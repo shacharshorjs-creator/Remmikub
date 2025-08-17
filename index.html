@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (מצלמה משופרת)</title>
+<title>רמיקוב – נקודות (זיהוי ספרות מתקדם)</title>
 <style>
   :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
   body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -15,7 +15,7 @@
   label{display:block;font-weight:700;margin-bottom:6px}
   input[type=text]{width:100%;background:#0b152a;color:#fff;border:2px solid rgba(255,255,255,.35);border-radius:12px;padding:12px 14px}
   button{cursor:pointer;border:none;border-radius:12px;padding:10px 14px;background:#1c2741;color:#fff}
-  .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:900}
+  .accent{background:linear-gradient(135deg,#63c9ff,#8affc1);color:#0b1320;font-weight:900}
   .ghost{background:transparent;border:1px dashed rgba(255,255,255,.35)}
   .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
   .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
@@ -29,13 +29,6 @@
   header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
   .cam{background:#0f1a30;border:1px solid rgba(99,201,255,.45)}
   .cam::before{content:"📷";margin-inline-end:6px}
-  .tiny{font-size:12px;color:var(--muted)}
-  .toast{position:fixed;inset-inline:0;bottom:14px;display:flex;justify-content:center;pointer-events:none}
-  .toast > div{background:#0b1325;border:1px solid rgba(255,255,255,.18);padding:10px 14px;border-radius:999px}
-  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-  .tag{background:#0c1730;border:1px solid rgba(255,255,255,.2);padding:4px 8px;border-radius:999px;cursor:text}
-  .tag input{width:32px;background:transparent;border:none;color:#fff;text-align:center}
-  .sumline{margin-top:6px}
   .help{font-size:12px;opacity:.8;margin-top:6px}
   canvas{max-width:100%;display:block;margin-top:6px;border:1px dashed rgba(255,255,255,.2);border-radius:10px}
 </style>
@@ -43,7 +36,7 @@
 <body>
 <div class="wrap">
   <header class="row">
-    <div>רמיקוב – PWA (מצלמה משופרת)</div>
+    <div>רמיקוב – PWA (זיהוי ספרות מתקדם)</div>
     <div class="row">
       <button id="resetBtn" class="danger">איפוס נקודות</button>
     </div>
@@ -59,7 +52,7 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <div class="tiny">במסך הבא: כפתור 📷 מזהה מספרים, עם תיקון ידני לפני שמירה.</div>
+      <div style="font-size:12px;color:#9fb0c9">מצלמים את הקוביות – הזיהוי יספור רק ספרות גדולות ויאחד 10–13.</div>
     </div>
   </section>
 
@@ -74,16 +67,15 @@
   </section>
 </div>
 
-<!-- OCR -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
-  const KEY = 'rummi_pwa_state_cam_v2';
+  const KEY = 'rummi_pwa_state_cam_v3';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
 
-  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
   const $ = s => document.querySelector(s);
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
   function val(id){ const e=$(id); return e? e.value.trim() : ""; }
 
   function startGame(){
@@ -92,111 +84,100 @@
     state.players = list.map((n,i)=>({id:String(i+1), name:n, points:0}));
     save(); showGame();
   }
-  function showGame(){
-    $('#s1').classList.add('hidden');
-    $('#s2').classList.remove('hidden');
-    render();
-    window.scrollTo({top:0, behavior:'smooth'});
-  }
-  function backToNames(){
-    $('#s2').classList.add('hidden');
-    $('#s1').classList.remove('hidden');
-  }
-  function addPoints(id,delta){
-    const p = state.players.find(x=>x.id===id); if(!p) return;
-    p.points += delta; save(); render();
-  }
-  function setPoints(id,val){
-    const p = state.players.find(x=>x.id===id); if(!p) return;
-    p.points = val; save(); render();
-  }
+  function showGame(){ $('#s1').classList.add('hidden'); $('#s2').classList.remove('hidden'); render(); window.scrollTo({top:0,behavior:'smooth'}); }
+  function backToNames(){ $('#s2').classList.add('hidden'); $('#s1').classList.remove('hidden'); }
+  function addPoints(id,delta){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points += delta; save(); render(); }
+  function setPoints(id,val){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points = val; save(); render(); }
 
-  // --- Image preprocessing on canvas (grayscale + contrast + two thresholds) ---
-  async function preprocessToCanvas(file){
+  async function preprocess(file){
     const img = await createImageBitmap(file);
-    const scale = Math.min(1280 / img.width, 1280 / img.height, 1);
-    const w = Math.round(img.width * scale);
-    const h = Math.round(img.height * scale);
-    const cvs = document.createElement('canvas');
-    cvs.width = w; cvs.height = h;
-    const ctx = cvs.getContext('2d');
-    ctx.drawImage(img, 0, 0, w, h);
-    const imgData = ctx.getImageData(0,0,w,h);
-    const d = imgData.data;
-    // grayscale + simple contrast stretch
-    let min=255, max=0;
-    for(let i=0;i<d.length;i+=4){
-      const g = Math.round(0.2126*d[i] + 0.7152*d[i+1] + 0.0722*d[i+2]);
-      d[i]=d[i+1]=d[i+2]=g;
-      if(g<min) min=g; if(g>max) max=g;
-    }
-    const range = Math.max(1, max-min);
-    for(let i=0;i<d.length;i+=4){
-      const g = (d[i]-min)/range*255; // normalize
-      d[i]=d[i+1]=d[i+2]=g;
-    }
-    ctx.putImageData(imgData,0,0);
-    return cvs;
+    const scale = Math.min(1400/img.width, 1400/img.height, 1);
+    const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+    const c = document.createElement('canvas'); c.width=w; c.height=h;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img,0,0,w,h);
+    // grayscale + normalize
+    const id = ctx.getImageData(0,0,w,h), d=id.data;
+    let min=255,max=0;
+    for(let i=0;i<d.length;i+=4){ const g = 0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; d[i]=d[i+1]=d[i+2]=g; if(g<min) min=g; if(g>max) max=g; }
+    const rng = Math.max(1,max-min);
+    for(let i=0;i<d.length;i+=4){ const g=(d[i]-min)/rng*255; d[i]=d[i+1]=d[i+2]=g; }
+    ctx.putImageData(id,0,0);
+    return c;
   }
 
-  async function runOCRBestOfTwo(file){
-    const base = await preprocessToCanvas(file);
-    // Two thresholds (bright & dark) to catch different tile/ink colors
-    const canvases = [180, 120].map(th => {
-      const c = document.createElement('canvas'); c.width=base.width; c.height=base.height;
-      const ctx = c.getContext('2d'); ctx.drawImage(base,0,0);
+  function mergeTenToThirteen(words){
+    // words: [{text, x0,y0,x1,y1, h, w} ... only digits '0'..'9'}
+    words.sort((a,b)=> a.x0 - b.x0);
+    const merged=[];
+    for(let i=0;i<words.length;i++){
+      const w=words[i];
+      if(w.text==='1' && i+1<words.length){
+        const n=words[i+1];
+        const sameLine = Math.abs(w.y0 - n.y0) < Math.max(w.h, n.h)*0.3;
+        const near = (n.x0 - w.x1) < Math.max(w.h,n.h)*0.6;
+        if(sameLine && near && ['0','1','2','3'].includes(n.text)){
+          const val = 10 + parseInt(n.text,10);
+          merged.push({val, area:(w.w*w.h + n.w*n.h), h:Math.max(w.h,n.h)});
+          i++; // skip next
+          continue;
+        }
+      }
+      // single digit
+      const val = parseInt(w.text,10);
+      merged.push({val, area:w.w*w.h, h:w.h});
+    }
+    // keep only legal 1..13
+    return merged.filter(o=>o.val>=1 && o.val<=13);
+  }
+
+  async function detectNumbers(file){
+    // Preprocess
+    const canvas = await preprocess(file);
+    // Two binarizations (bright/dark)
+    const thresholds = [180, 120];
+    let bestNums = [];
+    let bestMetrics = {count:0, sumArea:0};
+    for(const th of thresholds){
+      const c = document.createElement('canvas'); c.width=canvas.width; c.height=canvas.height;
+      const ctx = c.getContext('2d'); ctx.drawImage(canvas,0,0);
       const id = ctx.getImageData(0,0,c.width,c.height); const d=id.data;
-      for(let i=0;i<d.length;i+=4){ const g=d[i]; const v = g>th?255:0; d[i]=d[i+1]=d[i+2]=v; }
-      ctx.putImageData(id,0,0); return c;
-    });
-    // Recognize both, pick with most numbers
-    const cfg = { logger:m=>{}, config: 'tessedit_char_whitelist=0123456789 preserve_interword_spaces=1 --psm 6' };
-    const results = [];
-    for(const c of canvases){
-      const { data } = await Tesseract.recognize(c, 'eng', cfg);
-      const text = (data && data.text) ? data.text : '';
-      const matches = text.match(/\b(?:1[0-3]|[1-9])\b/g) || [];
-      const nums = matches.map(n=>parseInt(n,10)).filter(n=>n>=1 && n<=13);
-      results.push({nums, canvas:c});
+      for(let i=0;i<d.length;i+=4){ const g=d[i]; const v=g>th?255:0; d[i]=d[i+1]=d[i+2]=v; }
+      ctx.putImageData(id,0,0);
+      // OCR with whitelist; use sparse text
+      const { data } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 11' });
+      const words = (data.words||[])
+        .map(w=>({ text: (w.text||'').trim(), x0:w.bbox.x0, y0:w.bbox.y0, x1:w.bbox.x1, y1:w.bbox.y1, h:(w.bbox.y1-w.bbox.y0), w:(w.bbox.x1-w.bbox.x0) }))
+        .filter(w=>/^[0-9]$/.test(w.text));
+      if(!words.length) continue;
+      const merged = mergeTenToThirteen(words);
+      if(!merged.length) continue;
+      // size filter: take only digits whose height is close to the max (dominant glyphs)
+      const maxH = Math.max.apply(null, merged.map(m=>m.h));
+      const dominant = merged.filter(m=> m.h >= maxH*0.65);
+      const sumArea = dominant.reduce((a,b)=>a+b.area,0);
+      const metrics = {count: dominant.length, sumArea};
+      // choose result with more dominant numbers (or larger area)
+      if(metrics.count>bestMetrics.count || (metrics.count===bestMetrics.count && metrics.sumArea>bestMetrics.sumArea)){
+        bestMetrics = metrics;
+        bestNums = dominant.map(m=>m.val);
+      }
     }
-    results.sort((a,b)=> b.nums.length - a.nums.length);
-    return results[0]; // best
-  }
-
-  function editableChips(nums, onChange){
-    const wrap = document.createElement('div'); wrap.className='tags';
-    const rebuild = ()=>{
-      wrap.innerHTML='';
-      nums.forEach((n,idx)=>{
-        const tag = document.createElement('span'); tag.className='tag';
-        const inp = document.createElement('input'); inp.type='number'; inp.value=n; inp.min='1'; inp.max='13';
-        inp.oninput=()=>{ const v=parseInt(inp.value,10); if(!isNaN(v)){ nums[idx]=v; onChange(nums); } };
-        tag.appendChild(inp); wrap.appendChild(tag);
-      });
-      const add = document.createElement('button'); add.textContent='+ הוסף מספר'; add.className='ghost';
-      add.onclick=()=>{ nums.push(1); onChange(nums); rebuild(); };
-      wrap.appendChild(add);
-    };
-    rebuild();
-    return wrap;
+    // Final fallback: if nothing found, return empty
+    return bestNums;
   }
 
   async function handleCamera(id, file, mount){
-    mount.innerHTML = '<div class="tiny">מעבד תמונה…</div>';
-    const best = await runOCRBestOfTwo(file);
-    const nums = best.nums.length ? best.nums : [0];
-    // UI: show processed preview + editable numbers + sum
-    mount.innerHTML='';
-    mount.appendChild(best.canvas);
-    const sumLine = document.createElement('div'); sumLine.className='sumline';
-    const writeSum = ()=>{ const s = nums.reduce((a,b)=>a+(+b||0),0); sumLine.textContent = 'סכום מזוהה: ' + nums.join(' + ') + ' = ' + s; };
-    mount.appendChild(editableChips(nums, ()=>writeSum()));
-    writeSum();
-    mount.appendChild(sumLine);
-    const accept = document.createElement('button'); accept.textContent='אשר והחל';
-    accept.className='accent'; accept.style.marginTop='8px';
-    accept.onclick=()=>{ const s = nums.reduce((a,b)=>a+(+b||0),0); setPoints(id, s); };
-    mount.appendChild(accept);
+    mount.innerHTML = 'מזהה ספרות…';
+    try{
+      const nums = await detectNumbers(file);
+      if(!nums.length){ mount.textContent='לא זוהו ספרות. נסו לצלם קרוב יותר ובתאורה חזקה.'; return; }
+      const s = nums.reduce((a,b)=>a+b,0);
+      mount.innerHTML = 'זוהה: ' + nums.join(' + ') + ' = ' + s;
+      setPoints(id, s);
+    }catch(e){
+      mount.textContent = 'שגיאה בזיהוי: ' + e.message;
+    }
   }
 
   function render(){
@@ -204,8 +185,7 @@
     const board = document.getElementById('board'); board.innerHTML = '';
     const sorted = state.players.slice().sort((a,b)=> b.points-a.points);
     sorted.forEach((p,i)=>{
-      const div = document.createElement('div');
-      div.className='chip';
+      const div = document.createElement('div'); div.className='chip';
       div.innerHTML = '<div class="rank">'+(i+1)+'</div><div>'+p.name+(i===0?' 👑':'')+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
       board.appendChild(div);
     });
@@ -215,40 +195,34 @@
       const card = document.createElement('div'); card.className='card';
       const head = document.createElement('div'); head.className='row';
       const title = document.createElement('h3'); title.style.margin='0'; title.textContent = p.name;
-      const mount = document.createElement('div'); // where preview & chips will appear
+      const mount = document.createElement('div'); mount.className='help'; mount.textContent='השתמש/י בכפתור צילום כדי להזין אוטומטית.';
       const fileIn = document.createElement('input'); fileIn.type='file'; fileIn.accept='image/*'; fileIn.capture='environment'; fileIn.className='hidden';
       const camBtn = document.createElement('button'); camBtn.className='cam'; camBtn.textContent=' צילום';
       camBtn.onclick=()=> fileIn.click();
-      fileIn.onchange = (e)=>{ const f=e.target.files[0]; if(f) handleCamera(p.id, f, mount); e.target.value=''; };
+      fileIn.onchange=(e)=>{ const f=e.target.files[0]; if(f) handleCamera(p.id,f,mount); e.target.value=''; };
       head.appendChild(title); head.appendChild(camBtn);
       card.appendChild(head); card.appendChild(fileIn);
 
       const meta = document.createElement('div'); meta.innerHTML = 'נקודות נוכחיות: <span class="pill">'+p.points+'</span>';
       card.appendChild(meta);
-      const help = document.createElement('div'); help.className='help';
-      help.textContent = 'טיפים: רקע חלק, אור חזק, למלא את הפריים, לא לטשטש. ניתן לערוך את המספרים לפני אישור.';
-      card.appendChild(help);
 
       const ctrls = document.createElement('div'); ctrls.className='controls';
       const num = document.createElement('input'); num.type='number'; num.className='numbox'; num.placeholder='+/-';
       const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } };
       ctrls.appendChild(num); ctrls.appendChild(go);
       const minus10 = document.createElement('button'); minus10.textContent='-10'; minus10.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(minus10);
-      const setB=document.createElement('button'); setB.textContent='הגדר סכום…'; setB.className='ghost'; setB.onclick=()=>{ const v=prompt('סכום עבור '+p.name,p.points); const n=Number(v); if(!Number.isNaN(n)) setPoints(p.id,n); }; ctrls.appendChild(setB);
-      card.appendChild(ctrls);
+      card.appendChild(ctrlls);
       card.appendChild(mount);
 
       panels.appendChild(card);
     });
   }
 
-  // Wire
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('backBtn').addEventListener('click', backToNames);
   document.getElementById('resetBtn').addEventListener('click', ()=>{
     if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(p=>p.points=0); save(); render(); }
   });
-
   if(state.players && state.players.length){ showGame(); }
 </script>
 </body>
