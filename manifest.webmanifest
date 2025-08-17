@@ -1,0 +1,26 @@
+{
+  "name": "רמיקוב – ניהול נקודות",
+  "short_name": "רמיקוב",
+  "lang": "he",
+  "dir": "rtl",
+  "description": "ספירת נקודות לרמיקוב: עד 4 משתתפים, לוח הובלה, הוספת נקודות מהירה.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#0e1220",
+  "background_color": "#0e1220",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
