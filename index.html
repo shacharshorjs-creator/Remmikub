@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (מצב קובייה בודדת)</title>
+<title>רמיקוב – נקודות (זיהוי דרך OpenCV + Tesseract)</title>
 <style>
   :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
   body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -30,13 +30,13 @@
   .cam{background:#0f1a30;border:1px solid rgba(99,201,255,.45)}
   .cam::before{content:"📷";margin-inline-end:6px}
   .help{font-size:12px;opacity:.8;margin-top:6px}
-  .mode{font-size:12px;color:#9fb0c9}
+  .note{font-size:12px;color:#9fb0c9}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="row">
-    <div>רמיקוב – PWA (זיהוי משופר)</div>
+    <div>רמיקוב – PWA (OpenCV + Tesseract)</div>
     <div class="row">
       <button id="resetBtn" class="danger">איפוס נקודות</button>
     </div>
@@ -52,7 +52,7 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <div class="mode">ברירת מחדל: <b>מצב קובייה בודדת</b> (מדויק יותר). לצילום כמה קוביות יחד—נשתמש במצב גמיש יותר אוטומטית.</div>
+      <div class="note">האלגוריתם מאתר את הספרות הגדולות בעזרת סגמנטציה של OpenCV ואז מפעיל OCR נקודתי עליהן.</div>
     </div>
   </section>
 
@@ -67,9 +67,12 @@
   </section>
 </div>
 
+<!-- OpenCV & Tesseract -->
+<script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
 <script>
-  const KEY = 'rummi_pwa_state_cam_single_v1';
+  const KEY = 'rummi_pwa_state_cv_v1';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
 
@@ -88,136 +91,130 @@
   function addPoints(id,delta){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points += delta; save(); render(); }
   function setPoints(id,val){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points = val; save(); render(); }
 
-  // central crop to avoid logo edges
-  function centralCrop(ctx, w, h){
-    const cw = Math.round(w*0.7), ch = Math.round(h*0.7);
-    const sx = Math.round((w-cw)/2), sy = Math.round((h-ch)/2);
-    const c = document.createElement('canvas'); c.width=cw; c.height=ch;
-    c.getContext('2d').drawImage(ctx.canvas, sx, sy, cw, ch, 0, 0, cw, ch);
-    return c;
+  function ensureCvReady(){
+    return new Promise((resolve,reject)=>{
+      if (typeof cv !== 'undefined' && cv.Mat) return resolve();
+      const t = setInterval(()=>{
+        if (typeof cv !== 'undefined' && cv.Mat){ clearInterval(t); resolve(); }
+      }, 50);
+      setTimeout(()=>{ clearInterval(t); reject(new Error('OpenCV לא נטען')); }, 7000);
+    });
   }
 
-  async function preprocess(file){
+  async function segmentDigits(file){
+    await ensureCvReady();
     const img = await createImageBitmap(file);
-    const scale = Math.min(1400/img.width, 1400/img.height, 1);
+    const scale = Math.min(1280/img.width, 1280/img.height, 1);
     const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
-    const c = document.createElement('canvas'); c.width=w; c.height=h;
-    const ctx = c.getContext('2d');
-    ctx.drawImage(img,0,0,w,h);
-    // grayscale + normalize
-    const id = ctx.getImageData(0,0,w,h), d=id.data;
-    let min=255,max=0;
-    for(let i=0;i<d.length;i+=4){ const g = 0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; d[i]=d[i+1]=d[i+2]=g; if(g<min) min=g; if(g>max) max=g; }
-    const rng = Math.max(1,max-min);
-    for(let i=0;i<d.length;i+=4){ const g=(d[i]-min)/rng*255; d[i]=d[i+1]=d[i+2]=g; }
-    ctx.putImageData(id,0,0);
-    // crop center to avoid "Original Rummikub"
-    return centralCrop(ctx, w, h);
+    const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
+    const ctx = cvs.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+
+    let src = cv.imread(cvs);
+    let gray = new cv.Mat(); cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    let blur = new cv.Mat(); cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
+    let bin = new cv.Mat(); cv.threshold(blur, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+    // Morphology to remove dots and connect glyph parts
+    let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
+    cv.morphologyEx(bin, bin, cv.MORPH_OPEN, kernel);
+    cv.morphologyEx(bin, bin, cv.MORPH_CLOSE, kernel);
+
+    // Find contours
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    const candidates = [];
+    for (let i = 0; i < contours.size(); i++) {
+      const cnt = contours.get(i);
+      const rect = cv.boundingRect(cnt);
+      const area = rect.width * rect.height;
+      const relA = area / (w*h);
+      const relH = rect.height / h;
+      const ar = rect.width / rect.height;
+      // keep large-ish, plausible digit boxes
+      if (relA > 0.02 && relH > 0.25 && ar < 1.2) {
+        candidates.push(rect);
+      }
+      cnt.delete();
+    }
+    contours.delete(); hierarchy.delete(); kernel.delete(); src.delete(); gray.delete(); blur.delete(); bin.delete();
+
+    // sort left->right
+    candidates.sort((a,b)=> a.x - b.x);
+
+    // Return canvases croppings (with padding)
+    const crops = candidates.map(r => {
+      const pad = Math.round(Math.max(w,h)*0.02);
+      const x = Math.max(0, r.x - pad), y = Math.max(0, r.y - pad);
+      const cw = Math.min(w - x, r.width + pad*2), ch = Math.min(h - y, r.height + pad*2);
+      const c = document.createElement('canvas'); c.width=cw; c.height=ch;
+      const cctx = c.getContext('2d'); cctx.drawImage(cvs, x, y, cw, ch, 0, 0, cw, ch);
+      return {canvas:c, rect:r};
+    });
+    return crops;
   }
 
-  function mergeTenToThirteen(words){
-    words.sort((a,b)=> a.x0 - b.x0);
-    const merged=[];
-    for(let i=0;i<words.length;i++){
-      const w=words[i];
-      if(w.text==='1' && i+1<words.length){
-        const n=words[i+1];
-        const sameLine = Math.abs(w.y0 - n.y0) < Math.max(w.h, n.h)*0.3;
-        const near = (n.x0 - w.x1) < Math.max(w.h,n.h)*0.6;
-        if(sameLine && near && ['0','1','2','3'].includes(n.text)){
-          const val = 10 + parseInt(n.text,10);
-          merged.push({val, area:(w.w*w.h + n.w*n.h), h:Math.max(w.h,n.h), conf:Math.min(w.conf,n.conf)});
+  async function ocrDigitCanvas(c){
+    // Single-char mode improves accuracy
+    const { data } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 10' });
+    // try also psm7 if empty
+    let txt = (data && data.text || '').trim();
+    if (!txt) {
+      const { data: d2 } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 7' });
+      txt = (d2 && d2.text || '').trim();
+    }
+    // keep only single digit
+    const m = txt.match(/[0-9]/);
+    return m ? m[0] : '';
+  }
+
+  function combine1013(digits, rects){
+    // digits: array of chars '0'..'9', rects: positions
+    const out = [];
+    for (let i=0;i<digits.length;i++){
+      const d = digits[i];
+      if (d==='1' && i+1<digits.length && ['0','1','2','3'].includes(digits[i+1])) {
+        const r1 = rects[i], r2 = rects[i+1];
+        const sameLine = Math.abs(r1.y - r2.y) < Math.max(r1.height, r2.height)*0.3;
+        const near = (r2.x - (r1.x + r1.width)) < Math.max(r1.height, r2.height)*0.6;
+        if (sameLine && near) {
+          out.push(10 + parseInt(digits[i+1],10));
           i++; continue;
         }
       }
-      const val = parseInt(w.text,10);
-      merged.push({val, area:w.w*w.h, h:w.h, conf:w.conf});
+      out.push(parseInt(d,10));
     }
-    return merged.filter(o=>o.val>=1 && o.val<=13);
+    return out.filter(n => n>=1 && n<=13);
   }
 
-  async function detectSingleTile(file){
-    const canvas = await preprocess(file);
-    const thresholds = [170, 130];
-    let bestDigit = null, bestScore = -1;
-    for(const th of thresholds){
-      const c = document.createElement('canvas'); c.width=canvas.width; c.height=canvas.height;
-      const ctx = c.getContext('2d'); ctx.drawImage(canvas,0,0);
-      const id = ctx.getImageData(0,0,c.width,c.height); const d=id.data;
-      for(let i=0;i<d.length;i+=4){ const g=d[i]; const v=g>th?255:0; d[i]=d[i+1]=d[i+2]=v; }
-      ctx.putImageData(id,0,0);
-      // Try line/single char modes
-      const modes = ['--psm 7', '--psm 10'];
-      for(const mode of modes){
-        const { data } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 '+mode });
-        const words = (data.words||[])
-          .map(w=>({ text:(w.text||'').trim(), x0:w.bbox.x0, y0:w.bbox.y0, x1:w.bbox.x1, y1:w.bbox.y1, h:(w.bbox.y1-w.bbox.y0), w:(w.bbox.x1-w.bbox.x0), conf:w.confidence||w.conf||0 }))
-          .filter(w=>/^[0-9]$/.test(w.text));
-        if(!words.length) continue;
-        const merged = mergeTenToThirteen(words);
-        if(!merged.length) continue;
-        const maxH = Math.max.apply(null, merged.map(m=>m.h));
-        const dominant = merged.filter(m=> m.h >= maxH*0.7);
-        // pick the single best by size*confidence
-        dominant.forEach(m=>{
-          const score = m.h * (m.conf||70); // conf ~ 0-100
-          if(score > bestScore){ bestScore=score; bestDigit=m.val; }
-        });
-      }
+  async function detectNumbers(file){
+    const crops = await segmentDigits(file);
+    if (!crops.length) return [];
+    // OCR each crop
+    const digits = [];
+    for (const {canvas} of crops) {
+      digits.push(await ocrDigitCanvas(canvas));
     }
-    return bestDigit ? [bestDigit] : [];
-  }
-
-  async function detectFlexible(file){
-    // fallback for multiple tiles in one shot
-    const canvas = await preprocess(file);
-    const thresholds = [180, 120];
-    let bestNums = [];
-    let bestMetrics = {count:0, sumArea:0};
-    for(const th of thresholds){
-      const c = document.createElement('canvas'); c.width=canvas.width; c.height=canvas.height;
-      const ctx = c.getContext('2d'); ctx.drawImage(canvas,0,0);
-      const id = ctx.getImageData(0,0,c.width,c.height); const d=id.data;
-      for(let i=0;i<d.length;i+=4){ const g=d[i]; const v=g>th?255:0; d[i]=d[i+1]=d[i+2]=v; }
-      ctx.putImageData(id,0,0);
-      const { data } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 11' });
-      const words = (data.words||[])
-        .map(w=>({ text:(w.text||'').trim(), x0:w.bbox.x0, y0:w.bbox.y0, x1:w.bbox.x1, y1:w.bbox.y1, h:(w.bbox.y1-w.bbox.y0), w:(w.bbox.x1-w.bbox.x0), conf:w.confidence||w.conf||0 }))
-        .filter(w=>/^[0-9]$/.test(w.text));
-      if(!words.length) continue;
-      const merged = mergeTenToThirteen(words);
-      if(!merged.length) continue;
-      const maxH = Math.max.apply(null, merged.map(m=>m.h));
-      const dominant = merged.filter(m=> m.h >= maxH*0.65);
-      const sumArea = dominant.reduce((a,b)=>a+b.area,0);
-      const metrics = {count: dominant.length, sumArea};
-      if(metrics.count>bestMetrics.count || (metrics.count===bestMetrics.count && metrics.sumArea>bestMetrics.sumArea)){
-        bestMetrics = metrics;
-        bestNums = dominant.map(m=>m.val);
-      }
-    }
-    return bestNums;
+    const clean = digits.map(d => d || '').filter(Boolean);
+    const nums = combine1013(clean, crops.map(c => c.rect));
+    return nums;
   }
 
   async function handleCamera(id, file, mount){
-    mount.textContent = 'מזהה (מצב קובייה בודדת)…';
+    mount.textContent = 'מאתר ספרות…';
     try{
-      let nums = await detectSingleTile(file);
-      if(!nums.length){
-        mount.textContent = 'מנסה מצב גמיש…';
-        nums = await detectFlexible(file);
-      }
-      if(!nums.length){ mount.textContent='לא זוהתה ספרה. צלם/י קרוב ובאור טוב.'; return; }
+      const nums = await detectNumbers(file);
+      if(!nums.length){ mount.textContent='לא זוהתה ספרה. נסו לצלם קרוב יותר, פריים נקי ורקע חלק.'; return; }
       const s = nums.reduce((a,b)=>a+b,0);
       mount.textContent = 'זוהה: ' + nums.join(' + ') + ' = ' + s;
       setPoints(id, s);
     }catch(e){
-      mount.textContent = 'שגיאה בזיהוי: ' + e.message;
+      mount.textContent = 'שגיאה: ' + e.message;
     }
   }
 
   function render(){
-    // Leaderboard
     const board = document.getElementById('board'); board.innerHTML = '';
     const sorted = state.players.slice().sort((a,b)=> b.points-a.points);
     sorted.forEach((p,i)=>{
@@ -225,7 +222,7 @@
       div.innerHTML = '<div class="rank">'+(i+1)+'</div><div>'+p.name+(i===0?' 👑':'')+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
       board.appendChild(div);
     });
-    // Panels
+
     const panels = document.getElementById('panels'); panels.innerHTML='';
     state.players.forEach(p=>{
       const card = document.createElement('div'); card.className='card';
@@ -247,7 +244,7 @@
       const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } };
       ctrls.appendChild(num); ctrls.appendChild(go);
       const minus10 = document.createElement('button'); minus10.textContent='-10'; minus10.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(minus10);
-      card.appendChild(ctrls);
+      card.appendChild(ctrlls);
       card.appendChild(mount);
 
       panels.appendChild(card);
