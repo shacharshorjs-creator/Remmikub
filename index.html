@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (PWA + מצלמה)</title>
+<title>רמיקוב – נקודות (מצלמה משופרת)</title>
 <style>
   :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
   body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -17,13 +17,13 @@
   button{cursor:pointer;border:none;border-radius:12px;padding:10px 14px;background:#1c2741;color:#fff}
   .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:900}
   .ghost{background:transparent;border:1px dashed rgba(255,255,255,.35)}
-  .danger{background:#3a1c1c;color:#ffd9ד9;border:1px solid #5a2a2a}
+  .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
   .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
   .hidden{display:none}
   .leader{display:flex;gap:10px;flex-wrap:wrap}
   .chip{background:#0b1325;border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center}
   .rank{font-weight:900;width:28px;height:28px;display:grid;place-items:center;border-radius:99px;background:#0d1a2e;border:1px solid rgba(100,200,255,.45)}
-  .pill{padding:6px 10px;border-radius:999px;background:#0b172ד;border:1px solid rgba(255,255,255,.18)}
+  .pill{padding:6px 10px;border-radius:999px;background:#0b172d;border:1px solid rgba(255,255,255,.18)}
   .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .numbox{width:90px;background:#0b152a;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:8px 10px}
   header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
@@ -32,16 +32,19 @@
   .tiny{font-size:12px;color:var(--muted)}
   .toast{position:fixed;inset-inline:0;bottom:14px;display:flex;justify-content:center;pointer-events:none}
   .toast > div{background:#0b1325;border:1px solid rgba(255,255,255,.18);padding:10px 14px;border-radius:999px}
-  .progress{height:6px;background:#0c1230;border-radius:999px;overflow:hidden}
-  .bar{height:100%;background:linear-gradient(90deg,#63c9ff,#8affc1)}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .tag{background:#0c1730;border:1px solid rgba(255,255,255,.2);padding:4px 8px;border-radius:999px;cursor:text}
+  .tag input{width:32px;background:transparent;border:none;color:#fff;text-align:center}
+  .sumline{margin-top:6px}
+  .help{font-size:12px;opacity:.8;margin-top:6px}
+  canvas{max-width:100%;display:block;margin-top:6px;border:1px dashed rgba(255,255,255,.2);border-radius:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="row">
-    <div>רמיקוב – PWA (מצלמה)</div>
+    <div>רמיקוב – PWA (מצלמה משופרת)</div>
     <div class="row">
-      <button id="installBtn" class="ghost" title="התקנה למסך הבית">📲 התקן לאפליקציה</button>
       <button id="resetBtn" class="danger">איפוס נקודות</button>
     </div>
   </header>
@@ -56,7 +59,7 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <div class="tiny">במסך הבא יש כפתור 📷 לצילום הקוביות וסיכום אוטומטי.</div>
+      <div class="tiny">במסך הבא: כפתור 📷 מזהה מספרים, עם תיקון ידני לפני שמירה.</div>
     </div>
   </section>
 
@@ -71,96 +74,133 @@
   </section>
 </div>
 
-<div id="toast" class="toast hidden"><div id="toastMsg">...</div></div>
-
-<!-- Tesseract.js (OCR) -->
+<!-- OCR -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
-  let deferredPrompt;
-  const installBtn = document.getElementById('installBtn');
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    installBtn.disabled = false;
-  });
-  installBtn.addEventListener('click', async () => {
-    if (!deferredPrompt) { alert('ב-iOS: פתח/י בספארי > שתף > הוסף למסך הבית'); return; }
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    installBtn.disabled = true;
-  });
-
-  const KEY = 'rummi_pwa_state_cam_v1';
+  const KEY = 'rummi_pwa_state_cam_v2';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
 
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
-  function val(id){ const e=document.getElementById(id); return e? e.value.trim() : ""; }
+  const $ = s => document.querySelector(s);
+  function val(id){ const e=$(id); return e? e.value.trim() : ""; }
 
   function startGame(){
-    const names = [val('n0'),val('n1'),val('n2'),val('n3')].filter(Boolean);
+    const names = ['#n0','#n1','#n2','#n3'].map(val).filter(Boolean);
     const list = names.length ? names : ['שחקן 1','שחקן 2'];
     state.players = list.map((n,i)=>({id:String(i+1), name:n, points:0}));
     save(); showGame();
   }
   function showGame(){
-    document.getElementById('s1').classList.add('hidden');
-    document.getElementById('s2').classList.remove('hidden');
+    $('#s1').classList.add('hidden');
+    $('#s2').classList.remove('hidden');
     render();
     window.scrollTo({top:0, behavior:'smooth'});
   }
   function backToNames(){
-    document.getElementById('s2').classList.add('hidden');
-    document.getElementById('s1').classList.remove('hidden');
+    $('#s2').classList.add('hidden');
+    $('#s1').classList.remove('hidden');
   }
-
   function addPoints(id,delta){
-    const p = state.players.find(x=>x.id===id);
-    if(!p) return;
-    p.points += delta;
-    save(); render();
+    const p = state.players.find(x=>x.id===id); if(!p) return;
+    p.points += delta; save(); render();
   }
   function setPoints(id,val){
-    const p = state.players.find(x=>x.id===id);
-    if(!p) return;
-    p.points = val;
-    save(); render();
-  }
-  function promptSetPoints(id){
-    const p = state.players.find(x=>x.id===id);
-    if(!p) return;
-    const v = prompt('סכום עבור '+p.name, p.points);
-    const n = Number(v);
-    if(!Number.isNaN(n)) { setPoints(id,n); }
+    const p = state.players.find(x=>x.id===id); if(!p) return;
+    p.points = val; save(); render();
   }
 
-  function showToast(msg){
-    const box = document.getElementById('toast'); const t = document.getElementById('toastMsg');
-    t.textContent = msg; box.classList.remove('hidden');
-    setTimeout(()=> box.classList.add('hidden'), 2500);
+  // --- Image preprocessing on canvas (grayscale + contrast + two thresholds) ---
+  async function preprocessToCanvas(file){
+    const img = await createImageBitmap(file);
+    const scale = Math.min(1280 / img.width, 1280 / img.height, 1);
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const cvs = document.createElement('canvas');
+    cvs.width = w; cvs.height = h;
+    const ctx = cvs.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    const imgData = ctx.getImageData(0,0,w,h);
+    const d = imgData.data;
+    // grayscale + simple contrast stretch
+    let min=255, max=0;
+    for(let i=0;i<d.length;i+=4){
+      const g = Math.round(0.2126*d[i] + 0.7152*d[i+1] + 0.0722*d[i+2]);
+      d[i]=d[i+1]=d[i+2]=g;
+      if(g<min) min=g; if(g>max) max=g;
+    }
+    const range = Math.max(1, max-min);
+    for(let i=0;i<d.length;i+=4){
+      const g = (d[i]-min)/range*255; // normalize
+      d[i]=d[i+1]=d[i+2]=g;
+    }
+    ctx.putImageData(imgData,0,0);
+    return cvs;
   }
 
-  async function ocrAndSum(id, file){
-    try{
-      showToast('מנתח תמונה...');
-      const { data } = await Tesseract.recognize(file, 'eng', {
-        logger: m => { /* could show progress */ }
-      });
+  async function runOCRBestOfTwo(file){
+    const base = await preprocessToCanvas(file);
+    // Two thresholds (bright & dark) to catch different tile/ink colors
+    const canvases = [180, 120].map(th => {
+      const c = document.createElement('canvas'); c.width=base.width; c.height=base.height;
+      const ctx = c.getContext('2d'); ctx.drawImage(base,0,0);
+      const id = ctx.getImageData(0,0,c.width,c.height); const d=id.data;
+      for(let i=0;i<d.length;i+=4){ const g=d[i]; const v = g>th?255:0; d[i]=d[i+1]=d[i+2]=v; }
+      ctx.putImageData(id,0,0); return c;
+    });
+    // Recognize both, pick with most numbers
+    const cfg = { logger:m=>{}, config: 'tessedit_char_whitelist=0123456789 preserve_interword_spaces=1 --psm 6' };
+    const results = [];
+    for(const c of canvases){
+      const { data } = await Tesseract.recognize(c, 'eng', cfg);
       const text = (data && data.text) ? data.text : '';
-      // קח רק מספרים 1-13
       const matches = text.match(/\b(?:1[0-3]|[1-9])\b/g) || [];
       const nums = matches.map(n=>parseInt(n,10)).filter(n=>n>=1 && n<=13);
-      const sum = nums.reduce((a,b)=>a+b,0);
-      setPoints(id, sum);
-      showToast('זוהו: '+ (nums.join(' + ') || '—') + ' = ' + sum);
-    }catch(e){
-      alert('שגיאה בניתוח: '+ e.message);
+      results.push({nums, canvas:c});
     }
+    results.sort((a,b)=> b.nums.length - a.nums.length);
+    return results[0]; // best
+  }
+
+  function editableChips(nums, onChange){
+    const wrap = document.createElement('div'); wrap.className='tags';
+    const rebuild = ()=>{
+      wrap.innerHTML='';
+      nums.forEach((n,idx)=>{
+        const tag = document.createElement('span'); tag.className='tag';
+        const inp = document.createElement('input'); inp.type='number'; inp.value=n; inp.min='1'; inp.max='13';
+        inp.oninput=()=>{ const v=parseInt(inp.value,10); if(!isNaN(v)){ nums[idx]=v; onChange(nums); } };
+        tag.appendChild(inp); wrap.appendChild(tag);
+      });
+      const add = document.createElement('button'); add.textContent='+ הוסף מספר'; add.className='ghost';
+      add.onclick=()=>{ nums.push(1); onChange(nums); rebuild(); };
+      wrap.appendChild(add);
+    };
+    rebuild();
+    return wrap;
+  }
+
+  async function handleCamera(id, file, mount){
+    mount.innerHTML = '<div class="tiny">מעבד תמונה…</div>';
+    const best = await runOCRBestOfTwo(file);
+    const nums = best.nums.length ? best.nums : [0];
+    // UI: show processed preview + editable numbers + sum
+    mount.innerHTML='';
+    mount.appendChild(best.canvas);
+    const sumLine = document.createElement('div'); sumLine.className='sumline';
+    const writeSum = ()=>{ const s = nums.reduce((a,b)=>a+(+b||0),0); sumLine.textContent = 'סכום מזוהה: ' + nums.join(' + ') + ' = ' + s; };
+    mount.appendChild(editableChips(nums, ()=>writeSum()));
+    writeSum();
+    mount.appendChild(sumLine);
+    const accept = document.createElement('button'); accept.textContent='אשר והחל';
+    accept.className='accent'; accept.style.marginTop='8px';
+    accept.onclick=()=>{ const s = nums.reduce((a,b)=>a+(+b||0),0); setPoints(id, s); };
+    mount.appendChild(accept);
   }
 
   function render(){
+    // Leaderboard
     const board = document.getElementById('board'); board.innerHTML = '';
     const sorted = state.players.slice().sort((a,b)=> b.points-a.points);
     sorted.forEach((p,i)=>{
@@ -169,38 +209,40 @@
       div.innerHTML = '<div class="rank">'+(i+1)+'</div><div>'+p.name+(i===0?' 👑':'')+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
       board.appendChild(div);
     });
-
+    // Panels
     const panels = document.getElementById('panels'); panels.innerHTML='';
     state.players.forEach(p=>{
       const card = document.createElement('div'); card.className='card';
-      // hidden file input per player
-      const finput = document.createElement('input'); finput.type='file'; finput.accept='image/*'; finput.capture='environment'; finput.className='hidden'; finput.id='cam_'+p.id;
-      finput.onchange = (e)=>{ const f=e.target.files[0]; if(f) ocrAndSum(p.id, f); e.target.value=''; };
-
       const head = document.createElement('div'); head.className='row';
       const title = document.createElement('h3'); title.style.margin='0'; title.textContent = p.name;
+      const mount = document.createElement('div'); // where preview & chips will appear
+      const fileIn = document.createElement('input'); fileIn.type='file'; fileIn.accept='image/*'; fileIn.capture='environment'; fileIn.className='hidden';
       const camBtn = document.createElement('button'); camBtn.className='cam'; camBtn.textContent=' צילום';
-      camBtn.onclick = ()=> finput.click();
+      camBtn.onclick=()=> fileIn.click();
+      fileIn.onchange = (e)=>{ const f=e.target.files[0]; if(f) handleCamera(p.id, f, mount); e.target.value=''; };
       head.appendChild(title); head.appendChild(camBtn);
-
-      card.appendChild(head);
-      card.appendChild(finput);
+      card.appendChild(head); card.appendChild(fileIn);
 
       const meta = document.createElement('div'); meta.innerHTML = 'נקודות נוכחיות: <span class="pill">'+p.points+'</span>';
       card.appendChild(meta);
+      const help = document.createElement('div'); help.className='help';
+      help.textContent = 'טיפים: רקע חלק, אור חזק, למלא את הפריים, לא לטשטש. ניתן לערוך את המספרים לפני אישור.';
+      card.appendChild(help);
 
       const ctrls = document.createElement('div'); ctrls.className='controls';
       const num = document.createElement('input'); num.type='number'; num.className='numbox'; num.placeholder='+/-';
       const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } };
       ctrls.appendChild(num); ctrls.appendChild(go);
       const minus10 = document.createElement('button'); minus10.textContent='-10'; minus10.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(minus10);
-      const setB=document.createElement('button'); setB.textContent='הגדר סכום…'; setB.className='ghost'; setB.onclick=()=>promptSetPoints(p.id); ctrls.appendChild(setB);
+      const setB=document.createElement('button'); setB.textContent='הגדר סכום…'; setB.className='ghost'; setB.onclick=()=>{ const v=prompt('סכום עבור '+p.name,p.points); const n=Number(v); if(!Number.isNaN(n)) setPoints(p.id,n); }; ctrls.appendChild(setB);
       card.appendChild(ctrls);
+      card.appendChild(mount);
 
       panels.appendChild(card);
     });
   }
 
+  // Wire
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('backBtn').addEventListener('click', backToNames);
   document.getElementById('resetBtn').addEventListener('click', ()=>{
@@ -208,12 +250,6 @@
   });
 
   if(state.players && state.players.length){ showGame(); }
-
-  if('serviceWorker' in navigator){
-    window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register('./sw.js').catch(()=>{});
-    });
-  }
 </script>
 </body>
 </html>
