@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (סריקה מודרכת)</title>
+<title>רמיקוב – נקודות (העלאת תמונה)</title>
 <style>
   :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
   body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -28,24 +28,15 @@
   .numbox{width:90px;background:#0b152a;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:8px 10px}
   header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
   .cam{background:#0f1a30;border:1px solid rgba(99,201,255,.45)}
-  .cam::before{content:"📷";margin-inline-end:6px}
+  .cam::before{content:"🖼️";margin-inline-end:6px}
   .help{font-size:12px;opacity:.8;margin-top:6px}
-  /* Guided scan overlay */
-  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:9999}
-  .overlay.show{display:flex}
-  .ov-inner{position:relative;width:min(92vw,720px);aspect-ratio:3/4;background:#000;border:1px solid rgba(255,255,255,.2);border-radius:14px;overflow:hidden}
-  video{width:100%;height:100%;object-fit:cover}
-  .frame{position:absolute;inset:0;pointer-events:none}
-  .hole{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:60%;aspect-ratio:5/6;border:3px solid #63c9ff;border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,.35)}
-  .bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;padding:10px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.6))}
-  .bar > *{flex:1}
-  .note{font-size:12px;color:#9fb0c9}
+  canvas{max-width:100%;display:block;margin-top:6px;border:1px dashed rgba(255,255,255,.15);border-radius:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="row">
-    <div>רמיקוב – PWA (סריקה מודרכת)</div>
+    <div>רמיקוב – PWA (העלאת תמונה)</div>
     <div class="row">
       <button id="resetBtn" class="danger">איפוס נקודות</button>
     </div>
@@ -61,7 +52,7 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <div class="note">סריקה מודרכת: כוון/י קובייה אחת למסגרת המרכזית, לחץ/י "צלם".</div>
+      <div class="help">במסך הבא: העלה תמונה מהגלריה של הקוביות והאפליקציה תחשב את הסכום.</div>
     </div>
   </section>
 
@@ -76,23 +67,12 @@
   </section>
 </div>
 
-<!-- Tesseract.js -->
+<!-- OpenCV & Tesseract (CDNs) -->
+<script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-<!-- Overlay for guided capture -->
-<div id="overlay" class="overlay" aria-hidden="true">
-  <div class="ov-inner">
-    <video id="vid" playsinline muted></video>
-    <div class="frame"><div class="hole" id="hole"></div></div>
-    <div class="bar">
-      <button id="capBtn" class="accent">צלם</button>
-      <button id="cancelBtn" class="ghost">בטל</button>
-    </div>
-  </div>
-</div>
-
 <script>
-  const KEY = 'rummi_pwa_state_guided_v1';
+  const KEY = 'rummi_pwa_state_upload_v1';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
 
@@ -111,96 +91,111 @@
   function addPoints(id,delta){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points += delta; save(); render(); }
   function setPoints(id,val){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points = val; save(); render(); }
 
-  // ----- Guided camera -----
-  let stream=null, currentPlayerId=null, currentMount=null;
+  function ensureCvReady(){
+    return new Promise((resolve,reject)=>{
+      if (typeof cv !== 'undefined' && cv.Mat) return resolve();
+      const t = setInterval(()=>{ if (typeof cv !== 'undefined' && cv.Mat){ clearInterval(t); resolve(); } }, 50);
+      setTimeout(()=>{ clearInterval(t); reject(new Error('OpenCV לא נטען')); }, 8000);
+    });
+  }
 
-  async function openScanner(id, mount){
-    currentPlayerId = id; currentMount = mount;
-    $('#overlay').classList.add('show'); $('#overlay').setAttribute('aria-hidden','false');
-    const constraints = { video: { facingMode: 'environment' }, audio: false };
-    try{
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const vid = $('#vid'); vid.srcObject = stream; await vid.play();
-    }catch(e){
-      $('#overlay').classList.remove('show'); $('#overlay').setAttribute('aria-hidden','true');
-      alert('אין גישה למצלמה. ודא/י הרשאה ופתח/י את האתר מ-HTTPS (Safari/Chrome).');
+  async function segmentTiles(imageBitmap){
+    await ensureCvReady();
+    const scale = Math.min(1280/imageBitmap.width, 1280/imageBitmap.height, 1);
+    const w = Math.round(imageBitmap.width*scale), h = Math.round(imageBitmap.height*scale);
+    const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
+    const ctx = cvs.getContext('2d'); ctx.drawImage(imageBitmap,0,0,w,h);
+
+    let src = cv.imread(cvs);
+    let gray = new cv.Mat(); cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    let blur = new cv.Mat(); cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
+    let bin = new cv.Mat(); cv.adaptiveThreshold(blur, bin, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 35, 7);
+
+    // חיפוש מלבנים (אריחים)
+    let contours = new cv.MatVector(), hierarchy = new cv.Mat();
+    cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    const tiles = [];
+    for (let i = 0; i < contours.size(); i++){
+      const rect = cv.boundingRect(contours.get(i));
+      const area = rect.width*rect.height, relA = area/(w*h);
+      const ar = rect.width/rect.height;
+      if (relA>0.015 && ar>0.55 && ar<0.9 && rect.height>h*0.15){
+        // Crop tile, focus on center/top where הספרה הגדולה מופיעה (לוגו למטה)
+        const pad = Math.round(rect.height*0.08);
+        const x = Math.max(0, rect.x+pad), y = Math.max(0, rect.y+pad);
+        const cw = Math.min(w-x, rect.width-pad*2), ch = Math.min(h-y, Math.round(rect.height*0.6));
+        const c = document.createElement('canvas'); c.width=cw; c.height=ch;
+        c.getContext('2d').drawImage(cvs, x, y, cw, ch, 0, 0, cw, ch);
+        tiles.push({canvas:c, rect});
+      }
     }
+    contours.delete(); hierarchy.delete(); src.delete(); gray.delete(); blur.delete(); bin.delete();
+    // left->right, top->bottom
+    tiles.sort((a,b)=> a.rect.y===b.rect.y ? a.rect.x-b.rect.x : a.rect.y-b.rect.y);
+    return tiles;
   }
-  async function closeScanner(){
-    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
-    const vid=$('#vid'); vid.pause(); vid.srcObject=null;
-    $('#overlay').classList.remove('show'); $('#overlay').setAttribute('aria-hidden','true');
-  }
 
-  async function captureAndRecognize(){
-    const vid = $('#vid'); if(!vid.videoWidth){ return; }
-    // draw frame to canvas
-    const W = vid.videoWidth, H = vid.videoHeight;
-    const cvs = document.createElement('canvas'); cvs.width=W; cvs.height=H;
-    const ctx = cvs.getContext('2d'); ctx.drawImage(vid, 0, 0, W, H);
-
-    // compute hole rect in video coordinates
-    const hole = $('#hole');
-    const r = hole.getBoundingClientRect();
-    const v = vid.getBoundingClientRect();
-    const scaleX = W / v.width, scaleY = H / v.height;
-    const sx = Math.max(0, Math.round((r.left - v.left) * scaleX));
-    const sy = Math.max(0, Math.round((r.top  - v.top ) * scaleY));
-    const sw = Math.min(W - sx, Math.round(r.width  * scaleX));
-    const sh = Math.min(H - sy, Math.round(r.height * scaleY));
-
-    // crop to guide
-    const crop = document.createElement('canvas'); crop.width=sw; crop.height=sh;
-    crop.getContext('2d').drawImage(cvs, sx, sy, sw, sh, 0, 0, sw, sh);
-
-    // preprocess: grayscale + normalize + threshold
-    const c2 = document.createElement('canvas'); c2.width=sw; c2.height=sh;
-    const c2ctx = c2.getContext('2d');
-    c2ctx.drawImage(crop,0,0,sw,sh);
-    const id = c2ctx.getImageData(0,0,sw,sh), d=id.data;
+  async function ocrTile(canvas){
+    // Threshold for high contrast
+    const th = document.createElement('canvas'); th.width=canvas.width; th.height=canvas.height;
+    const tctx = th.getContext('2d'); tctx.drawImage(canvas,0,0);
+    const id = tctx.getImageData(0,0,th.width,th.height), d=id.data;
     let min=255,max=0;
-    for(let i=0;i<d.length;i+=4){ const g=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; d[i]=d[i+1]=d[i+2]=g; if(g<min)min=g; if(g>max)max=g; }
+    for(let i=0;i<d.length;i+=4){ const g=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; d[i]=d[i+1]=d[i+2]=g; if(g<min)min=g;if(g>max)max=g; }
     const rng=Math.max(1,max-min);
     for(let i=0;i<d.length;i+=4){ const g=(d[i]-min)/rng*255; d[i]=d[i+1]=d[i+2]=g; }
-    c2ctx.putImageData(id,0,0);
-    // two thresholds
-    const nums = await recognizeBestOfTwo(c2, [170,130]);
-    if(!nums.length){ currentMount.textContent='לא זוהתה ספרה. נסו שוב בתאורה טובה.'; }
-    else{
+    tctx.putImageData(id,0,0);
+    // two thresholds; prefer 10–13
+    const vals = [];
+    for(const T of [170,130]){
+      const bin = document.createElement('canvas'); bin.width=th.width; bin.height=th.height;
+      const bctx = bin.getContext('2d'); bctx.drawImage(th,0,0);
+      const id2 = bctx.getImageData(0,0,bin.width,bin.height), d2=id2.data;
+      for(let i=0;i<d2.length;i+=4){ const g=d2[i]; const v=g>T?255:0; d2[i]=d2[i+1]=d2[i+2]=v; }
+      bctx.putImageData(id2,0,0);
+      // 10-13 first
+      let { data } = await Tesseract.recognize(bin, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 7' });
+      let text = (data && data.text || '').trim();
+      let m = text.match(/\b1[0-3]\b/);
+      if(m){ vals.push(parseInt(m[0],10)); continue; }
+      // single digit
+      ({ data } = await Tesseract.recognize(bin, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 10' }));
+      text = (data && data.text || '').trim();
+      m = text.match(/\b[0-9]\b/);
+      if(m){ vals.push(parseInt(m[0],10)); }
+    }
+    // pick the most frequent non-empty in [1..13]
+    const legal = vals.filter(v=>v>=1 && v<=13);
+    if(!legal.length) return null;
+    const freq = {}; legal.forEach(v=>freq[v]=(freq[v]||0)+1);
+    return legal.sort((a,b)=> (freq[b]-freq[a]) || (b-a))[0];
+  }
+
+  async function detectFromImageFile(file){
+    const bmp = await createImageBitmap(file);
+    const tiles = await segmentTiles(bmp);
+    const results = [];
+    for(const t of tiles){
+      const v = await ocrTile(t.canvas);
+      if(v!=null) results.push(v);
+    }
+    return results;
+  }
+
+  async function handleUpload(id, file, mount){
+    mount.textContent = 'מנתח תמונה…';
+    try{
+      const nums = await detectFromImageFile(file);
+      if(!nums.length){ mount.textContent='לא זוהו קוביות/ספרות. נסו תמונה קרובה יותר ואור חזק.'; return; }
       const s = nums.reduce((a,b)=>a+b,0);
-      currentMount.textContent = 'זוהה: ' + nums.join(' + ') + ' = ' + s;
-      setPoints(currentPlayerId, s);
+      mount.textContent = 'זוהו: ' + nums.join(' + ') + ' = ' + s;
+      setPoints(id, s);
+    }catch(e){
+      mount.textContent = 'שגיאה: ' + e.message;
     }
-    closeScanner();
   }
 
-  async function recognizeBestOfTwo(canvas, thresholds){
-    let best=[];
-    for(const th of thresholds){
-      const bin = document.createElement('canvas'); bin.width=canvas.width; bin.height=canvas.height;
-      const bctx = bin.getContext('2d'); bctx.drawImage(canvas,0,0);
-      const id = bctx.getImageData(0,0,bin.width,bin.height), d=id.data;
-      for(let i=0;i<d.length;i+=4){ const g=d[i]; const v=g>th?255:0; d[i]=d[i+1]=d[i+2]=v; }
-      bctx.putImageData(id,0,0);
-      // try to read two-digit (10-13) first
-      const two = await tesseractRead(bin, '--psm 7');
-      const m2 = two.match(/\b1[0-3]\b/);
-      if(m2){ return [parseInt(m2[0],10)]; }
-      // else single best digit
-      const one = await tesseractRead(bin, '--psm 10');
-      const m1 = one.match(/\b[0-9]\b/);
-      if(m1){ best=[parseInt(m1[0],10)]; }
-    }
-    // filter legal 1..13
-    return best.filter(n=>n>=1 && n<=13);
-  }
-
-  async function tesseractRead(canvas, psm){
-    const { data } = await Tesseract.recognize(canvas, 'eng', { config: 'tessedit_char_whitelist=0123456789 '+psm });
-    return (data && data.text || '').trim();
-  }
-
-  // ----- UI render -----
   function render(){
     const board = document.getElementById('board'); board.innerHTML = '';
     const sorted = state.players.slice().sort((a,b)=> b.points-a.points);
@@ -215,11 +210,13 @@
       const card = document.createElement('div'); card.className='card';
       const head = document.createElement('div'); head.className='row';
       const title = document.createElement('h3'); title.style.margin='0'; title.textContent = p.name;
-      const mount = document.createElement('div'); mount.className='help'; mount.textContent='השתמש/י ב"סריקה" כדי לזהות קובייה אחת.';
-      const scanBtn = document.createElement('button'); scanBtn.className='cam'; scanBtn.textContent=' סריקה (קובייה בודדת)';
-      scanBtn.onclick=()=> openScanner(p.id, mount);
-      head.appendChild(title); head.appendChild(scanBtn);
-      card.appendChild(head);
+      const mount = document.createElement('div'); mount.className='help'; mount.textContent='העלה תמונה של הקוביות ברצף אחד.';
+      const fileIn = document.createElement('input'); fileIn.type='file'; fileIn.accept='image/*'; fileIn.className='hidden';
+      const uploadBtn = document.createElement('button'); uploadBtn.className='cam'; uploadBtn.textContent=' העלה תמונה';
+      uploadBtn.onclick=()=> fileIn.click();
+      fileIn.onchange=(e)=>{ const f=e.target.files[0]; if(f) handleUpload(p.id,f,mount); e.target.value=''; };
+      head.appendChild(title); head.appendChild(uploadBtn);
+      card.appendChild(head); card.appendChild(fileIn);
 
       const meta = document.createElement('div'); meta.innerHTML = 'נקודות נוכחיות: <span class="pill">'+p.points+'</span>';
       card.appendChild(meta);
@@ -235,10 +232,6 @@
       panels.appendChild(card);
     });
   }
-
-  // Wire overlay
-  document.getElementById('capBtn').addEventListener('click', captureAndRecognize);
-  document.getElementById('cancelBtn').addEventListener('click', closeScanner);
 
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('backBtn').addEventListener('click', backToNames);
