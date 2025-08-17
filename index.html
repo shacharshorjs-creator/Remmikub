@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (OpenCV + Tesseract – מתוקן)</title>
+<title>רמיקוב – נקודות (סריקה מודרכת)</title>
 <style>
   :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
   body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -30,13 +30,22 @@
   .cam{background:#0f1a30;border:1px solid rgba(99,201,255,.45)}
   .cam::before{content:"📷";margin-inline-end:6px}
   .help{font-size:12px;opacity:.8;margin-top:6px}
+  /* Guided scan overlay */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:9999}
+  .overlay.show{display:flex}
+  .ov-inner{position:relative;width:min(92vw,720px);aspect-ratio:3/4;background:#000;border:1px solid rgba(255,255,255,.2);border-radius:14px;overflow:hidden}
+  video{width:100%;height:100%;object-fit:cover}
+  .frame{position:absolute;inset:0;pointer-events:none}
+  .hole{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:60%;aspect-ratio:5/6;border:3px solid #63c9ff;border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,.35)}
+  .bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;padding:10px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.6))}
+  .bar > *{flex:1}
   .note{font-size:12px;color:#9fb0c9}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="row">
-    <div>רמיקוב – PWA (OpenCV + Tesseract)</div>
+    <div>רמיקוב – PWA (סריקה מודרכת)</div>
     <div class="row">
       <button id="resetBtn" class="danger">איפוס נקודות</button>
     </div>
@@ -52,7 +61,7 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <div class="note">האלגוריתם מאתר את הספרות הגדולות בעזרת סגמנטציה של OpenCV ואז מפעיל OCR נקודתי עליהן.</div>
+      <div class="note">סריקה מודרכת: כוון/י קובייה אחת למסגרת המרכזית, לחץ/י "צלם".</div>
     </div>
   </section>
 
@@ -67,12 +76,23 @@
   </section>
 </div>
 
-<!-- OpenCV & Tesseract -->
-<script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
+<!-- Tesseract.js -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
+<!-- Overlay for guided capture -->
+<div id="overlay" class="overlay" aria-hidden="true">
+  <div class="ov-inner">
+    <video id="vid" playsinline muted></video>
+    <div class="frame"><div class="hole" id="hole"></div></div>
+    <div class="bar">
+      <button id="capBtn" class="accent">צלם</button>
+      <button id="cancelBtn" class="ghost">בטל</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  const KEY = 'rummi_pwa_state_cv_v2';
+  const KEY = 'rummi_pwa_state_guided_v1';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
 
@@ -91,119 +111,96 @@
   function addPoints(id,delta){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points += delta; save(); render(); }
   function setPoints(id,val){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points = val; save(); render(); }
 
-  function ensureCvReady(){
-    return new Promise((resolve,reject)=>{
-      if (typeof cv !== 'undefined' && cv.Mat) return resolve();
-      const t = setInterval(()=>{
-        if (typeof cv !== 'undefined' && cv.Mat){ clearInterval(t); resolve(); }
-      }, 50);
-      setTimeout(()=>{ clearInterval(t); reject(new Error('OpenCV לא נטען')); }, 7000);
-    });
-  }
+  // ----- Guided camera -----
+  let stream=null, currentPlayerId=null, currentMount=null;
 
-  async function segmentDigits(file){
-    await ensureCvReady();
-    const img = await createImageBitmap(file);
-    const scale = Math.min(1280/img.width, 1280/img.height, 1);
-    const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
-    const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
-    const ctx = cvs.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
-
-    let src = cv.imread(cvs);
-    let gray = new cv.Mat(); cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    let blur = new cv.Mat(); cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
-    let bin = new cv.Mat(); cv.threshold(blur, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
-
-    let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
-    cv.morphologyEx(bin, bin, cv.MORPH_OPEN, kernel);
-    cv.morphologyEx(bin, bin, cv.MORPH_CLOSE, kernel);
-
-    let contours = new cv.MatVector();
-    let hierarchy = new cv.Mat();
-    cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-    const candidates = [];
-    for (let i = 0; i < contours.size(); i++) {
-      const cnt = contours.get(i);
-      const rect = cv.boundingRect(cnt);
-      const area = rect.width * rect.height;
-      const relA = area / (w*h);
-      const relH = rect.height / h;
-      const ar = rect.width / rect.height;
-      if (relA > 0.02 && relH > 0.25 && ar < 1.2) {
-        candidates.push(rect);
-      }
-      cnt.delete();
-    }
-    contours.delete(); hierarchy.delete(); kernel.delete(); src.delete(); gray.delete(); blur.delete(); bin.delete();
-
-    candidates.sort((a,b)=> a.x - b.x);
-
-    const crops = candidates.map(r => {
-      const pad = Math.round(Math.max(w,h)*0.02);
-      const x = Math.max(0, r.x - pad), y = Math.max(0, r.y - pad);
-      const cw = Math.min(w - x, r.width + pad*2), ch = Math.min(h - y, r.height + pad*2);
-      const c = document.createElement('canvas'); c.width=cw; c.height=ch;
-      const cctx = c.getContext('2d'); cctx.drawImage(cvs, x, y, cw, ch, 0, 0, cw, ch);
-      return {canvas:c, rect:r};
-    });
-    return crops;
-  }
-
-  async function ocrDigitCanvas(c){
-    const { data } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 10' });
-    let txt = (data && data.text || '').trim();
-    if (!txt) {
-      const { data: d2 } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 7' });
-      txt = (d2 && d2.text || '').trim();
-    }
-    const m = txt.match(/[0-9]/);
-    return m ? m[0] : '';
-  }
-
-  function combine1013(digits, rects){
-    const out = [];
-    for (let i=0;i<digits.length;i++){
-      const d = digits[i];
-      if (d==='1' && i+1<digits.length && ['0','1','2','3'].includes(digits[i+1])) {
-        const r1 = rects[i], r2 = rects[i+1];
-        const sameLine = Math.abs(r1.y - r2.y) < Math.max(r1.height, r2.height)*0.3;
-        const near = (r2.x - (r1.x + r1.width)) < Math.max(r1.height, r2.height)*0.6;
-        if (sameLine && near) {
-          out.push(10 + parseInt(digits[i+1],10));
-          i++; continue;
-        }
-      }
-      out.push(parseInt(d,10));
-    }
-    return out.filter(n => n>=1 && n<=13);
-  }
-
-  async function detectNumbers(file){
-    const crops = await segmentDigits(file);
-    if (!crops.length) return [];
-    const digits = [];
-    for (const {canvas} of crops) {
-      digits.push(await ocrDigitCanvas(canvas));
-    }
-    const clean = digits.map(d => d || '').filter(Boolean);
-    const nums = combine1013(clean, crops.map(c => c.rect));
-    return nums;
-  }
-
-  async function handleCamera(id, file, mount){
-    mount.textContent = 'מאתר ספרות…';
+  async function openScanner(id, mount){
+    currentPlayerId = id; currentMount = mount;
+    $('#overlay').classList.add('show'); $('#overlay').setAttribute('aria-hidden','false');
+    const constraints = { video: { facingMode: 'environment' }, audio: false };
     try{
-      const nums = await detectNumbers(file);
-      if(!nums.length){ mount.textContent='לא זוהתה ספרה. נסו לצלם קרוב יותר, פריים נקי ורקע חלק.'; return; }
-      const s = nums.reduce((a,b)=>a+b,0);
-      mount.textContent = 'זוהה: ' + nums.join(' + ') + ' = ' + s;
-      setPoints(id, s);
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const vid = $('#vid'); vid.srcObject = stream; await vid.play();
     }catch(e){
-      mount.textContent = 'שגיאה: ' + e.message;
+      $('#overlay').classList.remove('show'); $('#overlay').setAttribute('aria-hidden','true');
+      alert('אין גישה למצלמה. ודא/י הרשאה ופתח/י את האתר מ-HTTPS (Safari/Chrome).');
     }
   }
+  async function closeScanner(){
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+    const vid=$('#vid'); vid.pause(); vid.srcObject=null;
+    $('#overlay').classList.remove('show'); $('#overlay').setAttribute('aria-hidden','true');
+  }
 
+  async function captureAndRecognize(){
+    const vid = $('#vid'); if(!vid.videoWidth){ return; }
+    // draw frame to canvas
+    const W = vid.videoWidth, H = vid.videoHeight;
+    const cvs = document.createElement('canvas'); cvs.width=W; cvs.height=H;
+    const ctx = cvs.getContext('2d'); ctx.drawImage(vid, 0, 0, W, H);
+
+    // compute hole rect in video coordinates
+    const hole = $('#hole');
+    const r = hole.getBoundingClientRect();
+    const v = vid.getBoundingClientRect();
+    const scaleX = W / v.width, scaleY = H / v.height;
+    const sx = Math.max(0, Math.round((r.left - v.left) * scaleX));
+    const sy = Math.max(0, Math.round((r.top  - v.top ) * scaleY));
+    const sw = Math.min(W - sx, Math.round(r.width  * scaleX));
+    const sh = Math.min(H - sy, Math.round(r.height * scaleY));
+
+    // crop to guide
+    const crop = document.createElement('canvas'); crop.width=sw; crop.height=sh;
+    crop.getContext('2d').drawImage(cvs, sx, sy, sw, sh, 0, 0, sw, sh);
+
+    // preprocess: grayscale + normalize + threshold
+    const c2 = document.createElement('canvas'); c2.width=sw; c2.height=sh;
+    const c2ctx = c2.getContext('2d');
+    c2ctx.drawImage(crop,0,0,sw,sh);
+    const id = c2ctx.getImageData(0,0,sw,sh), d=id.data;
+    let min=255,max=0;
+    for(let i=0;i<d.length;i+=4){ const g=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; d[i]=d[i+1]=d[i+2]=g; if(g<min)min=g; if(g>max)max=g; }
+    const rng=Math.max(1,max-min);
+    for(let i=0;i<d.length;i+=4){ const g=(d[i]-min)/rng*255; d[i]=d[i+1]=d[i+2]=g; }
+    c2ctx.putImageData(id,0,0);
+    // two thresholds
+    const nums = await recognizeBestOfTwo(c2, [170,130]);
+    if(!nums.length){ currentMount.textContent='לא זוהתה ספרה. נסו שוב בתאורה טובה.'; }
+    else{
+      const s = nums.reduce((a,b)=>a+b,0);
+      currentMount.textContent = 'זוהה: ' + nums.join(' + ') + ' = ' + s;
+      setPoints(currentPlayerId, s);
+    }
+    closeScanner();
+  }
+
+  async function recognizeBestOfTwo(canvas, thresholds){
+    let best=[];
+    for(const th of thresholds){
+      const bin = document.createElement('canvas'); bin.width=canvas.width; bin.height=canvas.height;
+      const bctx = bin.getContext('2d'); bctx.drawImage(canvas,0,0);
+      const id = bctx.getImageData(0,0,bin.width,bin.height), d=id.data;
+      for(let i=0;i<d.length;i+=4){ const g=d[i]; const v=g>th?255:0; d[i]=d[i+1]=d[i+2]=v; }
+      bctx.putImageData(id,0,0);
+      // try to read two-digit (10-13) first
+      const two = await tesseractRead(bin, '--psm 7');
+      const m2 = two.match(/\b1[0-3]\b/);
+      if(m2){ return [parseInt(m2[0],10)]; }
+      // else single best digit
+      const one = await tesseractRead(bin, '--psm 10');
+      const m1 = one.match(/\b[0-9]\b/);
+      if(m1){ best=[parseInt(m1[0],10)]; }
+    }
+    // filter legal 1..13
+    return best.filter(n=>n>=1 && n<=13);
+  }
+
+  async function tesseractRead(canvas, psm){
+    const { data } = await Tesseract.recognize(canvas, 'eng', { config: 'tessedit_char_whitelist=0123456789 '+psm });
+    return (data && data.text || '').trim();
+  }
+
+  // ----- UI render -----
   function render(){
     const board = document.getElementById('board'); board.innerHTML = '';
     const sorted = state.players.slice().sort((a,b)=> b.points-a.points);
@@ -218,13 +215,11 @@
       const card = document.createElement('div'); card.className='card';
       const head = document.createElement('div'); head.className='row';
       const title = document.createElement('h3'); title.style.margin='0'; title.textContent = p.name;
-      const mount = document.createElement('div'); mount.className='help'; mount.textContent='לחץ/י צילום לזיהוי אוטומטי.';
-      const fileIn = document.createElement('input'); fileIn.type='file'; fileIn.accept='image/*'; fileIn.capture='environment'; fileIn.className='hidden';
-      const camBtn = document.createElement('button'); camBtn.className='cam'; camBtn.textContent=' צילום';
-      camBtn.onclick=()=> fileIn.click();
-      fileIn.onchange=(e)=>{ const f=e.target.files[0]; if(f) handleCamera(p.id,f,mount); e.target.value=''; };
-      head.appendChild(title); head.appendChild(camBtn);
-      card.appendChild(head); card.appendChild(fileIn);
+      const mount = document.createElement('div'); mount.className='help'; mount.textContent='השתמש/י ב"סריקה" כדי לזהות קובייה אחת.';
+      const scanBtn = document.createElement('button'); scanBtn.className='cam'; scanBtn.textContent=' סריקה (קובייה בודדת)';
+      scanBtn.onclick=()=> openScanner(p.id, mount);
+      head.appendChild(title); head.appendChild(scanBtn);
+      card.appendChild(head);
 
       const meta = document.createElement('div'); meta.innerHTML = 'נקודות נוכחיות: <span class="pill">'+p.points+'</span>';
       card.appendChild(meta);
@@ -234,12 +229,16 @@
       const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } };
       ctrls.appendChild(num); ctrls.appendChild(go);
       const minus10 = document.createElement('button'); minus10.textContent='-10'; minus10.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(minus10);
-      card.appendChild(ctrls); /* fixed here */
+      card.appendChild(ctrls);
       card.appendChild(mount);
 
       panels.appendChild(card);
     });
   }
+
+  // Wire overlay
+  document.getElementById('capBtn').addEventListener('click', captureAndRecognize);
+  document.getElementById('cancelBtn').addEventListener('click', closeScanner);
 
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('backBtn').addEventListener('click', backToNames);
