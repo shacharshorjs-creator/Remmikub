@@ -5,35 +5,41 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (PWA)</title>
+<title>רמיקוב – נקודות (PWA + מצלמה)</title>
 <style>
-  :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9}
+  :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
   body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
   .wrap{width:min(900px,94vw);margin:0 auto;padding:18px 0 28px}
   .card{background:var(--card);border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:16px}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   label{display:block;font-weight:700;margin-bottom:6px}
   input[type=text]{width:100%;background:#0b152a;color:#fff;border:2px solid rgba(255,255,255,.35);border-radius:12px;padding:12px 14px}
-  button{cursor:pointer;border:none;border-radius:12px;padding:12px 16px;background:#1c2741;color:#fff}
-  .accent{background:linear-gradient(135deg,#63c9ff,#8affc1);color:#0b1320;font-weight:900}
+  button{cursor:pointer;border:none;border-radius:12px;padding:10px 14px;background:#1c2741;color:#fff}
+  .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:900}
   .ghost{background:transparent;border:1px dashed rgba(255,255,255,.35)}
-  .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
+  .danger{background:#3a1c1c;color:#ffd9ד9;border:1px solid #5a2a2a}
   .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
   .hidden{display:none}
   .leader{display:flex;gap:10px;flex-wrap:wrap}
   .chip{background:#0b1325;border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center}
   .rank{font-weight:900;width:28px;height:28px;display:grid;place-items:center;border-radius:99px;background:#0d1a2e;border:1px solid rgba(100,200,255,.45)}
-  .pill{padding:6px 10px;border-radius:999px;background:#0b172d;border:1px solid rgba(255,255,255,.18)}
+  .pill{padding:6px 10px;border-radius:999px;background:#0b172ד;border:1px solid rgba(255,255,255,.18)}
   .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .numbox{width:90px;background:#0b152a;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:8px 10px}
-  .tip{color:var(--muted);font-size:13px}
   header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .cam{background:#0f1a30;border:1px solid rgba(99,201,255,.45)}
+  .cam::before{content:"📷";margin-inline-end:6px}
+  .tiny{font-size:12px;color:var(--muted)}
+  .toast{position:fixed;inset-inline:0;bottom:14px;display:flex;justify-content:center;pointer-events:none}
+  .toast > div{background:#0b1325;border:1px solid rgba(255,255,255,.18);padding:10px 14px;border-radius:999px}
+  .progress{height:6px;background:#0c1230;border-radius:999px;overflow:hidden}
+  .bar{height:100%;background:linear-gradient(90deg,#63c9ff,#8affc1)}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="row">
-    <div>רמיקוב – PWA</div>
+    <div>רמיקוב – PWA (מצלמה)</div>
     <div class="row">
       <button id="installBtn" class="ghost" title="התקנה למסך הבית">📲 התקן לאפליקציה</button>
       <button id="resetBtn" class="danger">איפוס נקודות</button>
@@ -50,7 +56,7 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <div class="tip">טיפ iOS: לאחר ההתקנה למסך הבית, הכול עובד כמו אפליקציה.</div>
+      <div class="tiny">במסך הבא יש כפתור 📷 לצילום הקוביות וסיכום אוטומטי.</div>
     </div>
   </section>
 
@@ -64,6 +70,11 @@
     <div id="panels" class="grid"></div>
   </section>
 </div>
+
+<div id="toast" class="toast hidden"><div id="toastMsg">...</div></div>
+
+<!-- Tesseract.js (OCR) -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
   let deferredPrompt;
@@ -81,12 +92,9 @@
     installBtn.disabled = true;
   });
 
-  const KEY = 'rummi_pwa_state_v3';
+  const KEY = 'rummi_pwa_state_cam_v1';
   let state = { players: [] };
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) state = JSON.parse(raw);
-  } catch {}
+  try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
 
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
   function val(id){ const e=document.getElementById(id); return e? e.value.trim() : ""; }
@@ -114,12 +122,42 @@
     p.points += delta;
     save(); render();
   }
-  function setPoints(id){
+  function setPoints(id,val){
+    const p = state.players.find(x=>x.id===id);
+    if(!p) return;
+    p.points = val;
+    save(); render();
+  }
+  function promptSetPoints(id){
     const p = state.players.find(x=>x.id===id);
     if(!p) return;
     const v = prompt('סכום עבור '+p.name, p.points);
     const n = Number(v);
-    if(!Number.isNaN(n)) { p.points = n; save(); render(); }
+    if(!Number.isNaN(n)) { setPoints(id,n); }
+  }
+
+  function showToast(msg){
+    const box = document.getElementById('toast'); const t = document.getElementById('toastMsg');
+    t.textContent = msg; box.classList.remove('hidden');
+    setTimeout(()=> box.classList.add('hidden'), 2500);
+  }
+
+  async function ocrAndSum(id, file){
+    try{
+      showToast('מנתח תמונה...');
+      const { data } = await Tesseract.recognize(file, 'eng', {
+        logger: m => { /* could show progress */ }
+      });
+      const text = (data && data.text) ? data.text : '';
+      // קח רק מספרים 1-13
+      const matches = text.match(/\b(?:1[0-3]|[1-9])\b/g) || [];
+      const nums = matches.map(n=>parseInt(n,10)).filter(n=>n>=1 && n<=13);
+      const sum = nums.reduce((a,b)=>a+b,0);
+      setPoints(id, sum);
+      showToast('זוהו: '+ (nums.join(' + ') || '—') + ' = ' + sum);
+    }catch(e){
+      alert('שגיאה בניתוח: '+ e.message);
+    }
   }
 
   function render(){
@@ -131,18 +169,34 @@
       div.innerHTML = '<div class="rank">'+(i+1)+'</div><div>'+p.name+(i===0?' 👑':'')+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
       board.appendChild(div);
     });
+
     const panels = document.getElementById('panels'); panels.innerHTML='';
     state.players.forEach(p=>{
       const card = document.createElement('div'); card.className='card';
-      card.innerHTML = '<h3>'+p.name+'</h3><div>נקודות נוכחיות: <span class="pill">'+p.points+'</span></div>';
+      // hidden file input per player
+      const finput = document.createElement('input'); finput.type='file'; finput.accept='image/*'; finput.capture='environment'; finput.className='hidden'; finput.id='cam_'+p.id;
+      finput.onchange = (e)=>{ const f=e.target.files[0]; if(f) ocrAndSum(p.id, f); e.target.value=''; };
+
+      const head = document.createElement('div'); head.className='row';
+      const title = document.createElement('h3'); title.style.margin='0'; title.textContent = p.name;
+      const camBtn = document.createElement('button'); camBtn.className='cam'; camBtn.textContent=' צילום';
+      camBtn.onclick = ()=> finput.click();
+      head.appendChild(title); head.appendChild(camBtn);
+
+      card.appendChild(head);
+      card.appendChild(finput);
+
+      const meta = document.createElement('div'); meta.innerHTML = 'נקודות נוכחיות: <span class="pill">'+p.points+'</span>';
+      card.appendChild(meta);
+
       const ctrls = document.createElement('div'); ctrls.className='controls';
       const num = document.createElement('input'); num.type='number'; num.className='numbox'; num.placeholder='+/-';
       const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } };
       ctrls.appendChild(num); ctrls.appendChild(go);
-      // כפתור יחיד: -10
-      const b=document.createElement('button'); b.textContent='-10'; b.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(b);
-      const setB=document.createElement('button'); setB.textContent='הגדר סכום…'; setB.className='ghost'; setB.onclick=()=>setPoints(p.id); ctrls.appendChild(setB);
+      const minus10 = document.createElement('button'); minus10.textContent='-10'; minus10.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(minus10);
+      const setB=document.createElement('button'); setB.textContent='הגדר סכום…'; setB.className='ghost'; setB.onclick=()=>promptSetPoints(p.id); ctrls.appendChild(setB);
       card.appendChild(ctrls);
+
       panels.appendChild(card);
     });
   }
