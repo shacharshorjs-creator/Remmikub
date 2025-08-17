@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (זיהוי ספרות מתקדם)</title>
+<title>רמיקוב – נקודות (מצלמה מתוקן)</title>
 <style>
   :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
   body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -30,13 +30,12 @@
   .cam{background:#0f1a30;border:1px solid rgba(99,201,255,.45)}
   .cam::before{content:"📷";margin-inline-end:6px}
   .help{font-size:12px;opacity:.8;margin-top:6px}
-  canvas{max-width:100%;display:block;margin-top:6px;border:1px dashed rgba(255,255,255,.2);border-radius:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="row">
-    <div>רמיקוב – PWA (זיהוי ספרות מתקדם)</div>
+    <div>רמיקוב – PWA (מצלמה מתוקן)</div>
     <div class="row">
       <button id="resetBtn" class="danger">איפוס נקודות</button>
     </div>
@@ -52,7 +51,7 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <div style="font-size:12px;color:#9fb0c9">מצלמים את הקוביות – הזיהוי יספור רק ספרות גדולות ויאחד 10–13.</div>
+      <div style="font-size:12px;color:#9fb0c9">במסך הבא: 📷 מזהה ספרות דומיננטיות ומאחד 10–13.</div>
     </div>
   </section>
 
@@ -70,7 +69,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
-  const KEY = 'rummi_pwa_state_cam_v3';
+  const KEY = 'rummi_pwa_state_cam_fixed_v1';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
 
@@ -107,7 +106,6 @@
   }
 
   function mergeTenToThirteen(words){
-    // words: [{text, x0,y0,x1,y1, h, w} ... only digits '0'..'9'}
     words.sort((a,b)=> a.x0 - b.x0);
     const merged=[];
     for(let i=0;i<words.length;i++){
@@ -119,22 +117,17 @@
         if(sameLine && near && ['0','1','2','3'].includes(n.text)){
           const val = 10 + parseInt(n.text,10);
           merged.push({val, area:(w.w*w.h + n.w*n.h), h:Math.max(w.h,n.h)});
-          i++; // skip next
-          continue;
+          i++; continue;
         }
       }
-      // single digit
       const val = parseInt(w.text,10);
       merged.push({val, area:w.w*w.h, h:w.h});
     }
-    // keep only legal 1..13
     return merged.filter(o=>o.val>=1 && o.val<=13);
   }
 
   async function detectNumbers(file){
-    // Preprocess
     const canvas = await preprocess(file);
-    // Two binarizations (bright/dark)
     const thresholds = [180, 120];
     let bestNums = [];
     let bestMetrics = {count:0, sumArea:0};
@@ -144,7 +137,6 @@
       const id = ctx.getImageData(0,0,c.width,c.height); const d=id.data;
       for(let i=0;i<d.length;i+=4){ const g=d[i]; const v=g>th?255:0; d[i]=d[i+1]=d[i+2]=v; }
       ctx.putImageData(id,0,0);
-      // OCR with whitelist; use sparse text
       const { data } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 11' });
       const words = (data.words||[])
         .map(w=>({ text: (w.text||'').trim(), x0:w.bbox.x0, y0:w.bbox.y0, x1:w.bbox.x1, y1:w.bbox.y1, h:(w.bbox.y1-w.bbox.y0), w:(w.bbox.x1-w.bbox.x0) }))
@@ -152,28 +144,25 @@
       if(!words.length) continue;
       const merged = mergeTenToThirteen(words);
       if(!merged.length) continue;
-      // size filter: take only digits whose height is close to the max (dominant glyphs)
       const maxH = Math.max.apply(null, merged.map(m=>m.h));
       const dominant = merged.filter(m=> m.h >= maxH*0.65);
       const sumArea = dominant.reduce((a,b)=>a+b.area,0);
       const metrics = {count: dominant.length, sumArea};
-      // choose result with more dominant numbers (or larger area)
       if(metrics.count>bestMetrics.count || (metrics.count===bestMetrics.count && metrics.sumArea>bestMetrics.sumArea)){
         bestMetrics = metrics;
         bestNums = dominant.map(m=>m.val);
       }
     }
-    // Final fallback: if nothing found, return empty
     return bestNums;
   }
 
   async function handleCamera(id, file, mount){
-    mount.innerHTML = 'מזהה ספרות…';
+    mount.textContent = 'מזהה ספרות…';
     try{
       const nums = await detectNumbers(file);
-      if(!nums.length){ mount.textContent='לא זוהו ספרות. נסו לצלם קרוב יותר ובתאורה חזקה.'; return; }
+      if(!nums.length){ mount.textContent='לא זוהו ספרות. צלם/י קרוב ובאור טוב.'; return; }
       const s = nums.reduce((a,b)=>a+b,0);
-      mount.innerHTML = 'זוהה: ' + nums.join(' + ') + ' = ' + s;
+      mount.textContent = 'זוהה: ' + nums.join(' + ') + ' = ' + s;
       setPoints(id, s);
     }catch(e){
       mount.textContent = 'שגיאה בזיהוי: ' + e.message;
@@ -195,7 +184,7 @@
       const card = document.createElement('div'); card.className='card';
       const head = document.createElement('div'); head.className='row';
       const title = document.createElement('h3'); title.style.margin='0'; title.textContent = p.name;
-      const mount = document.createElement('div'); mount.className='help'; mount.textContent='השתמש/י בכפתור צילום כדי להזין אוטומטית.';
+      const mount = document.createElement('div'); mount.className='help'; mount.textContent='לחץ/י צילום לזיהוי אוטומטי.';
       const fileIn = document.createElement('input'); fileIn.type='file'; fileIn.accept='image/*'; fileIn.capture='environment'; fileIn.className='hidden';
       const camBtn = document.createElement('button'); camBtn.className='cam'; camBtn.textContent=' צילום';
       camBtn.onclick=()=> fileIn.click();
@@ -211,7 +200,7 @@
       const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } };
       ctrls.appendChild(num); ctrls.appendChild(go);
       const minus10 = document.createElement('button'); minus10.textContent='-10'; minus10.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(minus10);
-      card.appendChild(ctrlls);
+      card.appendChild(ctrls);  /* <-- BUG FIXED: ctrls (not ctrlls) */
       card.appendChild(mount);
 
       panels.appendChild(card);
