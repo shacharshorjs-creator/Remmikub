@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (זיהוי דרך OpenCV + Tesseract)</title>
+<title>רמיקוב – נקודות (OpenCV + Tesseract – מתוקן)</title>
 <style>
   :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
   body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
@@ -72,7 +72,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
-  const KEY = 'rummi_pwa_state_cv_v1';
+  const KEY = 'rummi_pwa_state_cv_v2';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
 
@@ -114,12 +114,10 @@
     let blur = new cv.Mat(); cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
     let bin = new cv.Mat(); cv.threshold(blur, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
-    // Morphology to remove dots and connect glyph parts
     let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
     cv.morphologyEx(bin, bin, cv.MORPH_OPEN, kernel);
     cv.morphologyEx(bin, bin, cv.MORPH_CLOSE, kernel);
 
-    // Find contours
     let contours = new cv.MatVector();
     let hierarchy = new cv.Mat();
     cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
@@ -132,7 +130,6 @@
       const relA = area / (w*h);
       const relH = rect.height / h;
       const ar = rect.width / rect.height;
-      // keep large-ish, plausible digit boxes
       if (relA > 0.02 && relH > 0.25 && ar < 1.2) {
         candidates.push(rect);
       }
@@ -140,10 +137,8 @@
     }
     contours.delete(); hierarchy.delete(); kernel.delete(); src.delete(); gray.delete(); blur.delete(); bin.delete();
 
-    // sort left->right
     candidates.sort((a,b)=> a.x - b.x);
 
-    // Return canvases croppings (with padding)
     const crops = candidates.map(r => {
       const pad = Math.round(Math.max(w,h)*0.02);
       const x = Math.max(0, r.x - pad), y = Math.max(0, r.y - pad);
@@ -156,21 +151,17 @@
   }
 
   async function ocrDigitCanvas(c){
-    // Single-char mode improves accuracy
     const { data } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 10' });
-    // try also psm7 if empty
     let txt = (data && data.text || '').trim();
     if (!txt) {
       const { data: d2 } = await Tesseract.recognize(c, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 7' });
       txt = (d2 && d2.text || '').trim();
     }
-    // keep only single digit
     const m = txt.match(/[0-9]/);
     return m ? m[0] : '';
   }
 
   function combine1013(digits, rects){
-    // digits: array of chars '0'..'9', rects: positions
     const out = [];
     for (let i=0;i<digits.length;i++){
       const d = digits[i];
@@ -191,7 +182,6 @@
   async function detectNumbers(file){
     const crops = await segmentDigits(file);
     if (!crops.length) return [];
-    // OCR each crop
     const digits = [];
     for (const {canvas} of crops) {
       digits.push(await ocrDigitCanvas(canvas));
@@ -244,7 +234,7 @@
       const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } };
       ctrls.appendChild(num); ctrls.appendChild(go);
       const minus10 = document.createElement('button'); minus10.textContent='-10'; minus10.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(minus10);
-      card.appendChild(ctrlls);
+      card.appendChild(ctrls); /* fixed here */
       card.appendChild(mount);
 
       panels.appendChild(card);
