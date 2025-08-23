@@ -5,54 +5,73 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (העלאת תמונה)</title>
+<title>רמיקוב – נקודות (v1.4)</title>
 <style>
-  :root{--card:#171a2a;--ink:#ecf2ff;--muted:#9fb0c9;--accent:#63c9ff;--accent2:#8affc1}
-  body{margin:0;background:#0e1220;color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  .wrap{width:min(900px,94vw);margin:0 auto;padding:18px 0 28px}
-  .card{background:var(--card);border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:16px}
+  :root{
+    --bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;
+    --line:rgba(255,255,255,.14);--accent:#63c9ff;--accent2:#8affc1;
+    --chip:#0b1325
+  }
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  .container{width:min(940px,94vw);margin:0 auto;padding:90px 0 28px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   label{display:block;font-weight:700;margin-bottom:6px}
-  input[type=text]{width:100%;background:#0b152a;color:#fff;border:2px solid rgba(255,255,255,.35);border-radius:12px;padding:12px 14px}
+  input[type=text]{width:100%;background:#0b152a;color:#fff;border:2px solid var(--line);border-radius:12px;padding:12px 14px}
   button{cursor:pointer;border:none;border-radius:12px;padding:10px 14px;background:#1c2741;color:#fff}
   .accent{background:linear-gradient(135deg,#63c9ff,#8affc1);color:#0b1320;font-weight:900}
-  .ghost{background:transparent;border:1px dashed rgba(255,255,255,.35)}
+  .ghost{background:transparent;border:1px dashed var(--line)}
   .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
-  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
   .hidden{display:none}
   .leader{display:flex;gap:10px;flex-wrap:wrap}
-  .chip{background:#0b1325;border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center}
+  .chip{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center}
   .rank{font-weight:900;width:28px;height:28px;display:grid;place-items:center;border-radius:99px;background:#0d1a2e;border:1px solid rgba(100,200,255,.45)}
-  .pill{padding:6px 10px;border-radius:999px;background:#0b172d;border:1px solid rgba(255,255,255,.18)}
+  .pill{padding:6px 10px;border-radius:999px;background:#0b172d;border:1px solid var(--line)}
   .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-  .numbox{width:90px;background:#0b152a;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:8px 10px}
-  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-  .cam{background:#0f1a30;border:1px solid rgba(99,201,255,.45)}
-  .cam::before{content:"🖼️";margin-inline-end:6px}
-  .help{font-size:12px;opacity:.8;margin-top:6px}
-  canvas{max-width:100%;display:block;margin-top:6px;border:1px dashed rgba(255,255,255,.15);border-radius:10px}
+  .numbox{width:90px;background:#0b152a;color:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .btn-upload{background:#0f1a30;border:1px solid rgba(99,201,255,.45)}
+  .btn-upload::before{content:"🖼️";margin-inline-end:6px}
+  .btn-plus{background:#0f2e1a;border:1px solid rgba(138,255,193,.45)}
+  .btn-plus::before{content:"➕";margin-inline-end:6px}
+  .parsed{font-size:13px;color:var(--muted);margin-top:6px}
+
+  /* Top App Bar */
+  .appbar{position:fixed;inset:0 0 auto 0;height:64px;background:rgba(8,12,24,.7);backdrop-filter:blur(10px);
+          border-bottom:1px solid var(--line);z-index:10;display:flex;align-items:center}
+  .appbar-inner{width:min(940px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
+  .title{font-weight:800;letter-spacing:.2px}
+  .ver{font-size:12px;padding:6px 10px;border-radius:999px;background:#0a1a2c;border:1px solid rgba(99,201,255,.4)}
+  .actions{display:flex;gap:8px}
+  .divider{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin:14px 0;border:none}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="row">
-    <div>רמיקוב – PWA (העלאת תמונה)</div>
+<!-- Top bar with version -->
+<div class="appbar">
+  <div class="appbar-inner">
     <div class="row">
+      <div class="title">רמיקוב – ניהול נקודות</div>
+      <div class="ver" aria-label="version">v1.4</div>
+    </div>
+    <div class="actions">
       <button id="resetBtn" class="danger">איפוס נקודות</button>
     </div>
-  </header>
+  </div>
+</div>
 
+<div class="container">
   <section id="s1" class="card">
-    <h2>בחירת משתתפים (עד 4)</h2>
+    <h2 style="margin-top:0">בחירת משתתפים (עד 4)</h2>
     <div class="grid" style="margin-top:8px">
       <div><label for="n0">שחקן/ית 1</label><input id="n0" type="text" placeholder="לדוגמה: שחר"></div>
       <div><label for="n1">שחקן/ית 2</label><input id="n1" type="text" placeholder="לדוגמה: דנה"></div>
       <div><label for="n2">שחקן/ית 3</label><input id="n2" type="text" placeholder="אופציונלי"></div>
       <div><label for="n3">שחקן/ית 4</label><input id="n3" type="text" placeholder="אופציונלי"></div>
     </div>
-    <div class="row" style="margin-top:12px">
+    <div class="row" style="margin-top:12px;justify-content:space-between">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <div class="help">במסך הבא: העלה תמונה מהגלריה של הקוביות והאפליקציה תחשב את הסכום.</div>
+      <span style="font-size:12px;color:var(--muted)">העלה תמונות של הקוביות והאפליקציה תחשב את הסכום</span>
     </div>
   </section>
 
@@ -62,44 +81,44 @@
       <button id="backBtn" class="ghost">↩ חזרה לשמות</button>
     </div>
     <div id="board" class="leader" style="margin-top:10px"></div>
-    <hr style="border:none;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);margin:14px 0">
+    <hr class="divider">
     <div id="panels" class="grid"></div>
   </section>
 </div>
 
-<!-- OpenCV & Tesseract (CDNs) -->
+<!-- OpenCV & Tesseract -->
 <script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
-  const KEY = 'rummi_pwa_state_upload_v1';
-  let state = { players: [] };
-  try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch {}
+  const KEY = 'rummi_pwa_state_upload_plus_v1.4';
+  let state = {{ players: [] }};
+  try {{ const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); }} catch {{}};
 
   const $ = s => document.querySelector(s);
-  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
-  function val(id){ const e=$(id); return e? e.value.trim() : ""; }
+  function save(){{ try {{ localStorage.setItem(KEY, JSON.stringify(state)); }} catch {{}} }}
+  function val(id){{ const e=$(id); return e? e.value.trim() : ""; }}
 
-  function startGame(){
+  function startGame(){{
     const names = ['#n0','#n1','#n2','#n3'].map(val).filter(Boolean);
     const list = names.length ? names : ['שחקן 1','שחקן 2'];
-    state.players = list.map((n,i)=>({id:String(i+1), name:n, points:0}));
+    state.players = list.map((n,i)=>({{id:String(i+1), name:n, points:0}}));
     save(); showGame();
-  }
-  function showGame(){ $('#s1').classList.add('hidden'); $('#s2').classList.remove('hidden'); render(); window.scrollTo({top:0,behavior:'smooth'}); }
-  function backToNames(){ $('#s2').classList.add('hidden'); $('#s1').classList.remove('hidden'); }
-  function addPoints(id,delta){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points += delta; save(); render(); }
-  function setPoints(id,val){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points = val; save(); render(); }
+  }}
+  function showGame(){{ $('#s1').classList.add('hidden'); $('#s2').classList.remove('hidden'); render(); window.scrollTo({{top:0,behavior:'smooth'}}); }}
+  function backToNames(){{ $('#s2').classList.add('hidden'); $('#s1').classList.remove('hidden'); }}
+  function addPoints(id,delta){{ const p=state.players.find(x=>x.id===id); if(!p) return; p.points += delta; save(); render(); }}
+  function setPoints(id,val){{ const p=state.players.find(x=>x.id===id); if(!p) return; p.points = val; save(); render(); }}
 
-  function ensureCvReady(){
-    return new Promise((resolve,reject)=>{
+  function ensureCvReady(){{
+    return new Promise((resolve,reject)=>{{
       if (typeof cv !== 'undefined' && cv.Mat) return resolve();
-      const t = setInterval(()=>{ if (typeof cv !== 'undefined' && cv.Mat){ clearInterval(t); resolve(); } }, 50);
-      setTimeout(()=>{ clearInterval(t); reject(new Error('OpenCV לא נטען')); }, 8000);
-    });
-  }
+      const t = setInterval(()=>{{ if (typeof cv !== 'undefined' && cv.Mat){{ clearInterval(t); resolve(); }} }}, 50);
+      setTimeout(()=>{{ clearInterval(t); reject(new Error('OpenCV לא נטען')); }}, 8000);
+    }});
+  }}
 
-  async function segmentTiles(imageBitmap){
+  async function segmentTiles(imageBitmap){{
     await ensureCvReady();
     const scale = Math.min(1280/imageBitmap.width, 1280/imageBitmap.height, 1);
     const w = Math.round(imageBitmap.width*scale), h = Math.round(imageBitmap.height*scale);
@@ -111,134 +130,129 @@
     let blur = new cv.Mat(); cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
     let bin = new cv.Mat(); cv.adaptiveThreshold(blur, bin, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 35, 7);
 
-    // חיפוש מלבנים (אריחים)
     let contours = new cv.MatVector(), hierarchy = new cv.Mat();
     cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
     const tiles = [];
-    for (let i = 0; i < contours.size(); i++){
+    for (let i = 0; i < contours.size(); i++){{
       const rect = cv.boundingRect(contours.get(i));
       const area = rect.width*rect.height, relA = area/(w*h);
       const ar = rect.width/rect.height;
-      if (relA>0.015 && ar>0.55 && ar<0.9 && rect.height>h*0.15){
-        // Crop tile, focus on center/top where הספרה הגדולה מופיעה (לוגו למטה)
+      if (relA>0.015 && ar>0.55 && ar<0.9 && rect.height>h*0.15){{
         const pad = Math.round(rect.height*0.08);
         const x = Math.max(0, rect.x+pad), y = Math.max(0, rect.y+pad);
         const cw = Math.min(w-x, rect.width-pad*2), ch = Math.min(h-y, Math.round(rect.height*0.6));
         const c = document.createElement('canvas'); c.width=cw; c.height=ch;
         c.getContext('2d').drawImage(cvs, x, y, cw, ch, 0, 0, cw, ch);
-        tiles.push({canvas:c, rect});
-      }
-    }
+        tiles.push({{canvas:c, rect}});
+      }}
+    }}
     contours.delete(); hierarchy.delete(); src.delete(); gray.delete(); blur.delete(); bin.delete();
-    // left->right, top->bottom
     tiles.sort((a,b)=> a.rect.y===b.rect.y ? a.rect.x-b.rect.x : a.rect.y-b.rect.y);
     return tiles;
-  }
+  }}
 
-  async function ocrTile(canvas){
-    // Threshold for high contrast
+  async function ocrTile(canvas){{
     const th = document.createElement('canvas'); th.width=canvas.width; th.height=canvas.height;
     const tctx = th.getContext('2d'); tctx.drawImage(canvas,0,0);
     const id = tctx.getImageData(0,0,th.width,th.height), d=id.data;
     let min=255,max=0;
-    for(let i=0;i<d.length;i+=4){ const g=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; d[i]=d[i+1]=d[i+2]=g; if(g<min)min=g;if(g>max)max=g; }
+    for(let i=0;i<d.length;i+=4){{ const g=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; d[i]=d[i+1]=d[i+2]=g; if(g<min)min=g;if(g>max)max=g; }}
     const rng=Math.max(1,max-min);
-    for(let i=0;i<d.length;i+=4){ const g=(d[i]-min)/rng*255; d[i]=d[i+1]=d[i+2]=g; }
+    for(let i=0;i<d.length;i+=4){{ const g=(d[i]-min)/rng*255; d[i]=d[i+1]=d[i+2]=g; }}
     tctx.putImageData(id,0,0);
-    // two thresholds; prefer 10–13
     const vals = [];
-    for(const T of [170,130]){
+    for(const T of [170,130]){{
       const bin = document.createElement('canvas'); bin.width=th.width; bin.height=th.height;
       const bctx = bin.getContext('2d'); bctx.drawImage(th,0,0);
       const id2 = bctx.getImageData(0,0,bin.width,bin.height), d2=id2.data;
-      for(let i=0;i<d2.length;i+=4){ const g=d2[i]; const v=g>T?255:0; d2[i]=d2[i+1]=d2[i+2]=v; }
+      for(let i=0;i<d2.length;i+=4){{ const g=d2[i]; const v=g>T?255:0; d2[i]=d2[i+1]=d2[i+2]=v; }}
       bctx.putImageData(id2,0,0);
-      // 10-13 first
-      let { data } = await Tesseract.recognize(bin, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 7' });
+      let {{ data }} = await Tesseract.recognize(bin, 'eng', {{ config: 'tessedit_char_whitelist=0123456789 --psm 7' }});
       let text = (data && data.text || '').trim();
       let m = text.match(/\b1[0-3]\b/);
-      if(m){ vals.push(parseInt(m[0],10)); continue; }
-      // single digit
-      ({ data } = await Tesseract.recognize(bin, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 10' }));
+      if(m){{ vals.push(parseInt(m[0],10)); continue; }}
+      ({{ data }} = await Tesseract.recognize(bin, 'eng', {{ config: 'tessedit_char_whitelist=0123456789 --psm 10' }}));
       text = (data && data.text || '').trim();
       m = text.match(/\b[0-9]\b/);
-      if(m){ vals.push(parseInt(m[0],10)); }
-    }
-    // pick the most frequent non-empty in [1..13]
+      if(m){{ vals.push(parseInt(m[0],10)); }}
+    }}
     const legal = vals.filter(v=>v>=1 && v<=13);
     if(!legal.length) return null;
-    const freq = {}; legal.forEach(v=>freq[v]=(freq[v]||0)+1);
+    const freq = {{}}; legal.forEach(v=>freq[v]=(freq[v]||0)+1);
     return legal.sort((a,b)=> (freq[b]-freq[a]) || (b-a))[0];
-  }
+  }}
 
-  async function detectFromImageFile(file){
+  async function detectFromFile(file){{
     const bmp = await createImageBitmap(file);
     const tiles = await segmentTiles(bmp);
     const results = [];
-    for(const t of tiles){
+    for(const t of tiles){{
       const v = await ocrTile(t.canvas);
       if(v!=null) results.push(v);
-    }
+    }}
     return results;
-  }
+  }}
 
-  async function handleUpload(id, file, mount){
+  async function handleUpload(id, file, mount, mode){{
     mount.textContent = 'מנתח תמונה…';
-    try{
-      const nums = await detectFromImageFile(file);
-      if(!nums.length){ mount.textContent='לא זוהו קוביות/ספרות. נסו תמונה קרובה יותר ואור חזק.'; return; }
+    try{{
+      const nums = await detectFromFile(file);
+      if(!nums.length){{ mount.textContent='לא זוהו קוביות/ספרות. נסו תמונה קרובה יותר ואור חזק.'; return; }}
       const s = nums.reduce((a,b)=>a+b,0);
-      mount.textContent = 'זוהו: ' + nums.join(' + ') + ' = ' + s;
-      setPoints(id, s);
-    }catch(e){
+      const txt = 'זוהו: ' + nums.join(' + ') + ' = ' + s;
+      if(mode==='replace'){{ setPoints(id, s); }} else {{ addPoints(id, s); }}
+      mount.textContent = txt + (mode==='replace' ? ' (הוחלף)' : ' (נוסף)');
+    }}catch(e){{
       mount.textContent = 'שגיאה: ' + e.message;
-    }
-  }
+    }}
+  }}
 
-  function render(){
+  function render(){{
     const board = document.getElementById('board'); board.innerHTML = '';
     const sorted = state.players.slice().sort((a,b)=> b.points-a.points);
-    sorted.forEach((p,i)=>{
+    sorted.forEach((p,i)=>{{
       const div = document.createElement('div'); div.className='chip';
       div.innerHTML = '<div class="rank">'+(i+1)+'</div><div>'+p.name+(i===0?' 👑':'')+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
       board.appendChild(div);
-    });
+    }});
 
     const panels = document.getElementById('panels'); panels.innerHTML='';
-    state.players.forEach(p=>{
+    state.players.forEach(p=>{{
       const card = document.createElement('div'); card.className='card';
       const head = document.createElement('div'); head.className='row';
       const title = document.createElement('h3'); title.style.margin='0'; title.textContent = p.name;
-      const mount = document.createElement('div'); mount.className='help'; mount.textContent='העלה תמונה של הקוביות ברצף אחד.';
-      const fileIn = document.createElement('input'); fileIn.type='file'; fileIn.accept='image/*'; fileIn.className='hidden';
-      const uploadBtn = document.createElement('button'); uploadBtn.className='cam'; uploadBtn.textContent=' העלה תמונה';
-      uploadBtn.onclick=()=> fileIn.click();
-      fileIn.onchange=(e)=>{ const f=e.target.files[0]; if(f) handleUpload(p.id,f,mount); e.target.value=''; };
-      head.appendChild(title); head.appendChild(uploadBtn);
-      card.appendChild(head); card.appendChild(fileIn);
+      const mount = document.createElement('div'); mount.className='parsed'; mount.textContent='בחר/י תמונה של הקוביות.';
+      const fileReplace = document.createElement('input'); fileReplace.type='file'; fileReplace.accept='image/*'; fileReplace.className='hidden';
+      const fileAdd = document.createElement('input'); fileAdd.type='file'; fileAdd.accept='image/*'; fileAdd.className='hidden';
+      const uploadBtn = document.createElement('button'); uploadBtn.className='btn-upload'; uploadBtn.textContent=' העלה תמונה (החלף)';
+      const addBtn = document.createElement('button'); addBtn.className='btn-plus'; addBtn.textContent=' העלה ועוד (צבור)';
+      uploadBtn.onclick=()=> fileReplace.click();
+      addBtn.onclick=()=> fileAdd.click();
+      fileReplace.onchange=(e)=>{{ const f=e.target.files[0]; if(f) handleUpload(p.id,f,mount,'replace'); e.target.value=''; }};
+      fileAdd.onchange=(e)=>{{ const f=e.target.files[0]; if(f) handleUpload(p.id,f,mount,'add'); e.target.value=''; }};
+      head.appendChild(title); head.appendChild(uploadBtn); head.appendChild(addBtn);
+      card.appendChild(head); card.appendChild(fileReplace); card.appendChild(fileAdd);
 
       const meta = document.createElement('div'); meta.innerHTML = 'נקודות נוכחיות: <span class="pill">'+p.points+'</span>';
       card.appendChild(meta);
 
       const ctrls = document.createElement('div'); ctrls.className='controls';
       const num = document.createElement('input'); num.type='number'; num.className='numbox'; num.placeholder='+/-';
-      const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } };
+      const go  = document.createElement('button'); go.textContent='הוסף/הפחת'; go.onclick=()=>{{ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){{ addPoints(p.id,d); num.value=''; }} }};
       ctrls.appendChild(num); ctrls.appendChild(go);
       const minus10 = document.createElement('button'); minus10.textContent='-10'; minus10.onclick=()=>addPoints(p.id,-10); ctrls.appendChild(minus10);
       card.appendChild(ctrls);
       card.appendChild(mount);
 
       panels.appendChild(card);
-    });
-  }
+    }});
+  }}
 
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('backBtn').addEventListener('click', backToNames);
-  document.getElementById('resetBtn').addEventListener('click', ()=>{
-    if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(p=>p.points=0); save(); render(); }
-  });
-  if(state.players && state.players.length){ showGame(); }
+  document.getElementById('resetBtn').addEventListener('click', ()=>{{ if(confirm('לאפס את כל הנקודות?')){{ state.players.forEach(p=>p.points=0); save(); render(); }} }});
+  if(state.players && state.players.length){{ showGame(); }}
 </script>
 </body>
 </html>
