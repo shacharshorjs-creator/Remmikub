@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -6,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1220">
-<title>רמיקוב – נקודות (v1.6)</title>
+<title>רמיקוב – נקודות (v2.0-ml)</title>
 <style>
   :root{
     --bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;
     --line:rgba(255,255,255,.14);--accent:#63c9ff;--accent2:#8affc1;--chip:#0b1325
   }
   html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  .container{width:min(940px,94vw);margin:0 auto;padding:90px 0 28px}
+  .container{width:min(980px,94vw);margin:0 auto;padding:90px 0 28px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   label{display:block;font-weight:700;margin-bottom:6px}
@@ -35,13 +34,21 @@
   .btn-plus{background:#0f2e1a;border:1px solid rgba(138,255,193,.45)}
   .btn-plus::before{content:"➕";margin-inline-end:6px}
   .parsed{font-size:13px;color:var(--muted);margin-top:6px}
+
   .appbar{position:fixed;inset:0 0 auto 0;height:64px;background:rgba(8,12,24,.7);backdrop-filter:blur(10px);
           border-bottom:1px solid var(--line);z-index:10;display:flex;align-items:center}
-  .appbar-inner{width:min(940px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
+  .appbar-inner{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
   .title{font-weight:800;letter-spacing:.2px}
   .ver{font-size:12px;padding:6px 10px;border-radius:999px;background:#0a1a2c;border:1px solid rgba(99,201,255,.4)}
   .actions{display:flex;gap:8px}
   .divider{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin:14px 0;border:none}
+
+  /* Trainer panel */
+  .trainer{margin-top:16px}
+  .trainer .row{align-items:flex-end}
+  select, input[type=number]{background:#0b152a;color:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .hint{font-size:12px;color:var(--muted)}
+  .badge{font-size:12px;padding:2px 8px;border-radius:99px;background:#0a1a2c;border:1px solid rgba(99,201,255,.4)}
 </style>
 </head>
 <body>
@@ -49,15 +56,17 @@
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – ניהול נקודות</div>
-      <div class="ver" aria-label="version">v1.6</div>
+      <div class="ver" aria-label="version">v2.0-ml</div>
     </div>
     <div class="actions">
       <button id="resetBtn" class="danger">איפוס נקודות</button>
+      <button id="toggleTrainer" class="ghost">מודל זיהוי</button>
     </div>
   </div>
 </div>
 
 <div class="container">
+  <!-- Names -->
   <section id="s1" class="card">
     <h2 style="margin-top:0">בחירת משתתפים (עד 4)</h2>
     <div class="grid" style="margin-top:8px">
@@ -68,10 +77,11 @@
     </div>
     <div class="row" style="margin-top:12px;justify-content:space-between">
       <button class="accent" id="startBtn">התחל משחק</button>
-      <span style="font-size:12px;color:#9fb0c9">העלה תמונות של הקוביות והאפליקציה תחשב את הסכום</span>
+      <span class="hint">העלה תמונות של הקוביות והאפליקציה תחשב את הסכום (כעת עם מודל למידה)</span>
     </div>
   </section>
 
+  <!-- Leaderboard + players -->
   <section id="s2" class="card hidden">
     <div class="row" style="justify-content:space-between">
       <h2 style="margin:0">לוח הובלה</h2>
@@ -81,51 +91,147 @@
     <hr class="divider">
     <div id="panels" class="grid"></div>
   </section>
+
+  <!-- Trainer -->
+  <section id="trainer" class="card hidden trainer">
+    <h2 style="margin-top:0">מודל זיהוי על המכשיר</h2>
+    <div class="row">
+      <div>
+        <label>בחר/י מחלקה</label>
+        <select id="cls">
+          <option value="none">ללא / ג׳וקר</option>
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option>
+        </select>
+      </div>
+      <div>
+        <label>דגימות להוספה</label>
+        <input id="numSamples" type="number" value="5" min="1" max="20">
+      </div>
+      <div class="row" style="gap:6px">
+        <button id="addFromGallery" class="btn-upload"> הוסף מגזיר</button>
+        <input id="filePick" type="file" accept="image/*" class="hidden" multiple>
+        <button id="captureOne" class="btn-plus"> הוסף מהמצלמה</button>
+      </div>
+      <div class="row">
+        <button id="saveModel" class="ghost">שמור מודל</button>
+        <button id="loadModel" class="ghost">טען מודל</button>
+        <button id="exportModel" class="ghost">ייצא JSON</button>
+        <input id="importFile" type="file" accept="application/json" class="hidden">
+        <button id="importModel" class="ghost">ייבא JSON</button>
+        <span id="status" class="badge">אין מודל</span>
+      </div>
+      <div class="hint">טיפ: צלם/י לכל מחלקה 10–20 דוגמאות מזוויות ותאורות שונות. המודל נשמר מקומית.</div>
+    </div>
+  </section>
 </div>
 
+<!-- Libs: TFJS + MobileNet + KNN -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
+
+<!-- OpenCV for segmentation (reuse) -->
 <script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  const KEY = 'rummi_pwa_state_upload_plus_v16';
+document.addEventListener('DOMContentLoaded', async function() {
+  const KEY = 'rummi_pwa_state_v2.0-ml';
+  const MODEL_KEY = 'rummi_knn_v2.0-ml';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch (e) { console.warn(e); }
 
+  // ===== UI helpers =====
   const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn(e); } }
   function val(sel) { const e=$(sel); return e? e.value.trim() : ""; }
 
-  function startGame() {
+  // ===== TFJS + KNN =====
+  const statusEl = $('#status');
+  const classifier = knnClassifier.create();
+  let mobilenetModel = null;
+  async function loadEmbedder() {
+    if (!mobilenetModel) { mobilenetModel = await mobilenet.load({version:2, alpha:1.0}); }
+    statusEl.textContent = 'משתמש במודל: MobileNet + KNN';
+  }
+  await loadEmbedder();
+
+  function imageToTensor(img) {
+    const t = tf.browser.fromPixels(img).toFloat();
+    const resized = tf.image.resizeBilinear(t, [224,224]);
+    const offset = tf.scalar(127.5);
+    const norm = resized.sub(offset).div(offset);
+    return norm.expandDims(0);
+  }
+  async function addExample(imgOrCanvas, label) {
+    const logits = mobilenetModel.infer(imgOrCanvas, 'conv_preds'); // 1001-d
+    classifier.addExample(logits, label);
+  }
+  async function predictClass(imgOrCanvas) {
+    if (classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
+    const logits = mobilenetModel.infer(imgOrCanvas, 'conv_preds');
+    return await classifier.predictClass(logits);
+  }
+
+  function saveKNN() {
+    const dataset = classifier.getClassifierDataset();
+    const obj = {}
+    Object.keys(dataset).forEach(k=> obj[k] = Array.from(dataset[k].dataSync()));
+    localStorage.setItem(MODEL_KEY, JSON.stringify(obj));
+    statusEl.textContent = 'מודל נשמר';
+  }
+  function loadKNN() {
+    const raw = localStorage.getItem(MODEL_KEY);
+    if(!raw) return false;
+    const obj = JSON.parse(raw);
+    const tensorObj = {}
+    Object.keys(obj).forEach(k=> tensorObj[k] = tf.tensor(obj[k], [obj[k].length/1001, 1001]));
+    classifier.setClassifierDataset(tensorObj);
+    statusEl.textContent = 'מודל נטען ('+classifier.getNumClasses()+' מחלקות)';
+    return true;
+  }
+  function exportKNN() {
+    const dataset = classifier.getClassifierDataset();
+    const obj = {}
+    Object.keys(dataset).forEach(k=> obj[k] = Array.from(dataset[k].dataSync()));
+    const blob = new Blob([JSON.stringify(obj)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'rummi_knn_v2.0-ml.json';
+    a.click();
+  }
+  async function importKNN(file) {
+    const text = await file.text();
+    const obj = JSON.parse(text);
+    const tensorObj = {}
+    Object.keys(obj).forEach(k=> tensorObj[k] = tf.tensor(obj[k], [obj[k].length/1001, 1001]));
+    classifier.setClassifierDataset(tensorObj);
+    statusEl.textContent = 'מודל יובא ('+classifier.getNumClasses()+' מחלקות)';
+  }
+
+  // ===== Game logic =====
+  function startGame(){
     const names = ['#n0','#n1','#n2','#n3'].map(val).filter(Boolean);
     const list = names.length ? names : ['שחקן 1','שחקן 2'];
     state.players = list.map((n,i)=>({id:String(i+1), name:n, points:0}));
     save(); showGame();
   }
-  function showGame() {
-    document.getElementById('s1').classList.add('hidden');
-    document.getElementById('s2').classList.remove('hidden');
-    render();
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-  function backToNames() {
-    document.getElementById('s2').classList.add('hidden');
-    document.getElementById('s1').classList.remove('hidden');
-  }
-  function addPoints(id,delta) { const p=state.players.find(x=>x.id===id); if(!p) return; p.points += delta; save(); render(); }
-  function setPoints(id,val) { const p=state.players.find(x=>x.id===id); if(!p) return; p.points = val; save(); render(); }
+  function showGame(){ $('#s1').classList.add('hidden'); $('#s2').classList.remove('hidden'); render(); window.scrollTo({top:0,behavior:'smooth'}); }
+  function backToNames(){ $('#s2').classList.add('hidden'); $('#s1').classList.remove('hidden'); }
+  function addPoints(id,delta){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points += delta; save(); render(); }
+  function setPoints(id,val){ const p=state.players.find(x=>x.id===id); if(!p) return; p.points = val; save(); render(); }
 
-  async function ensureCvReady() {
+  function ensureCvReady(){
     return new Promise((resolve,reject)=>{
       if (typeof cv !== 'undefined' && cv.Mat) return resolve();
-      const t = setInterval(()=>{ if (typeof cv !== 'undefined' && cv.Mat) { clearInterval(t); resolve(); } }, 50);
+      const t = setInterval(()=>{ if (typeof cv !== 'undefined' && cv.Mat){ clearInterval(t); resolve(); } }, 50);
       setTimeout(()=>{ clearInterval(t); reject(new Error('OpenCV לא נטען')); }, 8000);
     });
   }
 
-  async function segmentTiles(imageBitmap) {
+  async function segmentTiles(imageBitmap){
     await ensureCvReady();
-    const scale = Math.min(1280/imageBitmap.width, 1280/imageBitmap.height, 1);
+    const scale = Math.min(1400/imageBitmap.width, 1400/imageBitmap.height, 1);
     const w = Math.round(imageBitmap.width*scale), h = Math.round(imageBitmap.height*scale);
     const cvs = document.createElement('canvas'); cvs.width=w; cvs.height=h;
     const ctx = cvs.getContext('2d'); ctx.drawImage(imageBitmap,0,0,w,h);
@@ -139,11 +245,11 @@ document.addEventListener('DOMContentLoaded', function() {
     cv.findContours(bin, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
     const tiles = [];
-    for (let i = 0; i < contours.size(); i++) {
+    for (let i = 0; i < contours.size(); i++){
       const rect = cv.boundingRect(contours.get(i));
       const area = rect.width*rect.height, relA = area/(w*h);
       const ar = rect.width/rect.height;
-      if (relA>0.015 && ar>0.55 && ar<0.9 && rect.height>h*0.15) {
+      if (relA>0.012 && ar>0.52 && ar<0.95 && rect.height>h*0.12){
         const pad = Math.round(rect.height*0.08);
         const x = Math.max(0, rect.x+pad), y = Math.max(0, rect.y+pad);
         const cw = Math.min(w-x, rect.width-pad*2), ch = Math.min(h-y, Math.round(rect.height*0.6));
@@ -157,35 +263,18 @@ document.addEventListener('DOMContentLoaded', function() {
     return tiles;
   }
 
-  async function ocrTile(canvas){
-    const th = document.createElement('canvas'); th.width=canvas.width; th.height=canvas.height;
-    const tctx = th.getContext('2d'); tctx.drawImage(canvas,0,0);
-    const id = tctx.getImageData(0,0,th.width,th.height), d=id.data;
-    let min=255,max=0;
-    for(let i=0;i<d.length;i+=4){ const g=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; d[i]=d[i+1]=d[i+2]=g; if(g<min)min=g;if(g>max)max=g; }
-    const rng=Math.max(1,max-min);
-    for(let i=0;i<d.length;i+=4){ const g=(d[i]-min)/rng*255; d[i]=d[i+1]=d[i+2]=g; }
-    tctx.putImageData(id,0,0);
-    const vals = [];
-    for(const T of [170,130]){
-      const bin = document.createElement('canvas'); bin.width=th.width; bin.height=th.height;
-      const bctx = bin.getContext('2d'); bctx.drawImage(th,0,0);
-      const id2 = bctx.getImageData(0,0,bin.width,bin.height), d2=id2.data;
-      for(let i=0;i<d2.length;i+=4){ const g=d2[i]; const v=g>T?255:0; d2[i]=d2[i+1]=d2[i+2]=v; }
-      bctx.putImageData(id2,0,0);
-      let res = await Tesseract.recognize(bin, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 7' });
-      let text = (res.data && res.data.text || '').trim();
-      let m = text.match(/\b1[0-3]\b/);
-      if(m){ vals.push(parseInt(m[0],10)); continue; }
-      res = await Tesseract.recognize(bin, 'eng', { config: 'tessedit_char_whitelist=0123456789 --psm 10' });
-      text = (res.data && res.data.text || '').trim();
-      m = text.match(/\b[0-9]\b/);
-      if(m){ vals.push(parseInt(m[0],10)); }
-    }
-    const legal = vals.filter(v=>v>=1 && v<=13);
-    if(!legal.length) return null;
-    const freq = {}; legal.forEach(v=>freq[v]=(freq[v]||0)+1);
-    return legal.sort((a,b)=> (freq[b]-freq[a]) || (b-a))[0];
+  async function classifyTile(canvas){
+    // predict with KNN
+    const res = await predictClass(canvas);
+    const label = res.label;
+    const confs = res.confidences;
+    // ignore "none"/joker or very low confidence
+    if(label==='none') return null;
+    const conf = confs[label] || 0;
+    if(conf < 0.6) return null;
+    const n = parseInt(label,10);
+    if(!Number.isInteger(n) || n<1 || n>13) return null;
+    return n;
   }
 
   async function detectFromFile(file){
@@ -193,17 +282,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const tiles = await segmentTiles(bmp);
     const results = [];
     for(const t of tiles){
-      const v = await ocrTile(t.canvas);
+      const v = await classifyTile(t.canvas);
       if(v!=null) results.push(v);
     }
     return results;
   }
 
   async function handleUpload(id, file, mount, mode){
-    mount.textContent = 'מנתח תמונה…';
+    mount.textContent = 'מנתח תמונה עם המודל…';
     try{
       const nums = await detectFromFile(file);
-      if(!nums.length){ mount.textContent='לא זוהו קוביות/ספרות. נסו תמונה קרובה יותר ואור חזק.'; return; }
+      if(!nums.length){ mount.textContent='לא זוהו קוביות. נסו דוגמיות אימון נוספות לכל מספר, ותמונה קרובה/בהירה.'; return; }
       const s = nums.reduce((a,b)=>a+b,0);
       const txt = 'זוהו: ' + nums.join(' + ') + ' = ' + s;
       if(mode==='replace'){ setPoints(id, s); } else { addPoints(id, s); }
@@ -254,11 +343,63 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // ===== Trainer UI =====
+  function toggleTrainer(){
+    $('#trainer').classList.toggle('hidden');
+  }
+  async function addFromGallery(){
+    const cls = $('#cls').value;
+    const picker = $('#filePick');
+    picker.onchange = async (e)=>{
+      const files = Array.from(e.target.files);
+      for(const f of files) {
+        const img = new Image();
+        img.src = URL.createObjectURL(f);
+        await new Promise(res=> img.onload=res);
+        await addExample(img, cls);
+      }
+      statusEl.textContent = 'נוספו דוגמאות ל-' + cls + ' (סה"כ מחלקות: ' + classifier.getNumClasses() + ')';
+      picker.value = '';
+    };
+    picker.click();
+  }
+  async function captureOne(){
+    const cls = $('#cls').value;
+    try{
+      const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      const video = document.createElement('video');
+      video.playsInline = true; video.muted = true; video.srcObject = s;
+      await video.play();
+      // warmup
+      await new Promise(r=> setTimeout(r, 400));
+      // capture to canvas
+      const c = document.createElement('canvas'); c.width=224; c.height=224;
+      const ctx = c.getContext('2d');
+      const vw = video.videoWidth, vh = video.videoHeight;
+      const size = Math.min(vw,vh);
+      ctx.drawImage(video, (vw-size)/2, (vh-size)/2, size, size, 0,0,224,224);
+      await addExample(c, cls);
+      s.getTracks().forEach(t=>t.stop());
+      statusEl.textContent = 'נוספה דוגמה ל-' + cls + ' (סה"כ מחלקות: ' + classifier.getNumClasses() + ')';
+    }catch(e){
+      alert('בעיית מצלמה/הרשאה: ' + e.message);
+    }
+  }
+
+  // Wire buttons
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('backBtn').addEventListener('click', backToNames);
-  document.getElementById('resetBtn').addEventListener('click', ()=>{ if(confirm('לאפס את כל הנקודות?')) { state.players.forEach(p=>p.points=0); save(); render(); } });
+  document.getElementById('resetBtn').addEventListener('click', ()=>{ if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(p=>p.points=0); save(); render(); } });
+  document.getElementById('toggleTrainer').addEventListener('click', toggleTrainer);
+  document.getElementById('addFromGallery').addEventListener('click', addFromGallery);
+  document.getElementById('captureOne').addEventListener('click', captureOne);
+  document.getElementById('saveModel').addEventListener('click', saveKNN);
+  document.getElementById('loadModel').addEventListener('click', loadKNN);
+  document.getElementById('exportModel').addEventListener('click', exportKNN);
+  document.getElementById('importModel').addEventListener('click', ()=> document.getElementById('importFile').click());
+  document.getElementById('importFile').addEventListener('change', (e)=> e.target.files[0] && importKNN(e.target.files[0]));
 
-  if(state.players && state.players.length) { showGame(); }
+  if(state.players && state.players.length){ showGame(); }
 });
 </script>
 </body>
