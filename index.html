@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.13-ml)</title>
+<title>רמיקוב – מצב משחק (v2.14-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9;--good:#19d19b}
@@ -51,7 +51,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.13-ml</div>
+      <div class="ver">v2.14-ml</div>
       <span id="backendBadge" class="badge">TF: —</span>
     </div>
     <div class="row">
@@ -151,12 +151,12 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', async function(){
-  const KEY = 'rummi_game_state_v2.13-ml';
-  const MODEL_KEY = 'rummi_knn_v2.13-ml';
+  const KEY = 'rummi_game_state_v2.14-ml';
+  const MODEL_KEY = 'rummi_knn_v2.14-ml';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch(e) { console.warn(e); }
 
-  // Backend badge
+  // Backend badge (prefer WebGL, fallback to CPU)
   try { await tf.setBackend('webgl'); await tf.ready(); } catch(e) { await tf.setBackend('cpu'); }
   finally { const b=document.getElementById('backendBadge'); if(b) b.textContent='TF: '+tf.getBackend(); }
 
@@ -182,10 +182,11 @@ document.addEventListener('DOMContentLoaded', async function(){
   const classifier = knnClassifier.create();
   let mobilenetModel = null;
   let tfReady = (async()=>{ try{ await tf.ready(); }catch(e){} })();
+
   async function ensureEmbedder(){
     await tfReady;
-    if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2, alpha:1.0});
-    const el=document.getElementById('status'); if(el) el.textContent='MobileNet + KNN מוכן';
+    if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2, alpha:0.5}); // lighter model
+    const el=document.getElementById('status'); if(el) el.textContent='MobileNet(0.5) + KNN מוכן';
   }
   ensureEmbedder();
 
@@ -207,18 +208,51 @@ document.addEventListener('DOMContentLoaded', async function(){
     });
   }
   function embed(img){
+    // Use tf.keep instead of clone to keep tensor outside tidy without extra memory
     return tf.tidy(()=>{
       const inp=preprocess(img);
       const emb=mobilenetModel.infer(inp,'conv_preds');
-      return emb.as2D(1, emb.shape[1]).clone();
+      return tf.keep(emb.as2D(1, emb.shape[1]));
     });
   }
+
+  // limit per-class examples to avoid OOM
+  function capPerClass(maxPer=50){
+    const ds=classifier.getClassifierDataset();
+    const keys=Object.keys(ds);
+    keys.forEach(k=>{
+      const t=ds[k];
+      const count=t.shape[0];
+      if(count>maxPer){
+        // keep only the newest maxPer rows
+        const slice = t.slice([count-maxPer,0],[maxPer,t.shape[1]]);
+        ds[k].dispose();
+        ds[k]=slice;
+      }
+    });
+    classifier.setClassifierDataset(ds);
+  }
+
   async function addExample(img,label){
     if(!label || label==='none'){ const st=document.getElementById('status'); if(st) st.textContent='בחר/י מחלקה לפני אימון'; return; }
-    await ensureEmbedder();
-    const logits=embed(img); classifier.addExample(logits,label);
-    await tf.nextFrame(); refreshCounts();
+    try{
+      await ensureEmbedder();
+      const logits=embed(img);
+      classifier.addExample(logits,label);
+      capPerClass(50);
+      await tf.nextFrame();
+      refreshCounts();
+    }catch(e){
+      // if webgl OOM, fallback to CPU for training
+      try{ await tf.setBackend('cpu'); const b=document.getElementById('backendBadge'); if(b) b.textContent='TF: '+tf.getBackend(); }catch(_){}
+      const logits=embed(img);
+      classifier.addExample(logits,label);
+      capPerClass(50);
+      await tf.nextFrame();
+      refreshCounts();
+    }
   }
+
   async function addMany(files,label){
     if(!label || label==='none'){ const st=document.getElementById('status'); if(st) st.textContent='בחר/י מחלקה לפני אימון'; return; }
     const list=Array.from(files).slice(0,20);
@@ -235,6 +269,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     }
     if(status) status.textContent='נוספו '+ok+' דוגמאות ל-'+label+(fail?(' (כשלו '+fail+')'):''); refreshCounts();
   }
+
   async function predictClass(img){
     await ensureEmbedder();
     if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
@@ -247,13 +282,13 @@ document.addEventListener('DOMContentLoaded', async function(){
     try{ const raw=localStorage.getItem(MODEL_KEY); if(!raw) return alert('אין מודל שמור'); const obj=JSON.parse(raw); const to={}; Object.keys(obj).forEach(k=> to[k]=tf.tensor(obj[k],[obj[k].length/1001,1001])); classifier.setClassifierDataset(to); const kb=Math.round(raw.length/1024); alert('מודל נטען · ~'+kb+'KB'); const st=document.getElementById('status'); if(st) st.textContent='מודל נטען · ~'+kb+'KB'; refreshCounts(); }catch(e){ alert('טעינה נכשלה'); }
   }
   function exportKNN(){
-    try{ const ds=classifier.getClassifierDataset(); const obj={}; Object.keys(ds).forEach(k=> obj[k]=Array.from(ds[k].dataSync())); const json=JSON.stringify(obj); const kb=Math.round(json.length/1024); const blob=new Blob([json],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='rummi_knn_v2.13-ml.json'; a.click(); const st=document.getElementById('status'); if(st) st.textContent='ייצוא · ~'+kb+'KB'; }catch(e){ alert('ייצוא נכשל'); }
+    try{ const ds=classifier.getClassifierDataset(); const obj={}; Object.keys(ds).forEach(k=> obj[k]=Array.from(ds[k].dataSync())); const json=JSON.stringify(obj); const kb=Math.round(json.length/1024); const blob=new Blob([json],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='rummi_knn_v2.14-ml.json'; a.click(); const st=document.getElementById('status'); if(st) st.textContent='ייצוא · ~'+kb+'KB'; }catch(e){ alert('ייצוא נכשל'); }
   }
   async function importKNN(file){
     try{ const text=await file.text(); const obj=JSON.parse(text); const to={}; Object.keys(obj).forEach(k=> to[k]=tf.tensor(obj[k],[obj[k].length/1001,1001])); classifier.setClassifierDataset(to); const kb=Math.round(text.length/1024); alert('יובא · ~'+kb+'KB'); const st=document.getElementById('status'); if(st) st.textContent='יובא · ~'+kb+'KB'; refreshCounts(); }catch(e){ alert('ייבוא נכשל'); }
   }
 
-  // ===== Duplicate suppression =====
+  // ===== Duplicate suppression (for detection stage) =====
   function iou(a,b){ const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y); const x2=Math.min(a.x+a.width,b.x+b.width); const y2=Math.min(a.y+a.height,b.y+b.height); const w=Math.max(0,x2-x1), h=Math.max(0,y2-y1); const inter=w*h; const ua=a.width*a.height + b.width*b.height - inter; return ua>0? inter/ua : 0; }
   function centerInside(inner, outer){ const cx=inner.x+inner.width/2, cy=inner.y+inner.height/2; return cx>outer.x && cx<outer.x+outer.width && cy>outer.y && cy<outer.y+outer.height; }
   function nmsMerge(rects){
@@ -418,7 +453,7 @@ document.addEventListener('DOMContentLoaded', async function(){
       uploadBtn.addEventListener('click', function(){ fileReplace.click(); });
       addBtn.addEventListener('click', function(){ fileAdd.click(); });
       fileReplace.addEventListener('change', function(e){ const f=e.target.files[0]; if(f){ mount.textContent='מנתח…'; detectFromFile(f,mount,p.id,'replace'); } e.target.value=''; });
-      fileAdd.addEventListener('change', function(e){ const f=e.target.files[0]; if(f){ mount.text_CONTENT='מנתח…'; detectFromFile(f,mount,p.id,'add'); } e.target.value=''; });
+      fileAdd.addEventListener('change', function(e){ const f=e.target.files[0]; if(f){ mount.textContent='מנתח…'; detectFromFile(f,mount,p.id,'add'); } e.target.value=''; });
       head.appendChild(title); head.appendChild(uploadBtn); head.appendChild(addBtn);
       card.appendChild(head); card.appendChild(fileReplace); card.appendChild(fileAdd);
       const meta=document.createElement('div'); meta.innerHTML='נקודות נוכחיות: <span class="pill">'+p.points+'</span>';
