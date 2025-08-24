@@ -3,119 +3,45 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (__AUTO_VER__)</title>
+<title>רמיקוב – מצב משחק (v2.34-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9;--good:#19d19b;--warn:#ffd166}
   html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  .container{width:min(980px,94vw);margin:0 auto;padding:112px 0 112px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+  .container{width:min(980px,94vw);margin:0 auto;padding:112px 0 120px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
   input[type=text],input[type=number]{background:#0b152a;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
   button{cursor:pointer;border:none;border-radius:12px;padding:12px 16px;background:#1c2741;color:#fff}
   .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:800}
   .ghost{background:transparent;border:1px dashed var(--line)}
-  .btnlike{display:inline-block; padding:12px 16px; border-radius:12px; cursor:pointer; user-select:none}
-  .btnlike:active{opacity:.8}
   .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
   .leader{display:flex;gap:10px;flex-wrap:wrap}
   .chip{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center}
   .rank{font-weight:900;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:#0d1a2e;border:1px solid rgba(100,200,255,.45)}
   .pill{padding:6px 10px;border-radius:999px;background:#0b172d;border:1px solid var(--line)}
-  .thumbs{display:flex;flex-wrap:wrap;gap:6px}
-  .thumb{border:1px solid var(--line);border-radius:8px;padding:4px}
-  .thumb span{display:block;font-size:11px;color:#c8d7ff;opacity:.9;margin-top:2px;text-align:center}
-  .hidden{display:none}
   .appbar{position:fixed;inset:0 0 auto 0;height:90px;background:rgba(8,12,24,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:10;display:flex;align-items:center}
   .appbar-inner{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
   .title{font-weight:800;letter-spacing:.2px}
   .ver{font-size:12px;padding:6px 10px;border-radius:999px;background:#0a1a2c;border:1px solid rgba(99,201,255,.4)}
-  .badge{font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#0a1628}
-  .big-toggle{display:flex;align-items:center;gap:12px;background:#0a1426;border:2px solid var(--line);border-radius:14px;padding:10px 14px}
-  .big-toggle.active{border-color:rgba(25,209,155,.6);box-shadow:0 0 0 3px rgba(25,209,155,.15) inset}
-  .big-toggle .state{font-weight:800}
-  .slider-wrap{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;background:#0a1426;padding:8px 12px}
-  input[type=range]{width:160px}
-  .divider{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin:14px 0;border:none}
   .bbar{position:fixed;left:0;right:0;bottom:0;height:96px;background:rgba(6,10,20,.9);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;align-items:center;z-index:12}
   .bbar-inner{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
-  .tilePrev{display:flex;align-items:center;gap:10px}
-  .tilePrev canvas{width:64px;height:64px;border-radius:10px;border:1px solid var(--line);background:#0b152a}
   .mini{font-size:12px;color:#9fb0c9}
-  .warn{color:#ffd166}
-  .vhfile{position:absolute; left:-9999px; width:0; height:0; opacity:0; pointer-events:none;}
-
-  #trainer{position:relative; z-index:1}
-
   .filebtn{appearance:none;-webkit-appearance:none;background:#1c2741;border:1px solid var(--line);color:#fff;border-radius:12px;padding:12px 16px}
   .filebtn:active{opacity:.85}
+  .hidden{display:none}
 </style>
-
-<script>
-// --- Auto versioning ---
-// Priority: ?v= query param -> embedded BUILD_VER -> fallback
-(function(){
-  var BUILD_VER = 'v2.31-ml'
-  var qv = new URLSearchParams(location.search).get('v');
-  var VER = qv || BUILD_VER;
-  // Update title text
-  document.title = document.title.replace('__AUTO_VER__', VER);
-  // Update any .ver badges that still contain placeholder
-  function applyVer(){
-    document.querySelectorAll('.ver').forEach(function(el){
-      if(el.textContent.indexOf('v')===-1 || el.textContent.indexOf('__AUTO_VER__')>-1){
-        el.textContent = el.textContent.replace('__AUTO_VER__', VER);
-        if(el.textContent.trim()==='' || el.textContent==='אין מודל') return;
-      }
-    });
-    // Also update any stray placeholders
-    document.body.querySelectorAll('*').forEach(function(el){
-      if(el.childNodes && el.childNodes.length){
-        el.childNodes.forEach(function(n){
-          if(n.nodeType===3 && n.nodeValue && n.nodeValue.indexOf('__AUTO_VER__')>-1){
-            n.nodeValue = n.nodeValue.replace('__AUTO_VER__', VER);
-          }
-        });
-      }
-    });
-    // Show build date near footer
-    var footer = document.getElementById('footerNote');
-    if(footer){
-      var dt = new Date();
-      var stamp = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0') + ' ' + dt.toTimeString().slice(0,5);
-      footer.textContent = 'מוכן · ' + VER + ' · ' + stamp;
-    }
-  }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', applyVer);
-  } else {
-    applyVer();
-  }
-  // Expose to window for future patches
-  window.__RUMMI_VER__ = VER;
-})();
-</script>
-
 </head>
 <body>
 <div class="appbar">
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – מצב משחק</div>
-      <div class="ver">__AUTO_VER__</div>
-      <span id="backendBadge" class="badge">TF: —</span>
+      <div class="ver" id="verBadge">v2.34-ml</div>
+      <span id="backendBadge" class="ver">TF: —</span>
     </div>
     <div class="row">
-      <button type="button" id="ignoreBtn" class="big-toggle active"><span>🎨 התעלם מצבע</span><span class="state" id="ignoreLbl">פעיל</span></button>
-      <div class="slider-wrap">
-        <label for="confThresh">סף ביטחון</label>
-        <input id="confThresh" type="range" min="0.3" max="0.95" step="0.05" value="0.65">
-        <span id="confVal">0.65</span>
-      </div>
-      <button type="button" id="ocrOnlyBtn" class="big-toggle"><span>🔤 OCR בלבד</span><span class="state" id="ocrLbl">כבוי</span></button>
       <button type="button" id="resetBtn" class="danger">איפוס נקודות</button>
-      <button type="button" id="clearResults" class="ghost">איפוס תוצאות</button>
       <button type="button" id="toggleTrainer" class="accent">אימון מודל</button>
     </div>
   </div>
@@ -124,15 +50,12 @@
 <div class="container">
   <section id="s1" class="card">
     <h2 style="margin:0">בחירת משתתפים (עד 4)</h2>
-    <div class="grid" style="margin-top:8px">
-      <div><label for="n0">שחקן/ית 1</label><input id="n0" type="text" placeholder="לדוגמה: שחר"></div>
-      <div><label for="n1">שחקן/ית 2</label><input id="n1" type="text" placeholder="לדוגמה: דנה"></div>
-      <div><label for="n2">שחקן/ית 3</label><input id="n2" type="text" placeholder="אופציונלי"></div>
-      <div><label for="n3">שחקן/ית 4</label><input id="n3" type="text" placeholder="אופציונלי"></div>
-    </div>
-    <div class="row" style="margin-top:12px;justify-content:space-between">
+    <div class="row" style="margin-top:8px">
+      <input id="n0" type="text" placeholder="שחקן/ית 1">
+      <input id="n1" type="text" placeholder="שחקן/ית 2">
+      <input id="n2" type="text" placeholder="אופציונלי">
+      <input id="n3" type="text" placeholder="אופציונלי">
       <button type="button" class="accent" id="startBtn">התחל משחק</button>
-      <span class="mini">מצב משחק + אימון</span>
     </div>
   </section>
 
@@ -142,59 +65,34 @@
       <button type="button" id="backBtn" class="ghost">↩ חזרה לשמות</button>
     </div>
     <div id="board" class="leader" style="margin-top:10px"></div>
-    <hr class="divider">
-    <div id="panels" class="grid"></div>
+    <div id="panels" style="margin-top:10px"></div>
   </section>
 
   <section id="trainer" class="card">
     <h2 style="margin-top:0">אימון מודל זיהוי (על המכשיר)</h2>
-    <div class="row">
-      <div>
-        <label>בחר/י מחלקה</label>
-        <select id="cls">
-          <option value="none">בחר/י מספר לפני בחירת קבצים</option>
-          <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-          <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
-          <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option>
-        </select>
-      </div>
-      <div class="row" style="gap:6px">
-        <label for="filePick" class="ghost btnlike" id="pickersContainerStartX" onclick="try{document.getElementById('status').textContent='נפתח בוחר קבצים (גלריה) ...';document.getElementById('dbgLog').textContent+='\nclick lblPickMulti';}catch(e){}"> הוסף מגזיר (גלריה)</label>
-        
-<div class="mini" style="opacity:.85;margin-bottom:6px">בחר/י קבצים כאן (מותאם ל‑iOS Chrome)</div>
-<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-  <input id="filePick" class="filebtn" type="file" accept="image/*,.heic,.heif" multiple>
-  <input id="filePickOne" class="filebtn" type="file" accept="image/*,.heic,.heif">
-  <input id="filePickCam" class="filebtn" type="file" accept="image/*,.heic,.heif" capture="environment">
-  <input id="filePickHeic" class="filebtn" type="file" accept="image/*,.heic,.heif" multiple>
-</div>
-
-      <div class="row mini warn" id="heicWarn" style="display:none">HEIC/HEIF יומר אוטומטית ל‑JPG (ייתכן עיכוב קצר).</div>
-      <div class="row">
-        <button type="button" id="exportModel" class="ghost">ייצא JSON</button>
-        <input id="importFile" class="vhfile" type="file" accept="application/json">
-        <button type="button" id="importModel" class="ghost">ייבא JSON</button>
-        <span id="status" class="ver">אין מודל</span>
-      </div>
-      
-<div class="mini" style="margin-top:6px">או: <input id="fallbackFile" type="file" accept="image/*,.heic,.heif"> (קלט גיבוי גלוי)</div>
-<div class="mini" style="opacity:.85">בחר/י קבצים כאן (שדות גלויים, מותאם ל‑iOS Chrome)</div>
-      <div class="row mini" id="countsRow">דוגמאות למספרים: (טרם אימון)</div>
-      <div class="card" id="dbg" style="margin-top:8px"><div class="mini">Debug:</div><pre id="dbgLog" style="white-space:pre-wrap;max-height:160px;overflow:auto;margin:0"></pre></div>
+    <div class="mini">קלטים גלויים + fallback polling ל-iOS Chrome</div>
+    <div class="row" style="margin-top:8px">
+      <label>בחר/י מחלקה</label>
+      <select id="cls">
+        <option value="none">בחר/י מספר</option>
+        <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option>
+      </select>
     </div>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <input id="filePick" class="filebtn" type="file" accept="image/*,.heic,.heif" multiple>
+      <input id="filePickOne" class="filebtn" type="file" accept="image/*,.heic,.heif">
+      <input id="filePickCam" class="filebtn" type="file" accept="image/*,.heic,.heif" capture="environment">
+      <input id="filePickHeic" class="filebtn" type="file" accept="image/*,.heic,.heif" multiple>
+    </div>
+    <div class="row mini" id="countsRow" style="margin-top:6px">דוגמאות למספרים: (טרם אימון)</div>
+    <div class="card" id="dbg" style="margin-top:8px"><div class="mini">Debug:</div><pre id="dbgLog" style="white-space:pre-wrap;max-height:160px;overflow:auto;margin:0"></pre></div>
+    <div class="row"><span id="status" class="ver">אין מודל</span></div>
   </section>
 </div>
 
 <div class="bbar">
   <div class="bbar-inner">
-    <div class="tilePrev">
-      <canvas id="lastTile" width="64" height="64"></canvas>
-      <div>
-        <div style="font-weight:700">הזיהוי האחרון:</div>
-        <div id="lastLabel" class="mini">—</div>
-      </div>
-    </div>
-    <div class="row mini" id="footerNote">טוען…</div>
+    <div class="mini" id="footerNote">טוען…</div>
   </div>
 </div>
 
@@ -204,159 +102,87 @@
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function(){
-  const KEY = 'rummi_state___AUTO_VER__';
-  let state = {players:[]};
-  try { const raw = localStorage.getItem(KEY); if(raw) state = JSON.parse(raw);} catch(e){}
+(function(){
+  const dbg = (m)=>{ try{ const el=document.getElementById('dbgLog'); el.textContent += '\n'+m; el.scrollTop = el.scrollHeight; }catch(_){} };
   const footer = document.getElementById('footerNote');
-  const dbgLog = (msg)=>{ try{ const el=document.getElementById('dbgLog'); if(!el) return; const time=new Date().toLocaleTimeString(); el.textContent += `\n[${ver}] ${time}  ${msg}`; el.scrollTop=el.scrollHeight; }catch(_){}};
+  (async()=>{ try{ await tf.setBackend('webgl'); await tf.ready(); }catch(e){ await tf.setBackend('cpu'); } finally{ document.getElementById('backendBadge').textContent='TF: '+tf.getBackend(); footer.textContent='מוכן · v2.34-ml'; } } )();
 
-  (async()=>{ try{ await tf.setBackend('webgl'); await tf.ready(); }catch(e){ await tf.setBackend('cpu'); } finally{ document.getElementById('backendBadge').textContent='TF: '+tf.getBackend(); footer.textContent='מוכן'; } })();
-
-  const settings = {ignoreColor:true, conf:0.65, ocrOnly:false};
-  const confSlider = document.getElementById('confThresh'), confVal=document.getElementById('confVal'), ocrBtn=document.getElementById('ocrOnlyBtn'), ocrLbl=document.getElementById('ocrLbl');
-  function reflect(){ confVal.textContent=Number(confSlider.value).toFixed(2); ocrLbl.textContent=settings.ocrOnly?'פעיל':'כבוי'; ocrBtn.classList.toggle('active', settings.ocrOnly); }
-  reflect();
-  document.getElementById('ignoreBtn').addEventListener('click', function(){ settings.ignoreColor=!settings.ignoreColor; });
-  confSlider.addEventListener('input', function(e){ settings.conf=parseFloat(e.target.value); reflect(); });
-  ocrBtn.addEventListener('click', function(){ settings.ocrOnly=!settings.ocrOnly; reflect(); });
-
-  function startGame(){ const names=['#n0','#n1','#n2','#n3'].map(function(s){const e=document.querySelector(s); return e?e.value.trim():'';}).filter(Boolean); const list=names.length?names:['שחקן 1','שחקן 2']; state.players=list.map(function(n,i){return {id:String(i+1),name:n,points:0};}); localStorage.setItem(KEY,JSON.stringify(state)); showGame(); }
-  function showGame(){ document.getElementById('s1').classList.add('hidden'); document.getElementById('s2').classList.remove('hidden'); render(); window.scrollTo({top:0,behavior:'smooth'}); }
-  function backToNames(){ document.getElementById('s2').classList.add('hidden'); document.getElementById('s1').classList.remove('hidden'); }
-  function addPoints(id,delta){ const p=state.players.find(function(x){return x.id===id;}); if(!p) return; p.points+=delta; localStorage.setItem(KEY,JSON.stringify(state)); render(); }
-  document.getElementById('startBtn').addEventListener('click', startGame);
-  document.getElementById('backBtn').addEventListener('click', backToNames);
-  document.getElementById('resetBtn').addEventListener('click', function(){ if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(function(p){ p.points=0; }); localStorage.setItem(KEY,JSON.stringify(state)); render(); } });
-  document.getElementById('clearResults').addEventListener('click', function(){ const ctx=document.getElementById('lastTile').getContext('2d'); ctx.clearRect(0,0,64,64); document.getElementById('lastLabel').textContent='—'; });
-
+  // --- Game minimal state ---
+  const KEY='rummi_state_v234ml';
+  let state={players:[]};
+  function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
   function render(){
     const board=document.getElementById('board'); board.innerHTML='';
-    const sorted=state.players.slice().sort(function(a,b){return b.points-a.points;});
-    sorted.forEach(function(p,i){ const div=document.createElement('div'); div.className='chip'; div.innerHTML='<div class="rank">'+(i+1)+'</div><div>'+p.name+(i===0?' 👑':'')+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>'; board.appendChild(div); });
+    const sorted=state.players.slice().sort((a,b)=>b.points-a.points);
+    sorted.forEach((p,i)=>{
+      const div=document.createElement('div'); div.className='chip';
+      div.innerHTML='<div class="rank">'+(i+1)+'</div><div>'+p.name+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
+      board.appendChild(div);
+    });
     const panels=document.getElementById('panels'); panels.innerHTML='';
-    state.players.forEach(function(p){
+    state.players.forEach(p=>{
       const card=document.createElement('div'); card.className='card';
-      const head=document.createElement('div'); head.className='row';
-      const title=document.createElement('h3'); title.style.margin='0'; title.textContent=p.name;
-      const mount=document.createElement('div'); mount.className='mini'; mount.textContent='בחר/י תמונות לאימון המודל עבור מספר מסוים.';
-      const fileReplace=document.createElement('input'); fileReplace.type='file'; fileReplace.accept='image/*,.heic,.heif'; fileReplace.className='vhfile';
-      const uploadBtn=document.createElement('button'); uploadBtn.className='ghost'; uploadBtn.type='button'; uploadBtn.textContent=' העלה תמונה לשחקן (תצוגה בלבד)';
-      uploadBtn.addEventListener('click', function(){ fileReplace.click(); });
-      fileReplace.addEventListener('change', async function(e){
-        const f=e.target.files[0]; e.target.value=''; if(!f) return;
-        try{ const img=await loadImageFromFile(f); const c=document.getElementById('lastTile'); const ctx=c.getContext('2d'); c.width=64; c.height=64; ctx.drawImage(img,0,0,64,64); document.getElementById('lastLabel').textContent='תצוגה: '+(f.name||'תמונה'); mount.textContent='נטען בהצלחה'; }catch(err){ mount.textContent='שגיאה בטעינת תמונה: '+(err.message||err); }
-      });
-      head.appendChild(title); head.appendChild(uploadBtn); card.appendChild(head); card.appendChild(fileReplace);
-      const meta=document.createElement('div'); meta.innerHTML='נקודות נוכחיות: <span class="pill">'+p.points+'</span>'; card.appendChild(meta);
-      const ctrls=document.createElement('div'); ctrls.className='row'; const num=document.createElement('input'); num.type='number'; num.placeholder='+/-'; const go=document.createElement('button'); go.type='button'; go.textContent='הוסף/הפחת'; go.addEventListener('click', function(){ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } }); const minus10=document.createElement('button'); minus10.type='button'; minus10.textContent='-10'; minus10.addEventListener('click', function(){ addPoints(p.id,-10); }); ctrls.appendChild(num); ctrls.appendChild(go); ctrls.appendChild(minus10); card.appendChild(ctrls);
-      card.appendChild(mount); panels.appendChild(card);
+      const h=document.createElement('h3'); h.textContent=p.name; card.appendChild(h);
+      const row=document.createElement('div'); row.className='row';
+      const inp=document.createElement('input'); inp.type='number'; inp.placeholder='+/-';
+      const btn=document.createElement('button'); btn.textContent='הוסף/הפחת';
+      const m10=document.createElement('button'); m10.textContent='-10';
+      btn.onclick=()=>{ const d=Number(inp.value); if(!Number.isNaN(d)&&inp.value!==''){ p.points+=d; inp.value=''; save(); render(); } };
+      m10.onclick=()=>{ p.points-=10; save(); render(); };
+      row.appendChild(inp); row.appendChild(btn); row.appendChild(m10);
+      card.appendChild(row); panels.appendChild(card);
     });
   }
+  document.getElementById('startBtn').onclick=()=>{
+    const names=['n0','n1','n2','n3'].map(id=>document.getElementById(id).value.trim()).filter(Boolean);
+    const list=names.length?names:['שחקן 1','שחקן 2'];
+    state.players=list.map((n,i)=>({id:String(i+1),name:n,points:0})); save();
+    document.getElementById('s1').classList.add('hidden');
+    document.getElementById('s2').classList.remove('hidden');
+    render(); window.scrollTo({top:0,behavior:'smooth'});
+  };
+  document.getElementById('backBtn').onclick=()=>{ document.getElementById('s2').classList.add('hidden'); document.getElementById('s1').classList.remove('hidden'); };
+  document.getElementById('resetBtn').onclick=()=>{ if(confirm('לאפס נקודות?')){ state.players.forEach(p=>p.points=0); save(); render(); } };
 
-  // ===== Trainer (upload only, with HEIC conversion) =====
-  const classifier = knnClassifier.create();
-  let mobilenetModel = null;
-  async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2, alpha:0.35}); }
-  ensureEmbedder();
+  // --- Trainer ---
+  const classifier = knnClassifier.create(); let mobilenetModel=null;
+  async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2,alpha:0.35}); }
+  function isHeic(f){ const n=(f.name||'').toLowerCase(); return f.type==='image/heic'||f.type==='image/heif'||n.endsWith('.heic')||n.endsWith('.heif'); }
+  async function toJpegIfNeeded(f){ if(!isHeic(f)) return f; try{ const blob=await heic2any({blob:f,toType:'image/jpeg',quality:0.9}); return new File([blob], (f.name||'photo')+'.jpg', {type:'image/jpeg'}); }catch(_){ dbg('heic2any failed, using original'); return f; } }
+  async function loadImageFromFile(f){ f=await toJpegIfNeeded(f); return new Promise((res,rej)=>{ const img=new Image(); const u=URL.createObjectURL(f); img.onload=()=>{ URL.revokeObjectURL(u); res(img); }; img.onerror=(e)=>{ URL.revokeObjectURL(u); rej(e); }; img.src=u; }); }
 
-  function isHeicFile(f){ const n=(f.name||'').toLowerCase(); return f.type==='image/heic'||f.type==='image/heif'||n.endsWith('.heic')||n.endsWith('.heif'); }
-  async function toJpegIfNeeded(f){ if(!isHeicFile(f)) return f; document.getElementById('heicWarn').style.display='block'; try{ const blob=await heic2any({blob:f,toType:'image/jpeg',quality:0.9}); return new File([blob], (f.name||'photo')+'.jpg', {type:'image/jpeg'}); }catch(_){ return f; } }
-  async function loadImageFromFile(f){
-    f = await toJpegIfNeeded(f);
-    return new Promise(function(resolve,reject){
-      const img=new Image(); img.crossOrigin='anonymous';
-      const u=URL.createObjectURL(f);
-      img.onload=function(){ URL.revokeObjectURL(u); resolve(img); };
-      img.onerror=function(){
-        URL.revokeObjectURL(u);
-        try{ const fr=new FileReader(); fr.onload=function(){ img.onload=function(){ resolve(img); }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(f); }catch(e){ reject(e); }
-      };
-      img.src=u;
-    });
-  }
+  const cls=document.getElementById('cls');
+  const pickers=['filePick','filePickOne','filePickCam','filePickHeic'].map(id=>document.getElementById(id));
 
-  const clsSel=document.getElementById('cls');
-  const pickerMulti=document.getElementById('filePick');
-  const pickerOne=document.getElementById('filePickOne');
-  const pickerCam=document.getElementById('filePickCam');
-  const pickerHeic=document.getElementById('filePickHeic');
-  const pickerFallback=document.getElementById('fallbackFile');
-  document.getElementById('addFromGallery').addEventListener('click',function(){ dbgLog('open pickerMulti'); pickerMulti.click(); });
-  document.getElementById('addSingle').addEventListener('click',function(){ dbgLog('open pickerOne'); pickerOne.click(); });
-  document.getElementById('captureOne').addEventListener('click',function(){ dbgLog('open pickerCam'); pickerCam.click(); });
-
-  async function handleFiles(files){
-    dbgLog('handleFiles called');
-    const label=clsSel.value;
-    if(!files || !files.length){ document.getElementById('status').textContent='לא נבחרו קבצים'; dbgLog('no files'); return; } else { dbgLog('picked '+files.length+' files'); }
-    if(label==='none'){ document.getElementById('status').textContent='בחר/י מספר לפני העלאה'; return; }
-    await ensureEmbedder(); dbgLog('embedder ready');
-    const list=Array.from(files).slice(0,20);
-    let ok=0,fail=0;
-    for(let i=0;i<list.length;i++){
-      try{
-        dbgLog('loading file '+(list[i].name||i)); const img=await loadImageFromFile(list[i]); dbgLog('loaded OK');
-        const t=tf.tidy(function(){
-          let x=tf.browser.fromPixels(img).toFloat();
-          if(settings.ignoreColor){
-            const r=x.slice([0,0,0],[x.shape[0],x.shape[1],1]);
-            const g=x.slice([0,0,1],[x.shape[0],x.shape[1],1]);
-            const b=x.slice([0,0,2],[x.shape[0],x.shape[1],1]);
-            const gray=r.mul(0.299).add(g.mul(0.587)).add(b.mul(0.114));
-            x=tf.concat([gray,gray,gray],2);
-          }
-          x=tf.image.resizeBilinear(x,[224,224]);
-          const o=tf.scalar(127.5);
-          x=x.sub(o).div(o).expandDims(0);
-          return mobilenetModel.infer(x,'conv_preds').as2D(1,1001);
-        });
-        classifier.addExample(t,label);
-        t.dispose();
-        ok++; document.getElementById('status').textContent='מאמן: '+ok+'/'+list.length+' (נכשלו: '+fail+')';
-        await tf.nextFrame();
-      }catch(err){
-        console.error('upload/train error', err); dbgLog('ERR '+(err && err.message ? err.message : err));
-        fail++; var st='מאמן: '+ok+'/'+list.length+' (נכשלו: '+fail+')'; document.getElementById('status').textContent=st; try{document.getElementById('dbgLog').textContent += '\ntrain fail on '+(list[i].name||i);}catch(_){}
-      }
+  async function handleFilesFromInput(inp){
+    const files=inp.files;
+    dbg('poll detected ('+inp.id+') '+(files?files.length:0));
+    if(!files||!files.length) return;
+    if(cls.value==='none'){ document.getElementById('status').textContent='בחר/י מספר לפני העלאה'; return; }
+    await ensureEmbedder();
+    let ok=0,fail=0; const arr=[...files].slice(0,20);
+    for(let i=0;i<arr.length;i++){ try{ const img=await loadImageFromFile(arr[i]);
+      const emb=tf.tidy(()=>{ let x=tf.browser.fromPixels(img).toFloat();
+        const r=x.slice([0,0,0],[x.shape[0],x.shape[1],1]); const g=x.slice([0,0,1],[x.shape[0],x.shape[1],1]); const b=x.slice([0,0,2],[x.shape[0],x.shape[1],1]);
+        const gray=r.mul(0.299).add(g.mul(0.587)).add(b.mul(0.114)); x=tf.concat([gray,gray,gray],2);
+        x=tf.image.resizeBilinear(x,[224,224]); const o=tf.scalar(127.5); x=x.sub(o).div(o).expandDims(0); return mobilenetModel.infer(x,'conv_preds').as2D(1,1001); });
+      classifier.addExample(emb, cls.value); emb.dispose(); ok++; document.getElementById('status').textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; await tf.nextFrame(); }
+    catch(err){ fail++; document.getElementById('status').textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; dbg('ERR '+(err.message||err)); }
     }
     const ds=classifier.getClassifierDataset(); const keys=Object.keys(ds);
-    document.getElementById('countsRow').textContent = keys.length ? ('דוגמאות: ' + keys.map(function(k){return k+': '+(ds[k].shape[0]||0);}).join(' | ')) : 'אין דוגמאות';
+    document.getElementById('countsRow').textContent= keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')):'אין דוגמאות';
+    inp.value='';
   }
 
-  pickerMulti.addEventListener('change', async function(e){ dbgLog('pickerMulti change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
-  pickerOne.addEventListener('change', async function(e){ dbgLog('pickerOne change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
-  pickerCam.addEventListener('change', async function(e){ dbgLog('pickerCam change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
-  pickerHeic.addEventListener('change', async function(e){ dbgLog('pickerHeic change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
-  pickerFallback.addEventListener('change', async function(e){ dbgLog('pickerFallback change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
-
-  if(state.players && state.players.length) showGame();
-});
-</script>
-
-<script>
-(function(){
-  function prep(labelId, inputId, msg){
-    var lbl = document.getElementById(labelId);
-    var inp = document.getElementById(inputId);
-    if(!lbl || !inp) return;
-    lbl.addEventListener('click', function(){
-      try{
-        // Clear previous selection so picking the same file will still fire 'change'
-        inp.value = '';
-        var st = document.getElementById('status');
-        if(st){ st.textContent = msg || 'פותח בוחר קבצים...'; }
-        var dbg = document.getElementById('dbgLog');
-        if(dbg){ dbg.textContent += '\nprep '+labelId+' -> cleared input '+inputId; dbg.scrollTop = dbg.scrollHeight; }
-      }catch(e){}
+  pickers.forEach(inp=>{
+    inp.addEventListener('change', async (e)=>{
+      dbg(inp.id+' change ('+(inp.files?inp.files.length:0)+')');
+      await handleFilesFromInput(inp);
     });
-  }
-  // removed
-  // removed
-  // removed
-  // removed
+    // fallback polling every 2s
+    setInterval(()=>{ if(inp.files && inp.files.length){ handleFilesFromInput(inp); } },2000);
+  });
 })();
 </script>
-
 </body>
 </html>
