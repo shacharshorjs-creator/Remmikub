@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.24-ml)</title>
+<title>רמיקוב – מצב משחק (__AUTO_VER__)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9;--good:#19d19b;--warn:#ffd166}
@@ -15,7 +15,6 @@
   input[type=text],input[type=number]{background:#0b152a;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
   button{cursor:pointer;border:none;border-radius:12px;padding:12px 16px;background:#1c2741;color:#fff}
   .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:800}
-  .accent.on{box-shadow:0 0 0 3px rgba(99,201,255,.25)}
   .ghost{background:transparent;border:1px dashed var(--line)}
   .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
   .leader{display:flex;gap:10px;flex-wrap:wrap}
@@ -45,13 +44,59 @@
   .warn{color:#ffd166}
   .vhfile{position:absolute; left:-9999px; width:0; height:0; opacity:0; pointer-events:none;}
 </style>
+
+<script>
+// --- Auto versioning ---
+// Priority: ?v= query param -> embedded BUILD_VER -> fallback
+(function(){
+  var BUILD_VER = 'v2.26-ml';
+  var qv = new URLSearchParams(location.search).get('v');
+  var VER = qv || BUILD_VER;
+  // Update title text
+  document.title = document.title.replace('__AUTO_VER__', VER);
+  // Update any .ver badges that still contain placeholder
+  function applyVer(){
+    document.querySelectorAll('.ver').forEach(function(el){
+      if(el.textContent.indexOf('v')===-1 || el.textContent.indexOf('__AUTO_VER__')>-1){
+        el.textContent = el.textContent.replace('__AUTO_VER__', VER);
+        if(el.textContent.trim()==='' || el.textContent==='אין מודל') return;
+      }
+    });
+    // Also update any stray placeholders
+    document.body.querySelectorAll('*').forEach(function(el){
+      if(el.childNodes && el.childNodes.length){
+        el.childNodes.forEach(function(n){
+          if(n.nodeType===3 && n.nodeValue && n.nodeValue.indexOf('__AUTO_VER__')>-1){
+            n.nodeValue = n.nodeValue.replace('__AUTO_VER__', VER);
+          }
+        });
+      }
+    });
+    // Show build date near footer
+    var footer = document.getElementById('footerNote');
+    if(footer){
+      var dt = new Date();
+      var stamp = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0') + ' ' + dt.toTimeString().slice(0,5);
+      footer.textContent = 'מוכן · ' + VER + ' · ' + stamp;
+    }
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', applyVer);
+  } else {
+    applyVer();
+  }
+  // Expose to window for future patches
+  window.__RUMMI_VER__ = VER;
+})();
+</script>
+
 </head>
 <body>
 <div class="appbar">
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.23-ml</div>
+      <div class="ver">__AUTO_VER__</div>
       <span id="backendBadge" class="badge">TF: —</span>
     </div>
     <div class="row">
@@ -122,6 +167,7 @@
         <span id="status" class="ver">אין מודל</span>
       </div>
       <div class="row mini" id="countsRow">דוגמאות למספרים: (טרם אימון)</div>
+      <div class="card" id="dbg" style="margin-top:8px"><div class="mini">Debug:</div><pre id="dbgLog" style="white-space:pre-wrap;max-height:160px;overflow:auto;margin:0"></pre></div>
     </div>
   </section>
 </div>
@@ -146,10 +192,11 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function(){
-  const KEY = 'rummi_state_v2.23-ml';
+  const KEY = 'rummi_state___AUTO_VER__';
   let state = {players:[]};
   try { const raw = localStorage.getItem(KEY); if(raw) state = JSON.parse(raw);} catch(e){}
   const footer = document.getElementById('footerNote');
+  const dbgLog = (msg)=>{ try{ const el=document.getElementById('dbgLog'); if(!el) return; const time=new Date().toLocaleTimeString(); el.textContent += `\n[${ver}] ${time}  ${msg}`; el.scrollTop=el.scrollHeight; }catch(_){}};
 
   (async()=>{ try{ await tf.setBackend('webgl'); await tf.ready(); }catch(e){ await tf.setBackend('cpu'); } finally{ document.getElementById('backendBadge').textContent='TF: '+tf.getBackend(); footer.textContent='מוכן'; } })();
 
@@ -169,21 +216,6 @@ document.addEventListener('DOMContentLoaded', function(){
   document.getElementById('backBtn').addEventListener('click', backToNames);
   document.getElementById('resetBtn').addEventListener('click', function(){ if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(function(p){ p.points=0; }); localStorage.setItem(KEY,JSON.stringify(state)); render(); } });
   document.getElementById('clearResults').addEventListener('click', function(){ const ctx=document.getElementById('lastTile').getContext('2d'); ctx.clearRect(0,0,64,64); document.getElementById('lastLabel').textContent='—'; });
-
-  // open/close trainer panel
-  (function(){
-    const btn = document.getElementById('toggleTrainer');
-    const panel = document.getElementById('trainer');
-    btn.addEventListener('click', function(){
-      const isHidden = panel.classList.contains('hidden');
-      panel.classList.toggle('hidden');
-      btn.classList.toggle('on', isHidden);
-      btn.setAttribute('aria-expanded', String(isHidden));
-      if(isHidden){
-        setTimeout(()=>panel.scrollIntoView({behavior:'smooth', block:'start'}), 10);
-      }
-    });
-  })();
 
   function render(){
     const board=document.getElementById('board'); board.innerHTML='';
@@ -235,20 +267,21 @@ document.addEventListener('DOMContentLoaded', function(){
   const pickerMulti=document.getElementById('filePick');
   const pickerOne=document.getElementById('filePickOne');
   const pickerCam=document.getElementById('filePickCam');
-  document.getElementById('addFromGallery').addEventListener('click',function(){ pickerMulti.click(); });
-  document.getElementById('addSingle').addEventListener('click',function(){ pickerOne.click(); });
-  document.getElementById('captureOne').addEventListener('click',function(){ pickerCam.click(); });
+  document.getElementById('addFromGallery').addEventListener('click',function(){ dbgLog('open pickerMulti'); pickerMulti.click(); });
+  document.getElementById('addSingle').addEventListener('click',function(){ dbgLog('open pickerOne'); pickerOne.click(); });
+  document.getElementById('captureOne').addEventListener('click',function(){ dbgLog('open pickerCam'); pickerCam.click(); });
 
   async function handleFiles(files){
+    dbgLog('handleFiles called');
     const label=clsSel.value;
-    if(!files || !files.length){ document.getElementById('status').textContent='לא נבחרו קבצים'; return; }
+    if(!files || !files.length){ document.getElementById('status').textContent='לא נבחרו קבצים'; dbgLog('no files'); return; } else { dbgLog('picked '+files.length+' files'); }
     if(label==='none'){ document.getElementById('status').textContent='בחר/י מספר לפני העלאה'; return; }
-    await ensureEmbedder();
+    await ensureEmbedder(); dbgLog('embedder ready');
     const list=Array.from(files).slice(0,20);
     let ok=0,fail=0;
     for(let i=0;i<list.length;i++){
       try{
-        const img=await loadImageFromFile(list[i]);
+        dbgLog('loading file '+(list[i].name||i)); const img=await loadImageFromFile(list[i]); dbgLog('loaded OK');
         const t=tf.tidy(function(){
           let x=tf.browser.fromPixels(img).toFloat();
           if(settings.ignoreColor){
@@ -268,7 +301,7 @@ document.addEventListener('DOMContentLoaded', function(){
         ok++; document.getElementById('status').textContent='מאמן: '+ok+'/'+list.length+' (נכשלו: '+fail+')';
         await tf.nextFrame();
       }catch(err){
-        console.error('upload/train error', err);
+        console.error('upload/train error', err); dbgLog('ERR '+(err && err.message ? err.message : err));
         fail++; document.getElementById('status').textContent='מאמן: '+ok+'/'+list.length+' (נכשלו: '+fail+')';
       }
     }
