@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.16-ml)</title>
+<title>רמיקוב – מצב משחק (v2.17-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9;--good:#19d19b;--warn:#ffd166}
@@ -48,7 +48,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.16-ml</div>
+      <div class="ver">v2.17-ml</div>
       <span id="backendBadge" class="badge">TF: —</span>
     </div>
     <div class="row">
@@ -103,16 +103,19 @@
       <div>
         <label>בחר/י מחלקה</label>
         <select id="cls">
-          <option value="none">ללא / ג׳וקר</option>
+          <option value="none">בחר/י מספר לפני בחירת קבצים</option>
           <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
           <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
           <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option>
         </select>
       </div>
       <div class="row" style="gap:6px">
-        <button id="addFromGallery" class="btn-upload"> הוסף מגזיר (עד 20)</button>
+        <button id="addFromGallery" class="ghost"> הוסף מגזיר (גלריה)</button>
         <input id="filePick" type="file" accept="image/*" class="hidden" multiple>
-        <button id="captureOne" class="btn-plus"> הוסף מהמצלמה</button>
+        <button id="addSingle" class="ghost"> הוסף תמונה בודדת</button>
+        <input id="filePickOne" type="file" accept="image/*" class="hidden">
+        <button id="captureOne" class="ghost"> צילום מהמצלמה</button>
+        <input id="filePickCam" type="file" accept="image/*" capture="environment" class="hidden">
       </div>
       <div class="row">
         <button id="saveModel" class="ghost">שמור מודל</button>
@@ -152,8 +155,8 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', async function(){
-  const KEY = 'rummi_game_state_v2.16-ml';
-  const MODEL_KEY = 'rummi_knn_v2.16-ml';
+  const KEY = 'rummi_game_state_v2.17-ml';
+  const MODEL_KEY = 'rummi_knn_v2.17-ml';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch(e) { console.warn(e); }
 
@@ -188,7 +191,6 @@ document.addEventListener('DOMContentLoaded', async function(){
   async function ensureEmbedder(){
     await tfReady;
     if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2, alpha:0.35});
-    // try to infer embedding size
     try {
       const dummy = tf.zeros([1,224,224,3]);
       const out = mobilenetModel.infer(dummy, 'conv_preds');
@@ -224,54 +226,60 @@ document.addEventListener('DOMContentLoaded', async function(){
     });
   }
   async function addExample(img,label){
-    if(!label || label==='none'){ const st=document.getElementById('status'); if(st) st.textContent='בחר/י מחלקה לפני אימון'; return; }
+    if(!label || label==='none'){ const st=document.getElementById('status'); if(st) st.textContent='בחר/י מספר לפני העלאה'; return; }
     const logits=embed(img);
     classifier.addExample(logits,label);
-    logits.dispose(); // important to avoid leak
+    logits.dispose();
     await tf.nextFrame(); refreshCounts();
   }
 
-  // sequential loader with reuse
-  async function addMany(files,label){
-    if(!label || label==='none'){ const st=document.getElementById('status'); if(st) st.textContent='בחר/י מחלקה לפני אימון'; return; }
-    const list=Array.from(files).slice(0,20);
-    let ok=0, fail=0; const status=document.getElementById('status');
-    const img = new Image();
+  // ===== Trainer inputs (robust for mobile) =====
+  const pickerMulti = document.getElementById('filePick');
+  const pickerOne = document.getElementById('filePickOne');
+  const pickerCam = document.getElementById('filePickCam');
+  const btnMulti = document.getElementById('addFromGallery');
+  const btnOne = document.getElementById('addSingle');
+  const btnCam = document.getElementById('captureOne');
+  const clsSel = document.getElementById('cls');
+
+  btnMulti.addEventListener('click', function(){ pickerMulti.click(); });
+  btnOne.addEventListener('click', function(){ pickerOne.click(); });
+  btnCam.addEventListener('click', function(){ pickerCam.click(); });
+
+  async function handleFiles(files){
+    const label = clsSel.value;
+    if(!files || !files.length){ const st=document.getElementById('status'); if(st) st.textContent='לא נבחרו קבצים'; return; }
+    if(!label || label==='none'){ const st=document.getElementById('status'); if(st) st.textContent='בחר/י מספר לפני העלאה'; return; }
+    const list = Array.from(files).slice(0,20);
+    let ok=0, fail=0; const status=document.getElementById('status'); const img = new Image();
     for(let i=0;i<list.length;i++){
-      const f=list[i];
-      const url=URL.createObjectURL(f);
+      const url=URL.createObjectURL(list[i]);
       try{
-        // load
         await new Promise((resolve,reject)=>{ img.onload=resolve; img.onerror=reject; img.src=url; });
         await addExample(img,label); ok++;
         if(status) status.textContent='מאמן: '+(i+1)+'/'+list.length;
       }catch(e){ fail++; }
       finally{ URL.revokeObjectURL(url); }
       await tf.nextFrame();
-      await new Promise(r=> (window.requestIdleCallback ? requestIdleCallback(()=>r(),{timeout:60}) : setTimeout(r,30)));
     }
     if(status) status.textContent='נוספו '+ok+' דוגמאות ל-'+label+(fail?(' (כשלו '+fail+')'):''); refreshCounts();
   }
 
-  async function predictClass(img){
-    await ensureEmbedder();
-    if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
-    const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res;
-  }
-  function saveKNN(){
-    try{ const ds=classifier.getClassifierDataset(); const obj={}; Object.keys(ds).forEach(k=> obj[k]=Array.from(ds[k].dataSync())); const json=JSON.stringify({emb: EMB, data: obj}); localStorage.setItem(MODEL_KEY,json); const kb=Math.round(json.length/1024); alert('מודל נשמר (≈'+kb+'KB)'); const st=document.getElementById('status'); if(st) st.textContent='מודל נשמר · ~'+kb+'KB'; }catch(e){ alert('שמירה נכשלה'); }
-  }
-  function loadKNN(){
-    try{ const raw=localStorage.getItem(MODEL_KEY); if(!raw) return alert('אין מודל שמור'); const parse=JSON.parse(raw); const obj=parse.data||parse; const dim=(parse.emb||EMB||1001); const to={}; Object.keys(obj).forEach(k=> to[k]=tf.tensor2d(obj[k], [obj[k].length/dim, dim])); classifier.setClassifierDataset(to); const kb=Math.round(raw.length/1024); alert('מודל נטען · ~'+kb+'KB'); const st=document.getElementById('status'); if(st) st.textContent='מודל נטען · ~'+kb+'KB'; refreshCounts(); }catch(e){ alert('טעינה נכשלה'); }
-  }
-  function exportKNN(){
-    try{ const ds=classifier.getClassifierDataset(); const obj={}; Object.keys(ds).forEach(k=> obj[k]=Array.from(ds[k].dataSync())); const json=JSON.stringify({emb: EMB, data: obj}); const kb=Math.round(json.length/1024); const blob=new Blob([json],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='rummi_knn_v2.16-ml.json'; a.click(); const st=document.getElementById('status'); if(st) st.textContent='ייצוא · ~'+kb+'KB'; }catch(e){ alert('ייצוא נכשל'); }
-  }
-  async function importKNN(file){
-    try{ const text=await file.text(); const parse=JSON.parse(text); const obj=parse.data||parse; const dim=(parse.emb||EMB||1001); const to={}; Object.keys(obj).forEach(k=> to[k]=tf.tensor2d(obj[k], [obj[k].length/dim, dim])); classifier.setClassifierDataset(to); const kb=Math.round(text.length/1024); alert('יובא · ~'+kb+'KB'); const st=document.getElementById('status'); if(st) st.textContent='יובא · ~'+kb+'KB'; refreshCounts(); }catch(e){ alert('ייבוא נכשל'); }
+  pickerMulti.addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
+  pickerOne  .addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
+  pickerCam  .addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
+
+  // ===== Detection helpers & OCR (unchanged) =====
+  async function ocrFallback(canvas){
+    try{
+      const r=await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'});
+      const t=(r.data&&r.data.text||'').trim();
+      let m=t.match(/\\b1[0-3]\\b/); if(m) return parseInt(m[0],10);
+      m=t.match(/\\b[0-9]\\b/); if(m) return parseInt(m[0],10);
+    }catch(e){}
+    return null;
   }
 
-  // ===== Detection helpers (unchanged) =====
   function iou(a,b){ const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y); const x2=Math.min(a.x+a.width,b.x+b.width); const y2=Math.min(a.y+a.height,b.y+b.height); const w=Math.max(0,x2-x1), h=Math.max(0,y2-y1); const inter=w*h; const ua=a.width*a.height + b.width*b.height - inter; return ua>0? inter/ua : 0; }
   function centerInside(inner, outer){ const cx=inner.x+inner.width/2, cy=inner.y+inner.height/2; return cx>outer.x && cx<outer.x+outer.width && cy>outer.y && cy<outer.y+outer.height; }
   function nmsMerge(rects){
@@ -293,7 +301,6 @@ document.addEventListener('DOMContentLoaded', async function(){
     return filtered;
   }
 
-  // ===== OpenCV segmentation =====
   async function ensureCvReady(){
     return new Promise(function(resolve,reject){
       if (typeof cv!=='undefined' && cv.Mat) return resolve();
@@ -342,18 +349,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     return tiles;
   }
 
-  // ===== OCR fallback =====
-  async function ocrFallback(canvas){
-    try{
-      const r=await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'});
-      const t=(r.data&&r.data.text||'').trim();
-      let m=t.match(/\\b1[0-3]\\b/); if(m) return parseInt(m[0],10);
-      m=t.match(/\\b[0-9]\\b/); if(m) return parseInt(m[0],10);
-    }catch(e){}
-    return null;
-  }
-
-  // ===== Last detected preview =====
+  // ===== Last detected preview & OCR classify =====
   const lastCanvas=document.getElementById('lastTile'); const lastLabel=document.getElementById('lastLabel');
   function setLastPreview(fromCanvas,labelText){
     const ctx=lastCanvas.getContext('2d');
@@ -364,6 +360,20 @@ document.addEventListener('DOMContentLoaded', async function(){
   }
   document.getElementById('clearLast')?.addEventListener('click', function(){ setLastPreview(null,'—'); });
 
+  async function ocrFallback(canvas){
+    try{
+      const r=await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'});
+      const t=(r.data&&r.data.text||'').trim();
+      let m=t.match(/\\b1[0-3]\\b/); if(m) return parseInt(m[0],10);
+      m=t.match(/\\b[0-9]\\b/); if(m) return parseInt(m[0],10);
+    }catch(e){}
+    return null;
+  }
+  async function predictClass(img){
+    await ensureEmbedder();
+    if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
+    const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res;
+  }
   async function classifyTile(canvas){
     const res=await predictClass(canvas);
     if(res && res.label!=='none'){
@@ -447,7 +457,7 @@ document.addEventListener('DOMContentLoaded', async function(){
       go.addEventListener('click', function(){ const d=Number(num.value); if(!Number.isNaN(d) && num.value!==''){ addPoints(p.id,d); num.value=''; } });
       const minus10=document.createElement('button'); minus10.textContent='-10'; minus10.addEventListener('click', function(){ addPoints(p.id,-10); });
       ctrls.appendChild(num); ctrls.appendChild(go); ctrls.appendChild(minus10);
-      card.appendChild(ctrls);
+      card.appendChild(ctrlס);
       card.appendChild(mount);
       panels.appendChild(card);
     });
@@ -459,27 +469,6 @@ document.addEventListener('DOMContentLoaded', async function(){
   document.getElementById('resetBtn')?.addEventListener('click', function(){ if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(function(p){ p.points=0; }); save(); render(); } });
   document.getElementById('clearResults')?.addEventListener('click', function(){ document.getElementById('thumbs').innerHTML=''; setLastPreview(null,'—'); });
   document.getElementById('toggleTrainer')?.addEventListener('click', function(){ document.getElementById('trainer').classList.toggle('hidden'); });
-  document.getElementById('addFromGallery')?.addEventListener('click', function(){ const picker=document.getElementById('filePick'); const cls=document.getElementById('cls').value; picker.onchange=async function(e){ const files=Array.from(e.target.files); await addMany(files,cls); picker.value=''; }; picker.click(); });
-  document.getElementById('captureOne')?.addEventListener('click', async function(){
-    const cls=document.getElementById('cls').value;
-    try{
-      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-      const v=document.createElement('video'); v.playsInline=true; v.muted=true; v.srcObject=s; await v.play();
-      await new Promise(function(r){ setTimeout(r,400); });
-      const c=document.createElement('canvas'); c.width=224; c.height=224;
-      const ctx=c.getContext('2d'); const vw=v.videoWidth, vh=v.videoHeight;
-      const size=Math.min(vw,vh);
-      ctx.drawImage(v,(vw-size)/2,(vh-size)/2,size,size,0,0,224,224);
-      await addExample(c,cls);
-      s.getTracks().forEach(function(t){ t.stop(); });
-      const el=document.getElementById('status'); if(el) el.textContent='נוספה דוגמה עבור '+cls;
-    }catch(e){ alert('בעיה בגישה למצלמה'); }
-  });
-  document.getElementById('saveModel')?.addEventListener('click', saveKNN);
-  document.getElementById('loadModel')?.addEventListener('click', loadKNN);
-  document.getElementById('exportModel')?.addEventListener('click', exportKNN);
-  document.getElementById('importModel')?.addEventListener('click', function(){ document.getElementById('importFile').click(); });
-  document.getElementById('importFile')?.addEventListener('change', function(e){ if(e.target.files[0]) importKNN(e.target.files[0]); });
 
   function datasetCounts(){ const ds=classifier.getClassifierDataset(); const keys=Object.keys(ds); if(!keys.length) return 'אין דוגמאות'; const parts=keys.map(function(k){ return k+': '+(ds[k].shape[0]||0); }); return parts.join(' | '); }
   function refreshCounts(){ const cr=document.getElementById('countsRow'); if(cr) cr.textContent='דוגמאות למספרים: '+datasetCounts(); }
