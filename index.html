@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.23-ml)</title>
+<title>רמיקוב – מצב משחק (v2.24-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9;--good:#19d19b;--warn:#ffd166}
@@ -15,6 +15,7 @@
   input[type=text],input[type=number]{background:#0b152a;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
   button{cursor:pointer;border:none;border-radius:12px;padding:12px 16px;background:#1c2741;color:#fff}
   .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:800}
+  .accent.on{box-shadow:0 0 0 3px rgba(99,201,255,.25)}
   .ghost{background:transparent;border:1px dashed var(--line)}
   .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
   .leader{display:flex;gap:10px;flex-wrap:wrap}
@@ -168,6 +169,21 @@ document.addEventListener('DOMContentLoaded', function(){
   document.getElementById('backBtn').addEventListener('click', backToNames);
   document.getElementById('resetBtn').addEventListener('click', function(){ if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(function(p){ p.points=0; }); localStorage.setItem(KEY,JSON.stringify(state)); render(); } });
   document.getElementById('clearResults').addEventListener('click', function(){ const ctx=document.getElementById('lastTile').getContext('2d'); ctx.clearRect(0,0,64,64); document.getElementById('lastLabel').textContent='—'; });
+
+  // open/close trainer panel
+  (function(){
+    const btn = document.getElementById('toggleTrainer');
+    const panel = document.getElementById('trainer');
+    btn.addEventListener('click', function(){
+      const isHidden = panel.classList.contains('hidden');
+      panel.classList.toggle('hidden');
+      btn.classList.toggle('on', isHidden);
+      btn.setAttribute('aria-expanded', String(isHidden));
+      if(isHidden){
+        setTimeout(()=>panel.scrollIntoView({behavior:'smooth', block:'start'}), 10);
+      }
+    });
+  })();
 
   function render(){
     const board=document.getElementById('board'); board.innerHTML='';
