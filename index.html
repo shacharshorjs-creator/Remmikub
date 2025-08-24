@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.41-ml)</title>
+<title>רמיקוב – מצב משחק (v2.42-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9}
@@ -34,7 +34,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div style="font-weight:800">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.41-ml</div>
+      <div class="ver">v2.42-ml</div>
       <div id="tfBadge" class="ver">TF: initializing…</div>
     </div>
     <div class="row">
@@ -44,9 +44,8 @@
 </div>
 
 <div class="container">
-
   <div class="card">
-    🌐 כתובת הדף: <span id="pageUrl">https://shacharshorjs-creator.github.io/Remmikub/?v=241</span>
+    🌐 כתובת הדף: <span id="pageUrl">https://shacharshorjs-creator.github.io/Remmikub/?v=242</span>
     <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
   </div>
 
@@ -72,7 +71,7 @@
 
   <section id="trainer" class="card" aria-hidden="false">
     <h2 style="margin:0">אימון מודל זיהוי (על המכשיר)</h2>
-    <div id="warnTF" class="warn hidden">⚠️ לא זוהה TensorFlow — יש לפתוח את הקובץ ב־GitHub Pages (HTTPS) ולא מקובץ מקומי.</div>
+    <div id="warnTF" class="warn hidden">⚠️ לא זוהה TensorFlow — ייתכן ש־CDN חסום בדפדפן. נסה/י לפתוח שוב או לעבור לדפדפן אחר.</div>
     <div class="mini" style="margin-top:4px">upload → embedding (MobileNet) → KNN</div>
     <div class="row" style="margin-top:8px">
       <label>בחר/י מחלקה</label>
@@ -97,95 +96,100 @@
   </section>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
-
 <script>
-(function(){
-  const $$ = (id)=>document.getElementById(id);
-  const log = (m)=>{ const el=$$('dbgLog'); if(!el) return; el.textContent += (el.textContent?'\n':'')+m; el.scrollTop = el.scrollHeight; };
+(async function(){
+  const $$=(id)=>document.getElementById(id);
+  const log=(m)=>{ const el=$$('dbgLog'); el.textContent+=(el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; };
+
+  async function loadScript(url, name){
+    return new Promise((res,rej)=>{
+      const s=document.createElement('script'); s.src=url; s.async=true;
+      s.onload=()=>{ log('loaded '+name+': '+url); res(true); };
+      s.onerror=()=>{ log('FAILED '+name+': '+url); rej(new Error('load fail')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function tryLoad(name, urls){
+    for(const u of urls){ try{ await loadScript(u, name); return true; }catch(e){} }
+    return false;
+  }
+
+  const tfOk = await tryLoad('tfjs', [
+    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js',
+    'https://unpkg.com/@tensorflow/tfjs@4.20.0/dist/tf.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.20.0/tf.min.js'
+  ]);
+
+  const mobOk = await tryLoad('mobilenet', [
+    'https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0',
+    'https://unpkg.com/@tensorflow-models/mobilenet@2.1.0',
+    'https://cdn.jsdelivr.net/gh/tensorflow/tfjs-models/mobilenet/dist/mobilenet.js'
+  ]);
+
+  const knnOk = await tryLoad('knn-classifier', [
+    'https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2',
+    'https://unpkg.com/@tensorflow-models/knn-classifier@1.2.2',
+    'https://cdn.jsdelivr.net/gh/tensorflow/tfjs-models/knn-classifier/dist/knn-classifier.js'
+  ]);
+
+  if(!(tfOk && mobOk && knnOk)){ $$('#tfBadge').textContent='TF: failed'; $$('#warnTF').classList.remove('hidden'); return; }
 
   // Backend init
-  (async()=>{
-    let ok=false;
-    try{ await tf.setBackend('webgl'); await tf.ready(); ok=true; }
-    catch(e){ try{ await tf.setBackend('cpu'); await tf.ready(); ok=true; } catch(_){} }
-    if(ok){ $$('#tfBadge').textContent = 'TF: '+tf.getBackend(); }
-    else{ $$('#tfBadge').textContent = 'TF: failed'; $$('#warnTF').classList.remove('hidden'); }
-  })();
+  try{ await tf.setBackend('webgl'); await tf.ready(); }
+  catch(e){ try{ await tf.setBackend('cpu'); await tf.ready(); }catch(_e){} }
+  $$('#tfBadge').textContent='TF: '+tf.getBackend();
 
   // Game logic
   let state = { players: [] };
   function renderLeaderboard(){
-    const board = $$('#board'); board.innerHTML='';
-    const sorted = state.players.slice().sort((a,b)=>b.points-a.points);
-    sorted.forEach((p,i)=>{
-      const div = document.createElement('div'); div.className='chip';
-      div.innerHTML = '<div class="rank">'+(i+1)+'</div><div>'+p.name+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
-      board.appendChild(div);
-    });
-    const panels = $$('#panels'); panels.innerHTML='';
-    state.players.forEach(p=>{
-      const card = document.createElement('div'); card.className='card';
-      const h = document.createElement('h3'); h.textContent=p.name; card.appendChild(h);
-      const r = document.createElement('div'); r.className='row';
-      const inp = document.createElement('input'); inp.type='number'; inp.placeholder='+/-';
-      const btn = document.createElement('button'); btn.textContent='הוסף/הפחת';
-      const m10 = document.createElement('button'); m10.textContent='-10';
+    const board=$$('#board'); board.innerHTML='';
+    const sorted=state.players.slice().sort((a,b)=>b.points-a.points);
+    sorted.forEach((p,i)=>{ const div=document.createElement('div'); div.className='chip';
+      div.innerHTML='<div class="rank">'+(i+1)+'</div><div>'+p.name+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
+      board.appendChild(div); });
+    const panels=$$('#panels'); panels.innerHTML='';
+    state.players.forEach(p=>{ const card=document.createElement('div'); card.className='card';
+      const h=document.createElement('h3'); h.textContent=p.name; card.appendChild(h);
+      const r=document.createElement('div'); r.className='row';
+      const inp=document.createElement('input'); inp.type='number'; inp.placeholder='+/-';
+      const btn=document.createElement('button'); btn.textContent='הוסף/הפחת';
+      const m10=document.createElement('button'); m10.textContent='-10';
       btn.onclick=()=>{ const v=Number(inp.value); if(!Number.isNaN(v)&&inp.value!==''){ p.points+=v; inp.value=''; renderLeaderboard(); } };
       m10.onclick=()=>{ p.points-=10; renderLeaderboard(); };
       r.appendChild(inp); r.appendChild(btn); r.appendChild(m10);
-      card.appendChild(r); panels.appendChild(card);
-    });
+      card.appendChild(r); panels.appendChild(card); });
   }
-  $$('#startBtn').onclick = ()=>{
-    const names = ['n0','n1','n2','n3'].map(id=> $$(id).value.trim()).filter(Boolean);
-    const list = names.length?names:['שחקן 1','שחקן 2'];
-    state.players = list.map((n,i)=>({ id:String(i+1), name:n, points:0 }));
-    $$('#s1').classList.add('hidden');
-    $$('#s2').classList.remove('hidden');
-    renderLeaderboard();
-    window.scrollTo({top:0,behavior:'smooth'});
+  $$('#startBtn').onclick=()=>{ const names=['n0','n1','n2','n3'].map(id=>$$(id).value.trim()).filter(Boolean);
+    const list=names.length?names:['שחקן 1','שחקן 2']; state.players=list.map((n,i)=>({id:String(i+1),name:n,points:0}));
+    $$('#s1').classList.add('hidden'); $$('#s2').classList.remove('hidden'); renderLeaderboard(); window.scrollTo({top:0,behavior:'smooth'});
   };
-  $$('#backBtn').onclick = ()=>{ $$('#s2').classList.add('hidden'); $$('#s1').classList.remove('hidden'); };
-  $$('#resetBtn').onclick = ()=>{ state.players.forEach(p=>p.points=0); renderLeaderboard(); };
+  $$('#backBtn').onclick=()=>{ $$('#s2').classList.add('hidden'); $$('#s1').classList.remove('hidden'); };
+  $$('#resetBtn').onclick=()=>{ state.players.forEach(p=>p.points=0); renderLeaderboard(); };
 
   // Trainer logic
   const classifier = knnClassifier.create(); let mobilenetModel=null;
   async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2,alpha:0.35}); }
   function updateCounts(){
-    const ds = classifier.getClassifierDataset();
-    const keys = Object.keys(ds);
+    const ds = classifier.getClassifierDataset(); const keys=Object.keys(ds);
     $$('#countsRow').textContent = keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')) : 'דוגמאות: —';
   }
   async function handleFilesFromInput(inp){
-    const files = inp.files;
-    if(!files||!files.length) return;
+    const files=inp.files; if(!files||!files.length) return;
     log(inp.id+' change ('+files.length+')');
-    const clsSel = $$('#cls'); if(clsSel.value==='none'){ $$('#status').textContent='בחר/י מספר לפני העלאה'; return; }
+    const clsSel=$$('#cls'); if(clsSel.value==='none'){ $$('#status').textContent='בחר/י מספר לפני העלאה'; return; }
     await ensureEmbedder();
-    let ok=0,fail=0;
-    const arr=[...files].slice(0,20);
-    for(const f of arr){
-      try{
-        const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src = URL.createObjectURL(f); });
-        const emb = tf.tidy(()=> mobilenetModel.infer(tf.browser.fromPixels(img).expandDims(0),'conv_preds'));
-        classifier.addExample(emb, clsSel.value); emb.dispose();
-        ok++; log('Added '+(f.name||'file'));
-        $$('#status').textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')';
-        await tf.nextFrame();
+    let ok=0,fail=0; const arr=[...files].slice(0,20);
+    for(const f of arr){ try{ const img=await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(f); });
+        const emb=tf.tidy(()=> mobilenetModel.infer(tf.browser.fromPixels(img).expandDims(0),'conv_preds'));
+        classifier.addExample(emb, clsSel.value); emb.dispose(); ok++; log('Added '+(f.name||'file')); $$('#status').textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; await tf.nextFrame();
       }catch(err){ fail++; log('ERR '+(err.message||err)); $$('#status').textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; }
     }
     updateCounts(); inp.value='';
   }
-  ['filePick','filePickOne','filePickCam'].forEach(id=>{
-    const el = $$(id);
-    el.addEventListener('change', ()=>handleFilesFromInput(el));
-    setInterval(()=>{ if(el.files && el.files.length){ handleFilesFromInput(el); } }, 1800);
-  });
-  $$('#clearClass').onclick = ()=>{ const v=$$('#cls').value; if(v==='none') return; classifier.clearClass(v); log('Cleared class '+v); updateCounts(); };
-  $$('#clearAll').onclick = ()=>{ classifier.clearAllClasses(); log('Cleared ALL classes'); updateCounts(); };
+  ['filePick','filePickOne','filePickCam'].forEach(id=>{ const el=$$(id); el.addEventListener('change', ()=>handleFilesFromInput(el)); setInterval(()=>{ if(el.files && el.files.length) handleFilesFromInput(el); }, 1800); });
+  $$('#clearClass').onclick=()=>{ const v=$$('#cls').value; if(v==='none') return; classifier.clearClass(v); log('Cleared class '+v); updateCounts(); };
+  $$('#clearAll').onclick=()=>{ classifier.clearAllClasses(); log('Cleared ALL classes'); updateCounts(); };
 })();
 </script>
 </body>
