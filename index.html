@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.18-ml)</title>
+<title>רמיקוב – מצב משחק (v2.19-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9;--good:#19d19b;--warn:#ffd166}
@@ -49,7 +49,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.18-ml</div>
+      <div class="ver">v2.19-ml</div>
       <span id="backendBadge" class="badge">TF: —</span>
     </div>
     <div class="row">
@@ -116,9 +116,9 @@
         <button id="addSingle" class="ghost"> הוסף תמונה בודדת</button>
         <input id="filePickOne" type="file" accept="image/*,.heic,.heif" class="hidden">
         <button id="captureOne" class="ghost"> צילום מהמצלמה</button>
-        <input id="filePickCam" type="file" accept="image/*" capture="environment" class="hidden">
+        <input id="filePickCam" type="file" accept="image/*,.heic,.heif" capture="environment" class="hidden">
       </div>
-      <div class="row mini warn" id="heicWarn" style="display:none">הערה: קובצי HEIC עלולים לא להיטען בדפדפן זה. אם ההעלאה נכשלת – צלם/י מהמצלמה כאן או שמור/י את התמונה כ‑JPG/PNG.</div>
+      <div class="row mini warn" id="heicWarn" style="display:none">המרת HEIC → JPG מתבצעת אוטומטית (ייתכן עיכוב של כמה שניות).</div>
       <div class="row">
         <button id="saveModel" class="ghost">שמור מודל</button>
         <button id="loadModel" class="ghost">טען מודל</button>
@@ -154,11 +154,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
+<!-- HEIC support -->
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', async function(){
-  const KEY = 'rummi_game_state_v2.18-ml';
-  const MODEL_KEY = 'rummi_knn_v2.18-ml';
+  const KEY = 'rummi_game_state_v2.19-ml';
+  const MODEL_KEY = 'rummi_knn_v2.19-ml';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch(e) { console.warn(e); }
 
@@ -235,29 +237,26 @@ document.addEventListener('DOMContentLoaded', async function(){
     await tf.nextFrame(); refreshCounts();
   }
 
-  // ===== Trainer inputs =====
-  const pickerMulti = document.getElementById('filePick');
-  const pickerOne = document.getElementById('filePickOne');
-  const pickerCam = document.getElementById('filePickCam');
-  const btnMulti = document.getElementById('addFromGallery');
-  const btnOne = document.getElementById('addSingle');
-  const btnCam = document.getElementById('captureOne');
-  const clsSel = document.getElementById('cls');
-  const heicWarn = document.getElementById('heicWarn');
-
-  btnMulti.addEventListener('click', function(){ pickerMulti.click(); });
-  btnOne.addEventListener('click', function(){ pickerOne.click(); });
-  btnCam.addEventListener('click', function(){ pickerCam.click(); });
-
+  // ===== HEIC utilities =====
   function isHeicFile(f){
     const name=(f.name||'').toLowerCase();
     return (f.type==='image/heic' || f.type==='image/heif' || name.endsWith('.heic') || name.endsWith('.heif'));
   }
-
+  async function toJpegFileIfNeeded(f){
+    if(!isHeicFile(f)) return f;
+    document.getElementById('heicWarn').style.display='block';
+    try{
+      const blob = await heic2any({ blob: f, toType: 'image/jpeg', quality: 0.9 });
+      return new File([blob], (f.name||'photo')+'.jpg', { type: 'image/jpeg' });
+    }catch(e){
+      console.warn('HEIC convert failed, fallback to FileReader -> DataURL path', e);
+      return f; // ננסה לטעון כפי שהוא (ייתכן ש-iOS כבר המיר בקלט מצלמה מסוימים)
+    }
+  }
   async function loadImageFromFile(f){
+    f = await toJpegFileIfNeeded(f);
     return new Promise(function(resolve,reject){
       const img=new Image(); img.crossOrigin='anonymous';
-      // Prefer ObjectURL, but HEIC may fail → try DataURL
       const u=URL.createObjectURL(f);
       img.onload=function(){ URL.revokeObjectURL(u); resolve(img); };
       img.onerror=function(){
@@ -272,12 +271,23 @@ document.addEventListener('DOMContentLoaded', async function(){
     });
   }
 
+  // ===== Trainer inputs =====
+  const pickerMulti = document.getElementById('filePick');
+  const pickerOne = document.getElementById('filePickOne');
+  const pickerCam = document.getElementById('filePickCam');
+  const btnMulti = document.getElementById('addFromGallery');
+  const btnOne = document.getElementById('addSingle');
+  const btnCam = document.getElementById('captureOne');
+  const clsSel = document.getElementById('cls');
+
+  btnMulti.addEventListener('click', function(){ pickerMulti.click(); });
+  btnOne.addEventListener('click', function(){ pickerOne.click(); });
+  btnCam.addEventListener('click', function(){ pickerCam.click(); });
+
   async function handleFiles(files){
     const label = clsSel.value;
     if(!files || !files.length){ const st=document.getElementById('status'); if(st) st.textContent='לא נבחרו קבצים'; return; }
     if(!label || label==='none'){ const st=document.getElementById('status'); if(st) st.textContent='בחר/י מספר לפני העלאה'; return; }
-    heicWarn.style.display = Array.from(files).some(isHeicFile) ? 'block' : 'none';
-
     const list = Array.from(files).slice(0,20);
     let ok=0, fail=0; const status=document.getElementById('status');
     for(let i=0;i<list.length;i++){
@@ -295,21 +305,7 @@ document.addEventListener('DOMContentLoaded', async function(){
   pickerOne  .addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
   pickerCam  .addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
 
-  // ===== OCR fallback & detection remain as בגרסה קודמת =====
-  async function ocrFallback(canvas){
-    try{
-      const r=await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'});
-      const t=(r.data&&r.data.text||'').trim();
-      let m=t.match(/\\b1[0-3]\\b/); if(m) return parseInt(m[0],10);
-      m=t.match(/\\b[0-9]\\b/); if(m) return parseInt(m[0],10);
-    }catch(e){}
-    return null;
-  }
-  async function predictClass(img){
-    await ensureEmbedder();
-    if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
-    const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res;
-  }
+  // ===== Detection helpers (as before) =====
   function iou(a,b){ const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y); const x2=Math.min(a.x+a.width,b.x+b.width); const y2=Math.min(a.y+a.height,b.y+b.height); const w=Math.max(0,x2-x1), h=Math.max(0,y2-y1); const inter=w*h; const ua=a.width*a.height + b.width*b.height - inter; return ua>0? inter/ua : 0; }
   function centerInside(inner, outer){ const cx=inner.x+inner.width/2, cy=inner.y+inner.height/2; return cx>outer.x && cx<outer.x+outer.width && cy>outer.y && cy<outer.y+outer.height; }
   function nmsMerge(rects){
@@ -378,7 +374,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     return tiles;
   }
 
-  // ===== Last detected preview & scoring =====
+  // ===== Last detected preview + OCR/ML classify =====
   const lastCanvas=document.getElementById('lastTile'); const lastLabel=document.getElementById('lastLabel');
   function setLastPreview(fromCanvas,labelText){
     const ctx=lastCanvas.getContext('2d');
@@ -389,11 +385,6 @@ document.addEventListener('DOMContentLoaded', async function(){
   }
   document.getElementById('clearLast')?.addEventListener('click', function(){ setLastPreview(null,'—'); });
 
-  async function predictClass(img){
-    await ensureEmbedder();
-    if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
-    const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res;
-  }
   async function ocrFallback(canvas){
     try{
       const r=await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'});
@@ -402,6 +393,11 @@ document.addEventListener('DOMContentLoaded', async function(){
       m=t.match(/\\b[0-9]\\b/); if(m) return parseInt(m[0],10);
     }catch(e){}
     return null;
+  }
+  async function predictClass(img){
+    await ensureEmbedder();
+    if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
+    const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res;
   }
   async function classifyTile(canvas){
     const res=await predictClass(canvas);
@@ -415,7 +411,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     return null;
   }
   async function detectFromFile(file, mount, playerId, mode){
-    const bmp=await createImageBitmap(file);
+    const bmp=await createImageBitmap(await toJpegFileIfNeeded(file));
     const tiles=await segmentTiles(bmp);
     const thumbs=document.getElementById('thumbs');
     const got=[];
@@ -468,8 +464,8 @@ document.addEventListener('DOMContentLoaded', async function(){
       const head=document.createElement('div'); head.className='row';
       const title=document.createElement('h3'); title.style.margin='0'; title.textContent=p.name;
       const mount=document.createElement('div'); mount.className='mini'; mount.textContent='בחר/י תמונה של הקוביות.';
-      const fileReplace=document.createElement('input'); fileReplace.type='file'; fileReplace.accept='image/*'; fileReplace.className='hidden';
-      const fileAdd=document.createElement('input'); fileAdd.type='file'; fileAdd.accept='image/*'; fileAdd.className='hidden';
+      const fileReplace=document.createElement('input'); fileReplace.type='file'; fileReplace.accept='image/*,.heic,.heif'; fileReplace.className='hidden';
+      const fileAdd=document.createElement('input'); fileAdd.type='file'; fileAdd.accept='image/*,.heic,.heif'; fileAdd.className='hidden';
       const uploadBtn=document.createElement('button'); uploadBtn.className='ghost'; uploadBtn.textContent=' העלה תמונה (החלף)';
       const addBtn=document.createElement('button'); addBtn.className='ghost'; addBtn.textContent=' העלה ועוד (צבור)';
       uploadBtn.addEventListener('click', function(){ fileReplace.click(); });
