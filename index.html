@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.40-ml)</title>
+<title>רמיקוב – מצב משחק (v2.41-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9}
@@ -12,7 +12,7 @@
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   input[type=text],input[type=number]{background:#0b152a;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:140px}
-  button{cursor:pointer;border:none;border-radius:12px;padding:12px 16px;background:#1c2741;color:#fff}
+  button{cursor:pointer;border:none;border-radius:12px;padding:8px 12px;background:#1c2741;color:#fff}
   .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:800}
   .ghost{background:transparent;border:1px dashed var(--line)}
   .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
@@ -26,6 +26,7 @@
   .hidden{display:none}
   .appbar{position:fixed;inset:0 0 auto 0;height:90px;background:rgba(8,12,24,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:10;display:flex;align-items:center}
   .appbar-inner{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
+  .warn{color:#ff8080;font-weight:bold;margin-top:8px}
 </style>
 </head>
 <body>
@@ -33,7 +34,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div style="font-weight:800">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.40-ml</div>
+      <div class="ver">v2.41-ml</div>
       <div id="tfBadge" class="ver">TF: initializing…</div>
     </div>
     <div class="row">
@@ -43,6 +44,12 @@
 </div>
 
 <div class="container">
+
+  <div class="card">
+    🌐 כתובת הדף: <span id="pageUrl">https://shacharshorjs-creator.github.io/Remmikub/?v=241</span>
+    <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
+  </div>
+
   <section id="s1" class="card">
     <h2 style="margin:0">בחירת משתתפים (עד 4)</h2>
     <div class="row" style="margin-top:8px">
@@ -63,9 +70,9 @@
     <div id="panels" style="margin-top:10px"></div>
   </section>
 
-  <!-- Trainer is ALWAYS visible -->
   <section id="trainer" class="card" aria-hidden="false">
     <h2 style="margin:0">אימון מודל זיהוי (על המכשיר)</h2>
+    <div id="warnTF" class="warn hidden">⚠️ לא זוהה TensorFlow — יש לפתוח את הקובץ ב־GitHub Pages (HTTPS) ולא מקובץ מקומי.</div>
     <div class="mini" style="margin-top:4px">upload → embedding (MobileNet) → KNN</div>
     <div class="row" style="margin-top:8px">
       <label>בחר/י מחלקה</label>
@@ -83,7 +90,7 @@
     </div>
     <div id="countsRow" class="mini" style="margin-top:6px">דוגמאות: —</div>
     <div class="card" style="margin-top:8px">
-      <div class="mini">Debug:</div>
+      <div class="mini">Debug: <button onclick="navigator.clipboard.writeText(document.getElementById('dbgLog').textContent)">📋 העתק</button></div>
       <pre id="dbgLog" style="white-space:pre-wrap;max-height:220px;overflow:auto;margin:0"></pre>
     </div>
     <div class="row"><span id="status" class="ver">אין מודל</span></div>
@@ -101,15 +108,17 @@
 
   // Backend init
   (async()=>{
-    try{ await tf.setBackend('webgl'); await tf.ready(); }
-    catch(e){ try{ await tf.setBackend('cpu'); await tf.ready(); } catch(_){} }
-    $$('#tfBadge').textContent = 'TF: '+tf.getBackend();
+    let ok=false;
+    try{ await tf.setBackend('webgl'); await tf.ready(); ok=true; }
+    catch(e){ try{ await tf.setBackend('cpu'); await tf.ready(); ok=true; } catch(_){} }
+    if(ok){ $$('#tfBadge').textContent = 'TF: '+tf.getBackend(); }
+    else{ $$('#tfBadge').textContent = 'TF: failed'; $$('#warnTF').classList.remove('hidden'); }
   })();
 
-  // Game
+  // Game logic
   let state = { players: [] };
   function renderLeaderboard(){
-    const board = $$('#board'); if(!board) return; board.innerHTML='';
+    const board = $$('#board'); board.innerHTML='';
     const sorted = state.players.slice().sort((a,b)=>b.points-a.points);
     sorted.forEach((p,i)=>{
       const div = document.createElement('div'); div.className='chip';
@@ -130,7 +139,6 @@
       card.appendChild(r); panels.appendChild(card);
     });
   }
-
   $$('#startBtn').onclick = ()=>{
     const names = ['n0','n1','n2','n3'].map(id=> $$(id).value.trim()).filter(Boolean);
     const list = names.length?names:['שחקן 1','שחקן 2'];
@@ -171,13 +179,11 @@
     }
     updateCounts(); inp.value='';
   }
-
   ['filePick','filePickOne','filePickCam'].forEach(id=>{
     const el = $$(id);
     el.addEventListener('change', ()=>handleFilesFromInput(el));
     setInterval(()=>{ if(el.files && el.files.length){ handleFilesFromInput(el); } }, 1800);
   });
-
   $$('#clearClass').onclick = ()=>{ const v=$$('#cls').value; if(v==='none') return; classifier.clearClass(v); log('Cleared class '+v); updateCounts(); };
   $$('#clearAll').onclick = ()=>{ classifier.clearAllClasses(); log('Cleared ALL classes'); updateCounts(); };
 })();
