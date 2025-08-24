@@ -159,15 +159,16 @@
         </select>
       </div>
       <div class="row" style="gap:6px">
-        <label for="filePick" class="ghost btnlike" id="pickersContainerStart" onclick="try{document.getElementById('status').textContent='נפתח בוחר קבצים (גלריה) ...';document.getElementById('dbgLog').textContent+='\nclick lblPickMulti';}catch(e){}"> הוסף מגזיר (גלריה)</label>
-        <input id="filePick" class="vhfile" type="file" accept="image/*,.heic,.heif" multiple>
-        <label for="filePickOne" class="ghost btnlike" id="lblPickOne" onclick="try{document.getElementById('status').textContent='נפתח בוחר קבצים (בודד) ...';document.getElementById('dbgLog').textContent+='\nclick lblPickOne';}catch(e){}"> הוסף תמונה בודדת</label>
-        <input id="filePickOne" class="vhfile" type="file" accept="image/*,.heic,.heif">
-        <label for="filePickCam" class="ghost btnlike" id="lblPickCam" onclick="try{document.getElementById('status').textContent='נפתח מצלמה ...';document.getElementById('dbgLog').textContent+='\nclick lblPickCam';}catch(e){}"> צילום מהמצלמה</label>
-        <input id="filePickCam" class="vhfile" type="file" accept="image/*,.heic,.heif" capture="environment">
-        <label for="filePickHeic" class="ghost btnlike" id="lblPickHeic" onclick="try{document.getElementById('status').textContent='נפתח בוחר HEIC ...';document.getElementById('dbgLog').textContent+='\nclick lblPickHeic';}catch(e){}"> הוסף HEIC/HEIF</label>
-        <input id="filePickHeic" class="vhfile" type="file" accept="image/*,.heic,.heif" multiple>
-      </div>
+        <label for="filePick" class="ghost btnlike" id="pickersContainerStartX" onclick="try{document.getElementById('status').textContent='נפתח בוחר קבצים (גלריה) ...';document.getElementById('dbgLog').textContent+='\nclick lblPickMulti';}catch(e){}"> הוסף מגזיר (גלריה)</label>
+        
+<div class="mini" style="opacity:.85;margin-bottom:6px">בחר/י קבצים כאן (מותאם ל‑iOS Chrome)</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+  <input id="filePick" class="filebtn" type="file" accept="image/*,.heic,.heif" multiple>
+  <input id="filePickOne" class="filebtn" type="file" accept="image/*,.heic,.heif">
+  <input id="filePickCam" class="filebtn" type="file" accept="image/*,.heic,.heif" capture="environment">
+  <input id="filePickHeic" class="filebtn" type="file" accept="image/*,.heic,.heif" multiple>
+</div>
+
       <div class="row mini warn" id="heicWarn" style="display:none">HEIC/HEIF יומר אוטומטית ל‑JPG (ייתכן עיכוב קצר).</div>
       <div class="row">
         <button type="button" id="exportModel" class="ghost">ייצא JSON</button>
