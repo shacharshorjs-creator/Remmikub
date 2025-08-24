@@ -43,13 +43,15 @@
   .mini{font-size:12px;color:#9fb0c9}
   .warn{color:#ffd166}
   .vhfile{position:absolute; left:-9999px; width:0; height:0; opacity:0; pointer-events:none;}
+
+  #trainer{position:relative; z-index:1}
 </style>
 
 <script>
 // --- Auto versioning ---
 // Priority: ?v= query param -> embedded BUILD_VER -> fallback
 (function(){
-  var BUILD_VER = 'v2.26-ml';
+  var BUILD_VER = 'v2.27-ml';
   var qv = new URLSearchParams(location.search).get('v');
   var VER = qv || BUILD_VER;
   // Update title text
@@ -139,7 +141,7 @@
     <div id="panels" class="grid"></div>
   </section>
 
-  <section id="trainer" class="card hidden">
+  <section id="trainer" class="card">
     <h2 style="margin-top:0">אימון מודל זיהוי (על המכשיר)</h2>
     <div class="row">
       <div>
