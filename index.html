@@ -53,7 +53,7 @@
 // --- Auto versioning ---
 // Priority: ?v= query param -> embedded BUILD_VER -> fallback
 (function(){
-  var BUILD_VER = 'v2.30-ml';
+  var BUILD_VER = 'v2.31-ml'
   var qv = new URLSearchParams(location.search).get('v');
   var VER = qv || BUILD_VER;
   // Update title text
@@ -172,7 +172,9 @@
         <button type="button" id="importModel" class="ghost">ייבא JSON</button>
         <span id="status" class="ver">אין מודל</span>
       </div>
-      <div class="row mini" id="countsRow">דוגמאות למספרים: (טרם אימון)</div>
+      
+<div class="mini" style="margin-top:6px">או: <input id="fallbackFile" type="file" accept="image/*,.heic,.heif"> (קלט גיבוי גלוי)</div>
+<div class="row mini" id="countsRow">דוגמאות למספרים: (טרם אימון)</div>
       <div class="card" id="dbg" style="margin-top:8px"><div class="mini">Debug:</div><pre id="dbgLog" style="white-space:pre-wrap;max-height:160px;overflow:auto;margin:0"></pre></div>
     </div>
   </section>
@@ -274,6 +276,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const pickerOne=document.getElementById('filePickOne');
   const pickerCam=document.getElementById('filePickCam');
   const pickerHeic=document.getElementById('filePickHeic');
+  const pickerFallback=document.getElementById('fallbackFile');
   document.getElementById('addFromGallery').addEventListener('click',function(){ dbgLog('open pickerMulti'); pickerMulti.click(); });
   document.getElementById('addSingle').addEventListener('click',function(){ dbgLog('open pickerOne'); pickerOne.click(); });
   document.getElementById('captureOne').addEventListener('click',function(){ dbgLog('open pickerCam'); pickerCam.click(); });
@@ -309,7 +312,7 @@ document.addEventListener('DOMContentLoaded', function(){
         await tf.nextFrame();
       }catch(err){
         console.error('upload/train error', err); dbgLog('ERR '+(err && err.message ? err.message : err));
-        fail++; document.getElementById('status').textContent='מאמן: '+ok+'/'+list.length+' (נכשלו: '+fail+')';
+        fail++; var st='מאמן: '+ok+'/'+list.length+' (נכשלו: '+fail+')'; document.getElementById('status').textContent=st; try{document.getElementById('dbgLog').textContent += '\ntrain fail on '+(list[i].name||i);}catch(_){}
       }
     }
     const ds=classifier.getClassifierDataset(); const keys=Object.keys(ds);
@@ -320,6 +323,7 @@ document.addEventListener('DOMContentLoaded', function(){
   pickerOne.addEventListener('change', async function(e){ dbgLog('pickerOne change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
   pickerCam.addEventListener('change', async function(e){ dbgLog('pickerCam change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
   pickerHeic.addEventListener('change', async function(e){ dbgLog('pickerHeic change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
+  pickerFallback.addEventListener('change', async function(e){ dbgLog('pickerFallback change ('+(e.target.files?e.target.files.length:0)+')'); await handleFiles(e.target.files); e.target.value=''; });
 
   if(state.players && state.players.length) showGame();
 });
