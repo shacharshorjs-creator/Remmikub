@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.22-ml)</title>
+<title>רמיקוב – מצב משחק (v2.23-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9;--good:#19d19b;--warn:#ffd166}
@@ -14,7 +14,6 @@
   .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
   input[type=text],input[type=number]{background:#0b152a;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
   button{cursor:pointer;border:none;border-radius:12px;padding:12px 16px;background:#1c2741;color:#fff}
-  button:disabled{opacity:.5;cursor:not-allowed}
   .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:800}
   .ghost{background:transparent;border:1px dashed var(--line)}
   .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
@@ -43,7 +42,7 @@
   .tilePrev canvas{width:64px;height:64px;border-radius:10px;border:1px solid var(--line);background:#0b152a}
   .mini{font-size:12px;color:#9fb0c9}
   .warn{color:#ffd166}
-  .vhfile{position:absolute !important; left:-9999px !important; width:0 !important; height:0 !important; opacity:0 !important; pointer-events:none !important;}
+  .vhfile{position:absolute; left:-9999px; width:0; height:0; opacity:0; pointer-events:none;}
 </style>
 </head>
 <body>
@@ -51,7 +50,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.22-ml</div>
+      <div class="ver">v2.23-ml</div>
       <span id="backendBadge" class="badge">TF: —</span>
     </div>
     <div class="row">
@@ -92,7 +91,6 @@
     <div id="board" class="leader" style="margin-top:10px"></div>
     <hr class="divider">
     <div id="panels" class="grid"></div>
-    <div><h3 style="margin:8px 0 4px">תוצאות אחרונות</h3><div id="thumbs" class="thumbs"></div></div>
   </section>
 
   <section id="trainer" class="card hidden">
@@ -117,14 +115,11 @@
       </div>
       <div class="row mini warn" id="heicWarn" style="display:none">HEIC/HEIF יומר אוטומטית ל‑JPG (ייתכן עיכוב קצר).</div>
       <div class="row">
-        <button type="button" id="saveModel" class="ghost">שמור מודל</button>
-        <button type="button" id="loadModel" class="ghost">טען מודל</button>
         <button type="button" id="exportModel" class="ghost">ייצא JSON</button>
         <input id="importFile" class="vhfile" type="file" accept="application/json">
         <button type="button" id="importModel" class="ghost">ייבא JSON</button>
         <span id="status" class="ver">אין מודל</span>
       </div>
-      <div class="row mini">טיפ: הוסף 10–20 דוגמאות לכל מספר</div>
       <div class="row mini" id="countsRow">דוגמאות למספרים: (טרם אימון)</div>
     </div>
   </section>
@@ -137,122 +132,137 @@
       <div>
         <div style="font-weight:700">הזיהוי האחרון:</div>
         <div id="lastLabel" class="mini">—</div>
-        <div id="preprocBadge" class="mini">קדם-עיבוד: צבע</div>
       </div>
     </div>
-    <div class="row">
-      <button type="button" id="clearLast" class="ghost">נקה תצוגה</button>
-    </div>
+    <div class="row mini" id="footerNote">טוען…</div>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<script async src="https://docs.opencv.org/4.8.0/opencv.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function(){
-  const KEY = 'rummi_state_v2.22-ml';
+  const KEY = 'rummi_state_v2.23-ml';
   let state = {players:[]};
   try { const raw = localStorage.getItem(KEY); if(raw) state = JSON.parse(raw);} catch(e){}
-  (async()=>{ try{ await tf.setBackend('webgl'); await tf.ready(); }catch(e){ await tf.setBackend('cpu'); } finally{ document.getElementById('backendBadge').textContent='TF: '+tf.getBackend(); } })();
+  const footer = document.getElementById('footerNote');
+
+  (async()=>{ try{ await tf.setBackend('webgl'); await tf.ready(); }catch(e){ await tf.setBackend('cpu'); } finally{ document.getElementById('backendBadge').textContent='TF: '+tf.getBackend(); footer.textContent='מוכן'; } })();
 
   const settings = {ignoreColor:true, conf:0.65, ocrOnly:false};
-  const confSlider = document.getElementById('confThresh'), confVal=document.getElementById('confVal'), preproc=document.getElementById('preprocBadge'), ocrBtn=document.getElementById('ocrOnlyBtn'), ocrLbl=document.getElementById('ocrLbl');
-  function reflect(){ confVal.textContent=Number(confSlider.value).toFixed(2); preproc.textContent='קדם-עיבוד: '+(settings.ignoreColor?'שחור-לבן':'צבע'); ocrLbl.textContent=settings.ocrOnly?'פעיל':'כבוי'; ocrBtn.classList.toggle('active', settings.ocrOnly); }
+  const confSlider = document.getElementById('confThresh'), confVal=document.getElementById('confVal'), ocrBtn=document.getElementById('ocrOnlyBtn'), ocrLbl=document.getElementById('ocrLbl');
+  function reflect(){ confVal.textContent=Number(confSlider.value).toFixed(2); ocrLbl.textContent=settings.ocrOnly?'פעיל':'כבוי'; ocrBtn.classList.toggle('active', settings.ocrOnly); }
   reflect();
-  function addTap(el, fn){ el.addEventListener('click', fn); el.addEventListener('touchstart', function(e){ e.preventDefault(); fn(); }, {passive:false}); }
-
-  addTap(document.getElementById('ignoreBtn'), function(){ settings.ignoreColor=!settings.ignoreColor; reflect(); });
+  document.getElementById('ignoreBtn').addEventListener('click', function(){ settings.ignoreColor=!settings.ignoreColor; });
   confSlider.addEventListener('input', function(e){ settings.conf=parseFloat(e.target.value); reflect(); });
-  addTap(ocrBtn, function(){ settings.ocrOnly=!settings.ocrOnly; reflect(); });
+  ocrBtn.addEventListener('click', function(){ settings.ocrOnly=!settings.ocrOnly; reflect(); });
 
-  // KNN + Mobilenet
-  const classifier = knnClassifier.create();
-  let mobilenetModel = null;
-  async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2, alpha:0.35}); document.getElementById('status').textContent='MobileNet(0.35)+KNN מוכן'; }
-  ensureEmbedder();
-
-  function toGray3(t){ const H=t.shape[0],W=t.shape[1]; const r=t.slice([0,0,0],[H,W,1]),g=t.slice([0,0,1],[H,W,1]),b=t.slice([0,0,2],[H,W,1]); const gray=r.mul(0.299).add(g.mul(0.587)).add(b.mul(0.114)); return tf.concat([gray,gray,gray],2); }
-  function preprocess(img){ return tf.tidy(function(){ let t=tf.browser.fromPixels(img).toFloat(); if(settings.ignoreColor) t=toGray3(t); t=tf.image.resizeBilinear(t,[224,224]); const o=tf.scalar(127.5); return t.sub(o).div(o).expandDims(0); }); }
-  function embed(img){ return tf.tidy(function(){ const inp=preprocess(img); const emb=mobilenetModel.infer(inp,'conv_preds'); return tf.keep(emb.as2D(1, emb.shape[1])); }); }
-  async function addExample(img,label){ if(!label || label==='none'){ document.getElementById('status').textContent='בחר/י מספר לפני העלאה'; return; } const logits=embed(img); classifier.addExample(logits,label); logits.dispose(); await tf.nextFrame(); refreshCounts(); }
-
-  function isHeicFile(f){ const n=(f.name||'').toLowerCase(); return f.type==='image/heic'||f.type==='image/heif'||n.endsWith('.heic')||n.endsWith('.heif'); }
-  async function toJpegIfNeeded(f){ if(!isHeicFile(f)) return f; document.getElementById('heicWarn').style.display='block'; try{ const blob=await heic2any({blob:f,toType:'image/jpeg',quality:0.9}); return new File([blob], (f.name||'photo')+'.jpg', {type:'image/jpeg'}); }catch(_){ return f; } }
-  async function loadImageFromFile(f){ f=await toJpegIfNeeded(f); return new Promise(function(resolve,reject){ const img=new Image(); img.crossOrigin='anonymous'; const u=URL.createObjectURL(f); img.onload=function(){ URL.revokeObjectURL(u); resolve(img); }; img.onerror=function(){ URL.revokeObjectURL(u); try{ const fr=new FileReader(); fr.onload=function(){ img.onload=function(){ resolve(img); }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(f); }catch(e){ reject(e); } }; img.src=u; }); }
-
-  async function ensureCvReady(){ return new Promise(function(res,rej){ if(typeof cv!=='undefined'&&cv.Mat) return res(); const t=setInterval(function(){ if(typeof cv!=='undefined'&&cv.Mat){ clearInterval(t); res(); } },50); setTimeout(function(){ clearInterval(t); rej(new Error('OpenCV לא נטען')); },8000); }); }
-  function iou(a,b){ const x1=Math.max(a.x,b.x),y1=Math.max(a.y,b.y),x2=Math.min(a.x+a.width,b.x+b.width),y2=Math.min(a.y+a.height,b.y+b.height),w=Math.max(0,x2-x1),h=Math.max(0,y2-y1),inter=w*h,ua=a.width*a.height+b.width*b.height-inter; return ua>0?inter/ua:0; }
-  function centerInside(inner,outer){ const cx=inner.x+inner.width/2,cy=inner.y+inner.height/2; return cx>outer.x&&cx<outer.x+outer.width&&cy>outer.y&&cy<outer.y+outer.height; }
-  function nmsMerge(rects){ if(rects.length<=1) return rects.slice(); rects=rects.slice().sort(function(a,b){return (b.width*b.height)-(a.width*a.height);}); const nms=[]; rects.forEach(function(r){ let ok=true; for(let i=0;i<nms.length;i++){ if(iou(nms[i],r)>=0.25){ ok=false; break; } } if(ok) nms.push(r); }); const areas=nms.map(function(r){return r.width*r.height;}).sort(function(a,b){return a-b;}); const med=areas[Math.floor(areas.length/2)]||1; let filtered=nms.filter(function(r){return (r.width*r.height)>=med*0.4;}); filtered=filtered.filter(function(r,i){ for(let j=0;j<filtered.length;j++){ if(i===j) continue; const k=filtered[j]; if(centerInside(r,k)&&(k.width*k.height)>=(r.width*r.height)*1.6) return false; } return true; }); return filtered; }
-  async function segmentTilesCanvas(imgCanvas){ await ensureCvReady(); const maxSide=1400, scale=Math.min(maxSide/imgCanvas.width,maxSide/imgCanvas.height,1); const w=Math.round(imgCanvas.width*scale), h=Math.round(imgCanvas.height*scale); const cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h; const ctx=cvs.getContext('2d'); ctx.drawImage(imgCanvas,0,0,w,h); let src=cv.imread(cvs), gray=new cv.Mat(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY); let blur=new cv.Mat(); cv.GaussianBlur(gray,blur,new cv.Size(5,5),0); let bin=new cv.Mat(); cv.adaptiveThreshold(blur,bin,255,cv.ADAPTIVE_THRESH_GAUSSIAN_C,cv.THRESH_BINARY_INV,35,7); let kernel=cv.Mat.ones(3,3,cv.CV_8U); let closed=new cv.Mat(); cv.morphologyEx(bin,closed,cv.MORPH_CLOSE,kernel); let opened=new cv.Mat(); cv.morphologyEx(closed,opened,cv.MORPH_OPEN,kernel); let contours=new cv.MatVector(), hierarchy=new cv.Mat(); cv.findContours(opened,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE); const rects=[]; for(let i=0;i<contours.size();i++){ const rect=cv.boundingRect(contours.get(i)); const ar=rect.width/rect.height, area=rect.width*rect.height; if(area>(w*h*0.016) && ar>0.55 && ar<0.95) rects.push(rect); } const kept=nmsMerge(rects), tiles=[]; kept.forEach(function(rect){ const pad=Math.round(rect.height*0.08); const x=Math.max(0,rect.x+pad), y=Math.max(0,rect.y+pad); const ch=Math.min(h-y, Math.round(rect.height*0.6)); const cw=Math.min(w-x, rect.width-pad*2); const c=document.createElement('canvas'); c.width=cw; c.height=ch; c.getContext('2d').drawImage(cvs,x,y,cw,ch,0,0,cw,ch); tiles.push({canvas:c,rect:rect}); }); contours.delete(); hierarchy.delete(); src.delete(); gray.delete(); blur.delete(); bin.delete(); closed.delete(); opened.delete(); kernel.delete(); tiles.sort(function(a,b){ return a.rect.y===b.rect.y ? a.rect.x-b.rect.x : a.rect.y-b.rect.y; }); return tiles; }
-
-  async function doOCR(canvas){ try{ const r=await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'}); const t=(r.data&&r.data.text||'').trim(); let m=t.match(/\b1[0-3]\b/); if(m) return parseInt(m[0],10); m=t.match(/\b[0-9]\b/); if(m) return parseInt(m[0],10); }catch(e){} return null; }
-  async function predictML(img){ if(classifier.getNumClasses()===0) return {label:'none',confidences:{none:1}}; const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res; }
-  async function classifyTile(canvas){ if(settings.ocrOnly){ const v=await doOCR(canvas); if(v!=null) return {n:v,conf:0,via:'OCR'}; return null; } const res=await predictML(canvas); if(res && res.label!=='none'){ const n=parseInt(res.label,10); const conf=res.confidences[res.label]||0; if(n>=1 && n<=13 && conf>=settings.conf) return {n,conf,via:'ML'}; } const v=await doOCR(canvas); if(v!=null) return {n:v,conf:0,via:'OCR'}; return null; }
-
-  async function detectFromFile(file, mount, playerId, mode){ try{ const imgEl=await loadImageFromFile(file); const base=document.createElement('canvas'); base.width=imgEl.naturalWidth||imgEl.width; base.height=imgEl.naturalHeight||imgEl.height; base.getContext('2d').drawImage(imgEl,0,0,base.width,base.height); const tiles=await segmentTilesCanvas(base); const thumbs=document.getElementById('thumbs'); const got=[]; for(const t of tiles){ const r=await classifyTile(t.canvas); if(r){ got.push(r.n); const tn=document.createElement('canvas'); tn.width=96; tn.height=96; tn.getContext('2d').drawImage(t.canvas,0,0,96,96); const wrap=document.createElement('div'); wrap.className='thumb'; wrap.appendChild(tn); const sp=document.createElement('span'); sp.textContent=r.n+(r.via==='ML'?(' · '+r.conf.toFixed(2)):' · OCR'); wrap.appendChild(sp); thumbs.appendChild(wrap); const lc=document.getElementById('lastTile'); const lctx=lc.getContext('2d'); lctx.clearRect(0,0,64,64); lctx.drawImage(t.canvas,0,0,64,64); document.getElementById('lastLabel').textContent='קוביה: '+r.n+(r.via==='ML'?(' (בטחון '+r.conf.toFixed(2)+')'):' (OCR)'); } await tf.nextFrame(); } if(got.length){ const s=got.reduce(function(a,b){return a+b;},0); if(mode==='replace') setPoints(playerId,s); else addPoints(playerId,s); mount.textContent='זוהו: '+got.join(' + ')+' = '+s+(mode==='replace'?' (הוחלף)':' (נוסף)'); } else { mount.textContent='לא זוהו קוביות.'; } } catch(e){ console.error(e); mount.textContent='שגיאה בטעינת תמונה: '+(e.message||e.toString()); } }
-
-  function startGame(){ const names=['#n0','#n1','#n2','#n3'].map(function(s){ const e=document.querySelector(s); return e?e.value.trim():''; }).filter(Boolean); const list=names.length?names:['שחקן 1','שחקן 2']; state.players=list.map(function(n,i){ return {id:String(i+1),name:n,points:0}; }); localStorage.setItem(KEY,JSON.stringify(state)); showGame(); }
+  function startGame(){ const names=['#n0','#n1','#n2','#n3'].map(function(s){const e=document.querySelector(s); return e?e.value.trim():'';}).filter(Boolean); const list=names.length?names:['שחקן 1','שחקן 2']; state.players=list.map(function(n,i){return {id:String(i+1),name:n,points:0};}); localStorage.setItem(KEY,JSON.stringify(state)); showGame(); }
   function showGame(){ document.getElementById('s1').classList.add('hidden'); document.getElementById('s2').classList.remove('hidden'); render(); window.scrollTo({top:0,behavior:'smooth'}); }
   function backToNames(){ document.getElementById('s2').classList.add('hidden'); document.getElementById('s1').classList.remove('hidden'); }
   function addPoints(id,delta){ const p=state.players.find(function(x){return x.id===id;}); if(!p) return; p.points+=delta; localStorage.setItem(KEY,JSON.stringify(state)); render(); }
-  function setPoints(id,val){ const p=state.players.find(function(x){return x.id===id;}); if(!p) return; p.points=val; localStorage.setItem(KEY,JSON.stringify(state)); render(); }
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('backBtn').addEventListener('click', backToNames);
+  document.getElementById('resetBtn').addEventListener('click', function(){ if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(function(p){ p.points=0; }); localStorage.setItem(KEY,JSON.stringify(state)); render(); } });
+  document.getElementById('clearResults').addEventListener('click', function(){ const ctx=document.getElementById('lastTile').getContext('2d'); ctx.clearRect(0,0,64,64); document.getElementById('lastLabel').textContent='—'; });
 
   function render(){
     const board=document.getElementById('board'); board.innerHTML='';
-    const sorted=state.players.slice().sort(function(a,b){ return b.points-a.points; });
-    sorted.forEach(function(p,i){
-      const div=document.createElement('div'); div.className='chip';
-      div.innerHTML='<div class="rank">'+(i+1)+'</div><div>'+p.name+(i===0?' 👑':'')+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
-      board.appendChild(div);
-    });
+    const sorted=state.players.slice().sort(function(a,b){return b.points-a.points;});
+    sorted.forEach(function(p,i){ const div=document.createElement('div'); div.className='chip'; div.innerHTML='<div class="rank">'+(i+1)+'</div><div>'+p.name+(i===0?' 👑':'')+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>'; board.appendChild(div); });
     const panels=document.getElementById('panels'); panels.innerHTML='';
     state.players.forEach(function(p){
       const card=document.createElement('div'); card.className='card';
       const head=document.createElement('div'); head.className='row';
       const title=document.createElement('h3'); title.style.margin='0'; title.textContent=p.name;
-      const mount=document.createElement('div'); mount.className='mini'; mount.textContent='בחר/י תמונה של הקוביות.';
+      const mount=document.createElement('div'); mount.className='mini'; mount.textContent='בחר/י תמונות לאימון המודל עבור מספר מסוים.';
       const fileReplace=document.createElement('input'); fileReplace.type='file'; fileReplace.accept='image/*,.heic,.heif'; fileReplace.className='vhfile';
-      const fileAdd=document.createElement('input'); fileAdd.type='file'; fileAdd.accept='image/*,.heic,.heif'; fileAdd.className='vhfile';
-      const uploadBtn=document.createElement('button'); uploadBtn.className='ghost'; uploadBtn.type='button'; uploadBtn.textContent=' העלה תמונה (החלף)';
-      const addBtn=document.createElement('button'); addBtn.className='ghost'; addBtn.type='button'; addBtn.textContent=' העלה ועוד (צבור)';
+      const uploadBtn=document.createElement('button'); uploadBtn.className='ghost'; uploadBtn.type='button'; uploadBtn.textContent=' העלה תמונה לשחקן (תצוגה בלבד)';
       uploadBtn.addEventListener('click', function(){ fileReplace.click(); });
-      addBtn.addEventListener('click', function(){ fileAdd.click(); });
-      fileReplace.addEventListener('change', function(e){ const f=e.target.files[0]; if(f){ mount.textContent='מנתח…'; detectFromFile(f,mount,p.id,'replace'); } e.target.value=''; });
-      fileAdd.addEventListener('change', function(e){ const f=e.target.files[0]; if(f){ mount.textContent='מנתח…'; detectFromFile(f,mount,p.id,'add'); } e.target.value=''; });
-      head.appendChild(title); head.appendChild(uploadBtn); head.appendChild(addBtn); card.appendChild(head); card.appendChild(fileReplace); card.appendChild(fileAdd);
+      fileReplace.addEventListener('change', async function(e){
+        const f=e.target.files[0]; e.target.value=''; if(!f) return;
+        try{ const img=await loadImageFromFile(f); const c=document.getElementById('lastTile'); const ctx=c.getContext('2d'); c.width=64; c.height=64; ctx.drawImage(img,0,0,64,64); document.getElementById('lastLabel').textContent='תצוגה: '+(f.name||'תמונה'); mount.textContent='נטען בהצלחה'; }catch(err){ mount.textContent='שגיאה בטעינת תמונה: '+(err.message||err); }
+      });
+      head.appendChild(title); head.appendChild(uploadBtn); card.appendChild(head); card.appendChild(fileReplace);
       const meta=document.createElement('div'); meta.innerHTML='נקודות נוכחיות: <span class="pill">'+p.points+'</span>'; card.appendChild(meta);
       const ctrls=document.createElement('div'); ctrls.className='row'; const num=document.createElement('input'); num.type='number'; num.placeholder='+/-'; const go=document.createElement('button'); go.type='button'; go.textContent='הוסף/הפחת'; go.addEventListener('click', function(){ const d=Number(num.value); if(!Number.isNaN(d)&&num.value!==''){ addPoints(p.id,d); num.value=''; } }); const minus10=document.createElement('button'); minus10.type='button'; minus10.textContent='-10'; minus10.addEventListener('click', function(){ addPoints(p.id,-10); }); ctrls.appendChild(num); ctrls.appendChild(go); ctrls.appendChild(minus10); card.appendChild(ctrls);
       card.appendChild(mount); panels.appendChild(card);
     });
   }
 
-  document.getElementById('startBtn').addEventListener('click', startGame);
-  document.getElementById('backBtn').addEventListener('click', backToNames);
-  document.getElementById('resetBtn').addEventListener('click', function(){ if(confirm('לאפס את כל הנקודות?')){ state.players.forEach(function(p){ p.points=0; }); localStorage.setItem(KEY,JSON.stringify(state)); render(); } });
-  document.getElementById('clearResults').addEventListener('click', function(){ document.getElementById('thumbs').innerHTML=''; const ctx=document.getElementById('lastTile').getContext('2d'); ctx.clearRect(0,0,64,64); document.getElementById('lastLabel').textContent='—'; });
-  document.getElementById('toggleTrainer').addEventListener('click', function(){ document.getElementById('trainer').classList.toggle('hidden'); });
+  // ===== Trainer (upload only, with HEIC conversion) =====
+  const classifier = knnClassifier.create();
+  let mobilenetModel = null;
+  async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2, alpha:0.35}); }
+  ensureEmbedder();
 
-  // Trainer file inputs (top-level)
+  function isHeicFile(f){ const n=(f.name||'').toLowerCase(); return f.type==='image/heic'||f.type==='image/heif'||n.endsWith('.heic')||n.endsWith('.heif'); }
+  async function toJpegIfNeeded(f){ if(!isHeicFile(f)) return f; document.getElementById('heicWarn').style.display='block'; try{ const blob=await heic2any({blob:f,toType:'image/jpeg',quality:0.9}); return new File([blob], (f.name||'photo')+'.jpg', {type:'image/jpeg'}); }catch(_){ return f; } }
+  async function loadImageFromFile(f){
+    f = await toJpegIfNeeded(f);
+    return new Promise(function(resolve,reject){
+      const img=new Image(); img.crossOrigin='anonymous';
+      const u=URL.createObjectURL(f);
+      img.onload=function(){ URL.revokeObjectURL(u); resolve(img); };
+      img.onerror=function(){
+        URL.revokeObjectURL(u);
+        try{ const fr=new FileReader(); fr.onload=function(){ img.onload=function(){ resolve(img); }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(f); }catch(e){ reject(e); }
+      };
+      img.src=u;
+    });
+  }
+
+  const clsSel=document.getElementById('cls');
   const pickerMulti=document.getElementById('filePick');
   const pickerOne=document.getElementById('filePickOne');
   const pickerCam=document.getElementById('filePickCam');
-  document.getElementById('addFromGallery').addEventListener('click', function(){ pickerMulti.click(); });
-  document.getElementById('addSingle').addEventListener('click', function(){ pickerOne.click(); });
-  document.getElementById('captureOne').addEventListener('click', function(){ pickerCam.click(); });
-  const clsSel=document.getElementById('cls');
-  async function handleFiles(files){ const label=clsSel.value; if(!files||!files.length){ document.getElementById('status').textContent='לא נבחרו קבצים'; return; } if(label==='none'){ document.getElementById('status').textContent='בחר/י מספר לפני העלאה'; return; } const list=Array.from(files).slice(0,20); let ok=0,fail=0; for(let i=0;i<list.length;i++){ try{ const img=await loadImageFromFile(list[i]); await addExample(img,label); ok++; document.getElementById('status').textContent='מאמן: '+(i+1)+'/'+list.length; }catch(e){ fail++; } await tf.nextFrame(); } document.getElementById('status').textContent='נוספו '+ok+' דוגמאות ל-'+label+(fail?(' (כשלו '+fail+')'):''); refreshCounts(); }
+  document.getElementById('addFromGallery').addEventListener('click',function(){ pickerMulti.click(); });
+  document.getElementById('addSingle').addEventListener('click',function(){ pickerOne.click(); });
+  document.getElementById('captureOne').addEventListener('click',function(){ pickerCam.click(); });
+
+  async function handleFiles(files){
+    const label=clsSel.value;
+    if(!files || !files.length){ document.getElementById('status').textContent='לא נבחרו קבצים'; return; }
+    if(label==='none'){ document.getElementById('status').textContent='בחר/י מספר לפני העלאה'; return; }
+    await ensureEmbedder();
+    const list=Array.from(files).slice(0,20);
+    let ok=0,fail=0;
+    for(let i=0;i<list.length;i++){
+      try{
+        const img=await loadImageFromFile(list[i]);
+        const t=tf.tidy(function(){
+          let x=tf.browser.fromPixels(img).toFloat();
+          if(settings.ignoreColor){
+            const r=x.slice([0,0,0],[x.shape[0],x.shape[1],1]);
+            const g=x.slice([0,0,1],[x.shape[0],x.shape[1],1]);
+            const b=x.slice([0,0,2],[x.shape[0],x.shape[1],1]);
+            const gray=r.mul(0.299).add(g.mul(0.587)).add(b.mul(0.114));
+            x=tf.concat([gray,gray,gray],2);
+          }
+          x=tf.image.resizeBilinear(x,[224,224]);
+          const o=tf.scalar(127.5);
+          x=x.sub(o).div(o).expandDims(0);
+          return mobilenetModel.infer(x,'conv_preds').as2D(1,1001);
+        });
+        classifier.addExample(t,label);
+        t.dispose();
+        ok++; document.getElementById('status').textContent='מאמן: '+ok+'/'+list.length+' (נכשלו: '+fail+')';
+        await tf.nextFrame();
+      }catch(err){
+        console.error('upload/train error', err);
+        fail++; document.getElementById('status').textContent='מאמן: '+ok+'/'+list.length+' (נכשלו: '+fail+')';
+      }
+    }
+    const ds=classifier.getClassifierDataset(); const keys=Object.keys(ds);
+    document.getElementById('countsRow').textContent = keys.length ? ('דוגמאות: ' + keys.map(function(k){return k+': '+(ds[k].shape[0]||0);}).join(' | ')) : 'אין דוגמאות';
+  }
+
   pickerMulti.addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
   pickerOne.addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
   pickerCam.addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
-
-  function datasetCounts(){ const ds=classifier.getClassifierDataset(); const keys=Object.keys(ds); if(!keys.length) return 'אין דוגמאות'; return keys.map(function(k){ return k+': '+(ds[k].shape[0]||0); }).join(' | '); }
-  function refreshCounts(){ const el=document.getElementById('countsRow'); if(el) el.textContent='דוגמאות למספרים: '+datasetCounts(); }
 
   if(state.players && state.players.length) showGame();
 });
