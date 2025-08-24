@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – נקודות (v2.7-ml-fixed)</title>
+<title>רמיקוב – נקודות (v2.7.1-ml-fixed)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   body{margin:0;background:#0e1220;color:#eaf1ff;font:16px system-ui}
@@ -60,18 +60,33 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function back(){$('#s2').classList.add('hidden');$('#s1').classList.remove('hidden');}
   function addPoints(id,d){const p=state.players.find(x=>x.id===id);if(p){p.points+=d;save();render();}}
   function setPoints(id,v){const p=state.players.find(x=>x.id===id);if(p){p.points=v;save();render();}}
+
+  // Expose to global so inline handlers can call them
+  window.addPoints = addPoints;
+  window.setPoints = setPoints;
+
   function render(){
-    const b=$('#board');b.innerHTML='';state.players.slice().sort((a,b)=>b.points-a.points).forEach((p,i)=>{
+    const b=$('#board');b.innerHTML='';
+    state.players.slice().sort((a,b)=>b.points-a.points).forEach((p,i)=>{
       b.innerHTML+=`<div class="chip"><div class="rank">${i+1}</div>${p.name}${i===0?'👑':''}<div style="margin-inline-start:auto">${p.points} נק׳</div></div>`;
     });
-    const panels=$('#panels');panels.innerHTML='';state.players.forEach(p=>{
-      panels.innerHTML+=`<div class="card"><h3>${p.name}</h3><div>נקודות: <span class="pill">${p.points}</span></div>
-      <input type="number" id="num${p.id}" placeholder="+/-"><button onclick="addPoints('${p.id}',Number(document.getElementById('num${p.id}').value)||0)">עדכן</button>
-      <button onclick="addPoints('${p.id}',-10)">-10</button></div>`;
+    const panels=$('#panels');panels.innerHTML='';
+    state.players.forEach(p=>{
+      const numId = 'num'+p.id;
+      panels.innerHTML+=`
+        <div class="card">
+          <h3>${p.name}</h3>
+          <div>נקודות: <span class="pill">${p.points}</span></div>
+          <input type="number" id="${numId}" placeholder="+/-">
+          <button onclick="(function(){ var v=Number(document.getElementById('${numId}').value)||0; window.addPoints('${p.id}', v); document.getElementById('${numId}').value=''; })()">עדכן</button>
+          <button onclick="window.addPoints('${p.id}', -10)">-10</button>
+        </div>`;
     });
   }
 
-  $('#startBtn').onclick=startGame;$('#backBtn').onclick=back;$('#clearLast').onclick=()=>{$('#lastLabel').textContent='—';const ctx=$('#lastTile').getContext('2d');ctx.clearRect(0,0,64,64);};
+  $('#startBtn').onclick=startGame;
+  $('#backBtn').onclick=back;
+  $('#clearLast').onclick=()=>{$('#lastLabel').textContent='—';const ctx=$('#lastTile').getContext('2d');ctx.clearRect(0,0,64,64);};
   if(state.players.length)showGame();
 });
 </script>
