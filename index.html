@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.43-ml)</title>
+<title>רמיקוב – מצב משחק (v2.44-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9}
@@ -34,7 +34,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div style="font-weight:800">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.43-ml</div>
+      <div class="ver">v2.44-ml</div>
       <div id="tfBadge" class="ver">TF: initializing…</div>
     </div>
     <div class="row">
@@ -45,7 +45,7 @@
 
 <div class="container">
   <div class="card">
-    🌐 כתובת הדף: <span id="pageUrl">https://shacharshorjs-creator.github.io/Remmikub/?v=243</span>
+    🌐 כתובת הדף: <span id="pageUrl">https://shacharshorjs-creator.github.io/Remmikub/?v=244</span>
     <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
   </div>
 
@@ -97,9 +97,10 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', () => {
 (async function(){
   const $$=(id)=>document.getElementById(id);
-  const log=(m)=>{ const el=$$('dbgLog'); el.textContent+=(el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; };
+  const log=(m)=>{ const el=$$('dbgLog'); if(el){ el.textContent+=(el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; } };
 
   async function loadScript(url, name){
     return new Promise((res,rej)=>{
@@ -129,28 +130,28 @@
     'https://unpkg.com/@tensorflow-models/knn-classifier@1.2.2',
     'https://cdn.jsdelivr.net/gh/tensorflow/tfjs-models/knn-classifier/dist/knn-classifier.js'
   ]);
-  if(!(tfOk && mobOk && knnOk)){ $$('#tfBadge').textContent='TF: failed'; $$('#warnTF').classList.remove('hidden'); return; }
+  if(!(tfOk && mobOk && knnOk)){ const b=$$('#tfBadge'); if(b) b.textContent='TF: failed'; const w=$$('#warnTF'); if(w) w.classList.remove('hidden'); return; }
 
-  // --- Backend with auto-fallback WebGL -> CPU ---
+  // Backend init with safe DOM guards
   async function initBackend(){ 
     function timeout(ms){ return new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms)); }
     try{ 
       await tf.setBackend('webgl'); 
       await Promise.race([tf.ready(), timeout(1200)]);
-      $$('#tfBadge').textContent='TF: '+tf.getBackend(); 
-      log('backend: webgl'); 
+      const b=$$('#tfBadge'); if(b) b.textContent='TF: '+tf.getBackend(); 
+      log('backend: '+tf.getBackend());
       return true;
     } catch(e){ 
-      log('webgl failed ('+(e && e.message || e)+') -> switching to cpu');
+      log('webgl failed: '+(e && e.message || e)+' -> switching to cpu');
       try{ 
         await tf.setBackend('cpu'); 
         await tf.ready(); 
-        $$('#tfBadge').textContent='TF: '+tf.getBackend(); 
-        log('backend: cpu'); 
+        const b=$$('#tfBadge'); if(b) b.textContent='TF: '+tf.getBackend(); 
+        log('backend: '+tf.getBackend());
         return true; 
       } catch(err){ 
-        $$('#tfBadge').textContent='TF: failed'; 
-        $$('#warnTF').classList.remove('hidden'); 
+        const b=$$('#tfBadge'); if(b) b.textContent='TF: failed'; 
+        const w=$$('#warnTF'); if(w) w.classList.remove('hidden'); 
         log('cpu backend also failed: '+(err && err.message || err)); 
         return false; 
       }
@@ -159,15 +160,15 @@
   const okBackend = await initBackend();
   if(!okBackend) return;
 
-  // --- Game logic ---
+  // Game logic
   let state = { players: [] };
   function renderLeaderboard(){
-    const board=$$('#board'); board.innerHTML='';
+    const board=$$('#board'); if(board) board.innerHTML='';
     const sorted=state.players.slice().sort((a,b)=>b.points-a.points);
     sorted.forEach((p,i)=>{ const div=document.createElement('div'); div.className='chip';
       div.innerHTML='<div class="rank">'+(i+1)+'</div><div>'+p.name+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
       board.appendChild(div); });
-    const panels=$$('#panels'); panels.innerHTML='';
+    const panels=$$('#panels'); if(panels) panels.innerHTML='';
     state.players.forEach(p=>{ const card=document.createElement('div'); card.className='card';
       const h=document.createElement('h3'); h.textContent=p.name; card.appendChild(h);
       const r=document.createElement('div'); r.className='row';
@@ -179,37 +180,38 @@
       r.appendChild(inp); r.appendChild(btn); r.appendChild(m10);
       card.appendChild(r); panels.appendChild(card); });
   }
-  $$('#startBtn').onclick=()=>{ const names=['n0','n1','n2','n3'].map(id=>$$(id).value.trim()).filter(Boolean);
+  const start=$$('#startBtn'); if(start) start.onclick=()=>{ const names=['n0','n1','n2','n3'].map(id=>$$(id).value.trim()).filter(Boolean);
     const list=names.length?names:['שחקן 1','שחקן 2']; state.players=list.map((n,i)=>({id:String(i+1),name:n,points:0}));
     $$('#s1').classList.add('hidden'); $$('#s2').classList.remove('hidden'); renderLeaderboard(); window.scrollTo({top:0,behavior:'smooth'});
   };
-  $$('#backBtn').onclick=()=>{ $$('#s2').classList.add('hidden'); $$('#s1').classList.remove('hidden'); };
-  $$('#resetBtn').onclick=()=>{ state.players.forEach(p=>p.points=0); renderLeaderboard(); };
+  const back=$$('#backBtn'); if(back) back.onclick=()=>{ $$('#s2').classList.add('hidden'); $$('#s1').classList.remove('hidden'); };
+  const reset=$$('#resetBtn'); if(reset) reset.onclick=()=>{ state.players.forEach(p=>p.points=0); renderLeaderboard(); };
 
-  // --- Trainer logic ---
+  // Trainer logic
   const classifier = knnClassifier.create(); let mobilenetModel=null;
   async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2,alpha:0.35}); }
   function updateCounts(){
     const ds = classifier.getClassifierDataset(); const keys=Object.keys(ds);
-    $$('#countsRow').textContent = keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')) : 'דוגמאות: —';
+    const row=$$('#countsRow'); if(row) row.textContent = keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')) : 'דוגמאות: —';
   }
   async function handleFilesFromInput(inp){
     const files=inp.files; if(!files||!files.length) return;
     log(inp.id+' change ('+files.length+')');
-    const clsSel=$$('#cls'); if(clsSel.value==='none'){ $$('#status').textContent='בחר/י מספר לפני העלאה'; return; }
+    const clsSel=$$('#cls'); if(clsSel && clsSel.value==='none'){ const s=$$('#status'); if(s) s.textContent='בחר/י מספר לפני העלאה'; return; }
     await ensureEmbedder();
     let ok=0,fail=0; const arr=[...files].slice(0,20);
     for(const f of arr){ try{ const img=await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(f); });
         const emb=tf.tidy(()=> mobilenetModel.infer(tf.browser.fromPixels(img).expandDims(0),'conv_preds'));
-        classifier.addExample(emb, clsSel.value); emb.dispose(); ok++; log('Added '+(f.name||'file')); $$('#status').textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; await tf.nextFrame();
-      }catch(err){ fail++; log('ERR '+(err.message||err)); $$('#status').textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; }
+        classifier.addExample(emb, clsSel.value); emb.dispose(); ok++; log('Added '+(f.name||'file')); const s=$$('#status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; await tf.nextFrame();
+      }catch(err){ fail++; log('ERR '+(err.message||err)); const s=$$('#status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; }
     }
     updateCounts(); inp.value='';
   }
-  ['filePick','filePickOne','filePickCam'].forEach(id=>{ const el=$$(id); el.addEventListener('change', ()=>handleFilesFromInput(el)); setInterval(()=>{ if(el.files && el.files.length) handleFilesFromInput(el); }, 1800); });
-  $$('#clearClass').onclick=()=>{ const v=$$('#cls').value; if(v==='none') return; classifier.clearClass(v); log('Cleared class '+v); updateCounts(); };
-  $$('#clearAll').onclick=()=>{ classifier.clearAllClasses(); log('Cleared ALL classes'); updateCounts(); };
+  ;['filePick','filePickOne','filePickCam'].forEach(id=>{ const el=$$(id); if(!el) return; el.addEventListener('change', ()=>handleFilesFromInput(el)); setInterval(()=>{ if(el.files && el.files.length) handleFilesFromInput(el); }, 1800); });
+  const btnClr=$$('#clearClass'); if(btnClr) btnClr.onclick=()=>{ const v=$$('#cls').value; if(v==='none') return; classifier.clearClass(v); log('Cleared class '+v); updateCounts(); };
+  const btnClrAll=$$('#clearAll'); if(btnClrAll) btnClrAll.onclick=()=>{ classifier.clearAllClasses(); log('Cleared ALL classes'); updateCounts(); };
 })();
+});
 </script>
 </body>
 </html>
