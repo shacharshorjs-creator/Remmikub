@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.42-ml)</title>
+<title>רמיקוב – מצב משחק (v2.43-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9}
@@ -34,7 +34,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div style="font-weight:800">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.42-ml</div>
+      <div class="ver">v2.43-ml</div>
       <div id="tfBadge" class="ver">TF: initializing…</div>
     </div>
     <div class="row">
@@ -45,7 +45,7 @@
 
 <div class="container">
   <div class="card">
-    🌐 כתובת הדף: <span id="pageUrl">https://shacharshorjs-creator.github.io/Remmikub/?v=242</span>
+    🌐 כתובת הדף: <span id="pageUrl">https://shacharshorjs-creator.github.io/Remmikub/?v=243</span>
     <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
   </div>
 
@@ -71,7 +71,7 @@
 
   <section id="trainer" class="card" aria-hidden="false">
     <h2 style="margin:0">אימון מודל זיהוי (על המכשיר)</h2>
-    <div id="warnTF" class="warn hidden">⚠️ לא זוהה TensorFlow — ייתכן ש־CDN חסום בדפדפן. נסה/י לפתוח שוב או לעבור לדפדפן אחר.</div>
+    <div id="warnTF" class="warn hidden">⚠️ TensorFlow לא עלה — אם המכשיר במצב חיסכון סוללה, בטל/י אותו. אחרת נסה/י שוב או דפדפן אחר.</div>
     <div class="mini" style="margin-top:4px">upload → embedding (MobileNet) → KNN</div>
     <div class="row" style="margin-top:8px">
       <label>בחר/י מחלקה</label>
@@ -109,7 +109,6 @@
       document.head.appendChild(s);
     });
   }
-
   async function tryLoad(name, urls){
     for(const u of urls){ try{ await loadScript(u, name); return true; }catch(e){} }
     return false;
@@ -120,27 +119,47 @@
     'https://unpkg.com/@tensorflow/tfjs@4.20.0/dist/tf.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.20.0/tf.min.js'
   ]);
-
   const mobOk = await tryLoad('mobilenet', [
     'https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0',
     'https://unpkg.com/@tensorflow-models/mobilenet@2.1.0',
     'https://cdn.jsdelivr.net/gh/tensorflow/tfjs-models/mobilenet/dist/mobilenet.js'
   ]);
-
   const knnOk = await tryLoad('knn-classifier', [
     'https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2',
     'https://unpkg.com/@tensorflow-models/knn-classifier@1.2.2',
     'https://cdn.jsdelivr.net/gh/tensorflow/tfjs-models/knn-classifier/dist/knn-classifier.js'
   ]);
-
   if(!(tfOk && mobOk && knnOk)){ $$('#tfBadge').textContent='TF: failed'; $$('#warnTF').classList.remove('hidden'); return; }
 
-  // Backend init
-  try{ await tf.setBackend('webgl'); await tf.ready(); }
-  catch(e){ try{ await tf.setBackend('cpu'); await tf.ready(); }catch(_e){} }
-  $$('#tfBadge').textContent='TF: '+tf.getBackend();
+  // --- Backend with auto-fallback WebGL -> CPU ---
+  async function initBackend(){ 
+    function timeout(ms){ return new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms)); }
+    try{ 
+      await tf.setBackend('webgl'); 
+      await Promise.race([tf.ready(), timeout(1200)]);
+      $$('#tfBadge').textContent='TF: '+tf.getBackend(); 
+      log('backend: webgl'); 
+      return true;
+    } catch(e){ 
+      log('webgl failed ('+(e && e.message || e)+') -> switching to cpu');
+      try{ 
+        await tf.setBackend('cpu'); 
+        await tf.ready(); 
+        $$('#tfBadge').textContent='TF: '+tf.getBackend(); 
+        log('backend: cpu'); 
+        return true; 
+      } catch(err){ 
+        $$('#tfBadge').textContent='TF: failed'; 
+        $$('#warnTF').classList.remove('hidden'); 
+        log('cpu backend also failed: '+(err && err.message || err)); 
+        return false; 
+      }
+    }
+  }
+  const okBackend = await initBackend();
+  if(!okBackend) return;
 
-  // Game logic
+  // --- Game logic ---
   let state = { players: [] };
   function renderLeaderboard(){
     const board=$$('#board'); board.innerHTML='';
@@ -167,7 +186,7 @@
   $$('#backBtn').onclick=()=>{ $$('#s2').classList.add('hidden'); $$('#s1').classList.remove('hidden'); };
   $$('#resetBtn').onclick=()=>{ state.players.forEach(p=>p.points=0); renderLeaderboard(); };
 
-  // Trainer logic
+  // --- Trainer logic ---
   const classifier = knnClassifier.create(); let mobilenetModel=null;
   async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2,alpha:0.35}); }
   function updateCounts(){
