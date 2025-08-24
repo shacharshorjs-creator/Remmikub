@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.47-ml)</title>
+<title>רמיקוב – מצב משחק (v2.48-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9}
@@ -11,22 +11,15 @@
   .container{width:min(980px,94vw);margin:0 auto;padding:112px 0 120px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  input[type=text],input[type=number]{background:#0b152a;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:140px}
-  button{cursor:pointer;border:none;border-radius:12px;padding:8px 12px;background:#1c2741;color:#fff}
-  .accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1320;font-weight:800}
-  .ghost{background:transparent;border:1px dashed var(--line)}
-  .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
-  .leader{display:flex;gap:10px;flex-wrap:wrap}
-  .chip{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center}
-  .rank{font-weight:900;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:#0d1a2e;border:1px solid rgba(100,200,255,.45)}
-  .ver{font-size:12px;padding:6px 10px;border-radius:999px;background:#0a1a2c;border:1px solid rgba(99,201,255,.4)}
-  .mini{font-size:12px;color:#9fb0c9}
+  .ver, .badge{font-size:12px;padding:6px 10px;border-radius:999px;background:#0a1a2c;border:1px solid rgba(99,201,255,.4)}
   .filebtn{appearance:none;-webkit-appearance:none;background:#1c2741;border:1px solid var(--line);color:#fff;border-radius:12px;padding:12px 16px}
-  .filebtn:active{opacity:.85}
   .hidden{display:none}
   .appbar{position:fixed;inset:0 0 auto 0;height:90px;background:rgba(8,12,24,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:10;display:flex;align-items:center}
   .appbar-inner{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
-  .warn{color:#ff8080;font-weight:bold;margin-top:8px}
+  .mini{font-size:12px;color:var(--muted)}
+  button{cursor:pointer;border:none;border-radius:12px;padding:8px 12px;background:#1c2741;color:#fff}
+  .ghost{background:transparent;border:1px dashed var(--line)}
+  .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
 </style>
 </head>
 <body>
@@ -34,53 +27,29 @@
   <div class="appbar-inner">
     <div class="row">
       <div style="font-weight:800">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.47-ml</div>
-      <div id="tfBadge" class="ver">TF: init</div>
+      <div class="ver">v2.48-ml</div>
+      <div id="tfBadge" class="badge">TF: init</div>
     </div>
     <div class="row">
-      <button id="resetBtn" class="danger">איפוס נקודות</button>
+      <span class="mini">כתובת:</span>
+      <span id="pageUrl" class="ver" style="background:#0b152a;border-color:#27415f">https://shacharshorjs-creator.github.io/Remmikub/?v=248</span>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
     </div>
   </div>
 </div>
 
 <div class="container">
-  <div class="card">
-    🌐 כתובת הדף: <span id="pageUrl">https://shacharshorjs-creator.github.io/Remmikub/?v=247</span>
-    <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
-  </div>
-
-  <section id="s1" class="card">
-    <h2 style="margin:0">בחירת משתתפים (עד 4)</h2>
-    <div class="row" style="margin-top:8px">
-      <input id="n0" type="text" placeholder="שחקן/ית 1">
-      <input id="n1" type="text" placeholder="שחקן/ית 2">
-      <input id="n2" type="text" placeholder="אופציונלי">
-      <input id="n3" type="text" placeholder="אופציונלי">
-      <button id="startBtn" class="accent">התחל משחק</button>
-    </div>
-  </section>
-
-  <section id="s2" class="card hidden">
-    <div class="row" style="justify-content:space-between">
-      <h2 style="margin:0">לוח הובלה</h2>
-      <button id="backBtn" class="ghost">↩ חזרה לשמות</button>
-    </div>
-    <div id="board" class="leader" style="margin-top:10px"></div>
-    <div id="panels" style="margin-top:10px"></div>
-  </section>
-
-  <section id="trainer" class="card" aria-hidden="false">
+  <section id="trainer" class="card">
     <h2 style="margin:0">אימון מודל זיהוי (CPU בלבד)</h2>
-    <div id="warnTF" class="warn hidden">⚠️ TensorFlow לא עלה — נסה/י שוב או דפדפן אחר.</div>
-    <div class="mini" style="margin-top:4px">upload → embedding (MobileNet) → KNN</div>
+    <div class="mini">upload → embedding (MobileNet) → KNN</div>
     <div class="row" style="margin-top:8px">
       <label>בחר/י מחלקה</label>
       <select id="cls">
         <option value="none">בחר/י מספר</option>
         <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option>
       </select>
-      <button id="clearClass" class="ghost" type="button">נקה מחלקה</button>
-      <button id="clearAll" class="danger" type="button">נקה הכל</button>
+      <button id="clearClass" class="ghost">נקה מחלקה</button>
+      <button id="clearAll" class="danger">נקה הכל</button>
     </div>
     <div class="row" style="gap:8px;margin-top:8px">
       <input id="filePick" class="filebtn" type="file" accept="image/*" multiple>
@@ -90,118 +59,86 @@
     <div id="countsRow" class="mini" style="margin-top:6px">דוגמאות: —</div>
     <div class="card" style="margin-top:8px">
       <div class="mini">Debug: <button onclick="navigator.clipboard.writeText(document.getElementById('dbgLog').textContent)">📋 העתק</button></div>
-      <pre id="dbgLog" style="white-space:pre-wrap;max-height:220px;overflow:auto;margin:0"></pre>
+      <pre id="dbgLog" style="white-space:pre-wrap;max-height:240px;overflow:auto;margin:0"></pre>
     </div>
     <div class="row"><span id="status" class="ver">אין מודל</span></div>
   </section>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-(async function(){
+(function(){
   const $$=(id)=>document.getElementById(id);
-  const setBadge=(txt)=>{ const b=$$('tfBadge'); if(b) b.textContent = txt; }
   const log=(m)=>{ const el=$$('dbgLog'); if(el){ el.textContent+=(el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; } };
 
-  async function loadScript(url, name){
+  function loadScript(url, name){
     return new Promise((res,rej)=>{
       const s=document.createElement('script'); s.src=url; s.async=true;
       s.onload=()=>{ log('loaded '+name+': '+url); res(true); };
-      s.onerror=()=>{ log('FAILED '+name+': '+url); rej(new Error('load fail')); };
+      s.onerror=()=>{ log('FAILED '+name+': '+url); rej(new Error('load fail '+name)); };
       document.head.appendChild(s);
     });
   }
-  async function tryLoad(name, urls){
-    for(const u of urls){ try{ await loadScript(u, name); return true; }catch(e){} }
-    return false;
-  }
 
-  // Load libraries
-  const tfOk = await tryLoad('tfjs', [
-    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js',
-    'https://unpkg.com/@tensorflow/tfjs@4.20.0/dist/tf.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.20.0/tf.min.js'
-  ]);
-  if(!tfOk){ setBadge('TF: failed'); log('tfjs failed'); return; }
+  async function boot(){
+    try{ 
+      await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js','tfjs');
+      // Force CPU backend only
+      await tf.setBackend('cpu');
+      await tf.ready();
+      if($$('tfBadge')) $$('#tfBadge').textContent='TF: '+tf.getBackend();
+      log('backend forced: '+tf.getBackend()+' (ready)');
+    }catch(e){ log('TF init error: '+(e&&e.message||e)); return; }
+    try{ 
+      await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0','mobilenet');
+      await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2','knn-classifier');
+    }catch(e){ log('Models load error: '+(e&&e.message||e)); return; }
 
-  // Force CPU immediately
-  try{ await tf.setBackend('cpu'); await tf.ready(); setBadge('TF: cpu'); log('backend forced: cpu'); }
-  catch(e){ setBadge('TF: failed'); log('backend force failed: '+(e.message||e)); return; }
+    const classifier = knnClassifier.create(); let mobilenetModel=null;
+    async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2,alpha:0.35}); }
+    function updateCounts(){
+      const ds = classifier.getClassifierDataset(); const keys=Object.keys(ds);
+      const row=$$('countsRow'); if(row) row.textContent = keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')) : 'דוגמאות: —';
+    }
 
-  const mobOk = await tryLoad('mobilenet', [
-    'https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0',
-    'https://unpkg.com/@tensorflow-models/mobilenet@2.1.0',
-    'https://cdn.jsdelivr.net/gh/tensorflow/tfjs-models/mobilenet/dist/mobilenet.js'
-  ]);
-  const knnOk = await tryLoad('knn-classifier', [
-    'https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2',
-    'https://unpkg.com/@tensorflow-models/knn-classifier@1.2.2',
-    'https://cdn.jsdelivr.net/gh/tensorflow/tfjs-models/knn-classifier/dist/knn-classifier.js'
-  ]);
-  if(!(mobOk && knnOk)){ log('model libs failed'); return; }
-
-  // Game logic
-  let state = { players: [] };
-  function renderLeaderboard(){
-    const board=$$('#board'); if(board) board.innerHTML='';
-    const sorted=state.players.slice().sort((a,b)=>b.points-a.points);
-    sorted.forEach((p,i)=>{ const div=document.createElement('div'); div.className='chip';
-      div.innerHTML='<div class="rank">'+(i+1)+'</div><div>'+p.name+'</div><div style="margin-inline-start:auto">'+p.points+' נק׳</div>';
-      board.appendChild(div); });
-    const panels=$$('#panels'); if(panels) panels.innerHTML='';
-    state.players.forEach(p=>{ const card=document.createElement('div'); card.className='card';
-      const h=document.createElement('h3'); h.textContent=p.name; card.appendChild(h);
-      const r=document.createElement('div'); r.className='row';
-      const inp=document.createElement('input'); inp.type='number'; inp.placeholder='+/-';
-      const btn=document.createElement('button'); btn.textContent='הוסף/הפחת';
-      const m10=document.createElement('button'); m10.textContent='-10';
-      btn.onclick=()=>{ const v=Number(inp.value); if(!Number.isNaN(v)&&inp.value!==''){ p.points+=v; inp.value=''; renderLeaderboard(); } };
-      m10.onclick=()=>{ p.points-=10; renderLeaderboard(); };
-      r.appendChild(inp); r.appendChild(btn); r.appendChild(m10);
-      card.appendChild(r); panels.appendChild(card); });
-  }
-  const start=$$('#startBtn'); if(start) start.onclick=()=>{ const names=['n0','n1','n2','n3'].map(id=>$$(id).value.trim()).filter(Boolean);
-    const list=names.length?names:['שחקן 1','שחקן 2']; state.players=list.map((n,i)=>({id:String(i+1),name=n,points:0}));
-    $$('#s1').classList.add('hidden'); $$('#s2').classList.remove('hidden'); renderLeaderboard(); window.scrollTo({top:0,behavior:'smooth'});
-  };
-  const back=$$('#backBtn'); if(back) back.onclick=()=>{ $$('#s2').classList.add('hidden'); $$('#s1').classList.remove('hidden'); };
-  const reset=$$('#resetBtn'); if(reset) reset.onclick=()=>{ state.players.forEach(p=>p.points=0); renderLeaderboard(); };
-
-  // Trainer logic (CPU)
-  const classifier = knnClassifier.create(); let mobilenetModel=null;
-  async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2,alpha:0.35}); }
-  function updateCounts(){
-    const ds = classifier.getClassifierDataset(); const keys=Object.keys(ds);
-    const row=$$('#countsRow'); if(row) row.textContent = keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')) : 'דוגמאות: —';
-  }
-  const busy = new Set();
-  function bindPicker(id){
-    const el=$$(id); if(!el) return;
-    const onChange = async ()=>{
-      if(busy.has(el)) return; busy.add(el);
-      try{ 
-        const files=el.files; if(!files||!files.length) return;
-        log(id+' change ('+files.length+')');
-        const clsSel=$$('#cls'); if(clsSel && clsSel.value==='none'){ const s=$$('#status'); if(s) s.textContent='בחר/י מספר לפני העלאה'; return; }
-        await ensureEmbedder();
-        let ok=0,fail=0; const arr=[...files].slice(0,20);
-        for(const f of arr){ try{ const img=await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(f); });
-            const emb=tf.tidy(()=> mobilenetModel.infer(tf.browser.fromPixels(img).expandDims(0),'conv_preds'));
-            classifier.addExample(emb, clsSel.value); emb.dispose(); ok++; log('Added '+(f.name||'file')); const s=$$('#status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; await tf.nextFrame();
-          }catch(err){ fail++; log('ERR '+(err.message||err)); const s=$$('#status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')'; }
+    const busy = new Set();
+    function bindPicker(id){
+      const el=$$(id); if(!el) return;
+      const onChange = async ()=>{
+        if(busy.has(el)) return; busy.add(el);
+        try{
+          const files=el.files; if(!files||!files.length) return;
+          log(id+' change ('+files.length+')');
+          const clsSel=$$('cls'); if(clsSel && clsSel.value==='none'){ const s=$$('status'); if(s) s.textContent='בחר/י מספר לפני העלאה'; return; }
+          await ensureEmbedder();
+          let ok=0,fail=0; const arr=[...files].slice(0,20);
+          for(const f of arr){
+            try{
+              const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(f); });
+              const emb = tf.tidy(()=> mobilenetModel.infer(tf.browser.fromPixels(img).expandDims(0),'conv_preds'));
+              classifier.addExample(emb, clsSel.value); emb.dispose(); ok++; 
+              const s=$$('status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')';
+              await tf.nextFrame();
+            }catch(err){ fail++; log('ERR '+(err&&err.message||err)); }
+          }
+          updateCounts();
+        } finally {
+          // hard reset input
+          const clone = el.cloneNode(true);
+          el.parentNode.replaceChild(clone, el);
+          bindPicker(id);
+          busy.delete(el);
         }
-        updateCounts();
-      } finally {
-        const clone = el.cloneNode(true); el.parentNode.replaceChild(clone, el); bindPicker(id); busy.delete(el);
-      }
-    };
-    el.addEventListener('change', onChange, false);
+      };
+      el.addEventListener('change', onChange, false);
+    }
+    bindPicker('filePick'); bindPicker('filePickOne'); bindPicker('filePickCam');
+
+    const btnClr=$$('clearClass'); if(btnClr) btnClr.onclick=()=>{ const v=$$('cls').value; if(v==='none') return; classifier.clearClass(v); log('Cleared class '+v); updateCounts(); };
+    const btnClrAll=$$('clearAll'); if(btnClrAll) btnClrAll.onclick=()=>{ classifier.clearAllClasses(); log('Cleared ALL classes'); updateCounts(); };
   }
-  bindPicker('filePick');
-  bindPicker('filePickOne');
-  bindPicker('filePickCam');
+
+  window.addEventListener('load', boot, {once:true});
 })();
-});
 </script>
 </body>
 </html>
