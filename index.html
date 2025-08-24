@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.10-ml)</title>
+<title>רמיקוב – מצב משחק (v2.11-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9}
@@ -50,7 +50,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.10-ml</div>
+      <div class="ver">v2.11-ml</div>
     </div>
     <div class="row">
       <div class="switch"><label for="ignoreColor">התעלם מצבע</label><input id="ignoreColor" type="checkbox" checked></div>
@@ -147,8 +147,8 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function(){
-  const KEY = 'rummi_game_state_v2.10-ml';
-  const MODEL_KEY = 'rummi_knn_v2.10-ml';
+  const KEY = 'rummi_game_state_v2.11-ml';
+  const MODEL_KEY = 'rummi_knn_v2.11-ml';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch(e) { console.warn(e); }
 
@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) { console.warn(e); } }
 
-  // ===== TF + KNN =====
+  // ===== TF + KNN (memory safe) =====
   const classifier = knnClassifier.create();
   let mobilenetModel = null;
   let tfReady = (async()=>{ try{ await tf.ready(); }catch(e){} })();
@@ -183,40 +183,30 @@ document.addEventListener('DOMContentLoaded', function(){
     return tf.concat([gray,gray,gray],2);
   }
   function preprocess(img){
-    let t=tf.browser.fromPixels(img).toFloat();
-    if(settings.ignoreColor) t=toGray3(t);
-    t=tf.image.resizeBilinear(t,[224,224]);
-    const offset=tf.scalar(127.5);
-    const norm=t.sub(offset).div(offset);
-    return norm.expandDims(0);
+    return tf.tidy(()=>{
+      let t=tf.browser.fromPixels(img).toFloat();
+      if(settings.ignoreColor) t=toGray3(t);
+      t=tf.image.resizeBilinear(t,[224,224]);
+      const offset=tf.scalar(127.5);
+      const norm=t.sub(offset).div(offset);
+      return norm.expandDims(0);
+    });
   }
-
-  function datasetCounts(){
-    const ds = classifier.getClassifierDataset();
-    const keys = Object.keys(ds);
-    if(!keys.length) return 'אין דוגמאות';
-    const parts = keys.map(k => k+': '+(ds[k].shape[0]||0));
-    return parts.join(' | ');
+  function embed(img){
+    return tf.tidy(()=>{
+      const inp = preprocess(img);
+      const emb = mobilenetModel.infer(inp,'conv_preds');
+      return emb.reshape([1, emb.shape[1]]).clone(); // keep logits, free rest
+    });
   }
-  function refreshCounts(){
-    const cr = document.getElementById('countsRow');
-    if(cr) cr.textContent = 'דוגמאות למספרים: ' + datasetCounts();
-  }
-
   async function addExample(imgOrCanvas,label){
     await ensureEmbedder();
-    const inp=preprocess(imgOrCanvas);
-    const emb=mobilenetModel.infer(inp,'conv_preds');
-    const data=await emb.data();
-    emb.dispose(); tf.dispose(inp);
-    const logits=tf.tensor2d(data,[1,data.length]);
+    const logits = embed(imgOrCanvas);
     classifier.addExample(logits,label);
     await tf.nextFrame();
     refreshCounts();
   }
-
   async function addMany(files,label){
-    // Cap to 20 to avoid memory spikes
     const list = Array.from(files).slice(0,20);
     let ok=0, fail=0;
     const status = document.getElementById('status');
@@ -228,27 +218,22 @@ document.addEventListener('DOMContentLoaded', function(){
         await new Promise(res=> img.onload=res);
         await addExample(img,label);
         ok++;
-        if(status) status.textContent = `מאמן: {${i+1}/${list.length}} נוספה דוגמה…`;
+        if(status) status.textContent = `מאמן: ${i+1}/${list.length} נוספה דוגמה…`;
       }catch(e){ fail++; console.warn('train fail',e); }
       finally{ URL.revokeObjectURL(url); }
-      await new Promise(res=> (window.requestIdleCallback? requestIdleCallback(res,{timeout:50}) : setTimeout(res,16)));
+      await tf.nextFrame();
+      await new Promise(r=> setTimeout(r, 0));
     }
     if(status) status.textContent = 'נוספו '+ok+' דוגמאות ל-'+label + (fail? (' (כשלו '+fail+')') : '');
     refreshCounts();
   }
-
   async function predictClass(imgOrCanvas){
     await ensureEmbedder();
     if(classifier.getNumClasses()===0) return {label:'none',confidences:{none:1}};
-    const inp=preprocess(imgOrCanvas);
-    const emb=mobilenetModel.infer(inp,'conv_preds');
-    const data=await emb.data();
-    emb.dispose(); tf.dispose(inp);
-    const logits=tf.tensor2d(data,[1,data.length]);
+    const logits = embed(imgOrCanvas);
     const res=await classifier.predictClass(logits);
     return res;
   }
-
   function saveKNN(){
     try{
       const dataset = classifier.getClassifierDataset();
@@ -284,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function(){
       const kb = Math.round(json.length/1024);
       const blob = new Blob([json], {type:'application/json'});
       const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-      a.download='rummi_knn_v2.10-ml.json'; a.click();
+      a.download='rummi_knn_v2.11-ml.json'; a.click();
       const st = document.getElementById('status'); if(st) st.textContent = 'ייצוא הושלם · ~'+kb+'KB';
     }catch(e){ alert('ייצוא נכשל: '+(e.message||e)); }
   }
@@ -302,7 +287,27 @@ document.addEventListener('DOMContentLoaded', function(){
     }catch(e){ alert('ייבוא נכשל: '+(e.message||e)); }
   }
 
-  // OpenCV segmentation
+  // ===== OpenCV helpers: NMS to avoid double-detection =====
+  function iou(a,b){
+    const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
+    const x2=Math.min(a.x+a.width, b.x+b.width);
+    const y2=Math.min(a.y+a.height, b.y+b.height);
+    const w=Math.max(0,x2-x1), h=Math.max(0,y2-y1);
+    const inter=w*h;
+    const ua=a.width*a.height + b.width*b.height - inter;
+    return ua>0? inter/ua : 0;
+  }
+  function nms(rects, thr=0.5){
+    rects = rects.slice().sort((r1,r2)=> (r2.width*r2.height)-(r1.width*r1.height));
+    const keep=[];
+    rects.forEach(r=>{
+      if(keep.every(k=> iou(k,r) < thr )) keep.push(r);
+    });
+    // Remove nested rects (one inside another) to avoid duplicated digits
+    return keep.filter(r=> keep.every(k=> (k===r) || !(r.x>=k.x && r.y>=k.y && r.x+r.width<=k.x+k.width && r.y+r.height<=k.y+k.height) ));
+  }
+
+  // ===== OpenCV segmentation =====
   async function ensureCvReady(){
     return new Promise((resolve,reject)=>{
       if (typeof cv !== 'undefined' && cv.Mat) return resolve();
@@ -321,29 +326,46 @@ document.addEventListener('DOMContentLoaded', function(){
     let gray=new cv.Mat(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
     let blur=new cv.Mat(); cv.GaussianBlur(gray,blur,new cv.Size(5,5),0);
     let bin=new cv.Mat(); cv.adaptiveThreshold(blur,bin,255,cv.ADAPTIVE_THRESH_GAUSSIAN_C,cv.THRESH_BINARY_INV,35,7);
+    // Morph close+open to merge inner edges and kill noise
+    let kernel=cv.Mat.ones(3,3,cv.CV_8U);
+    let closed=new cv.Mat(); cv.morphologyEx(bin,closed,cv.MORPH_CLOSE,kernel);
+    let opened=new cv.Mat(); cv.morphologyEx(closed,opened,cv.MORPH_OPEN,kernel);
     let contours=new cv.MatVector(), hierarchy=new cv.Mat();
-    cv.findContours(bin,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
-    const tiles=[];
+    cv.findContours(opened,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+
+    // Collect rect candidates
+    const rects=[];
     for(let i=0;i<contours.size();i++){
       const rect=cv.boundingRect(contours.get(i));
       const ar=rect.width/rect.height;
       const area=rect.width*rect.height;
       if(area>(w*h*0.012) && ar>0.5 && ar<0.98){
-        const pad=Math.round(rect.height*0.08);
-        const x=Math.max(0,rect.x+pad), y=Math.max(0,rect.y+pad);
-        const ch=Math.min(h-y, Math.round(rect.height*0.6));
-        const cw=Math.min(w-x, rect.width-pad*2);
-        const c=document.createElement('canvas'); c.width=cw; c.height=ch;
-        c.getContext('2d').drawImage(cvs,x,y,cw,ch,0,0,cw,ch);
-        tiles.push({canvas:c, rect});
+        rects.push(rect);
       }
     }
-    contours.delete(); hierarchy.delete(); src.delete(); gray.delete(); blur.delete(); bin.delete();
+    // Apply NMS to avoid doubles
+    const kept = nms(rects, 0.45);
+
+    // Crop tiles (focus on top/middle where number lives)
+    const tiles=[];
+    kept.forEach(rect=>{
+      const pad=Math.round(rect.height*0.08);
+      const x=Math.max(0,rect.x+pad), y=Math.max(0,rect.y+pad);
+      const ch=Math.min(h-y, Math.round(rect.height*0.6));
+      const cw=Math.min(w-x, rect.width-pad*2);
+      const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+      c.getContext('2d').drawImage(cvs,x,y,cw,ch,0,0,cw,ch);
+      tiles.push({canvas:c, rect});
+    });
+
+    contours.delete(); hierarchy.delete();
+    src.delete(); gray.delete(); blur.delete(); bin.delete(); closed.delete(); opened.delete(); kernel.delete();
+
     tiles.sort((a,b)=> a.rect.y===b.rect.y ? a.rect.x-b.rect.x : a.rect.y-b.rect.y);
     return tiles;
   }
 
-  // OCR fallback
+  // ===== OCR fallback =====
   async function ocrFallback(canvas){
     try{
       const r = await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'});
@@ -354,7 +376,7 @@ document.addEventListener('DOMContentLoaded', function(){
     return null;
   }
 
-  // Last detected preview
+  // ===== Last detected preview =====
   const lastCanvas=document.getElementById('lastTile');
   const lastLabel=document.getElementById('lastLabel');
   function setLastPreview(fromCanvas, labelText){
@@ -366,6 +388,7 @@ document.addEventListener('DOMContentLoaded', function(){
   }
   document.getElementById('clearLast')?.addEventListener('click', ()=> setLastPreview(null,'—'));
 
+  // ===== Classify + detect =====
   async function classifyTile(canvas){
     const res = await predictClass(canvas);
     if(res && res.label!=='none'){
@@ -404,7 +427,7 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   }
 
-  // Game logic
+  // ===== Game logic =====
   function startGame(){
     const names=['#n0','#n1','#n2','#n3'].map(sel=>{const e=$(sel);return e?e.value.trim():'';}).filter(Boolean);
     const list=names.length?names:['שחקן 1','שחקן 2'];
