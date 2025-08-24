@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.17-ml)</title>
+<title>רמיקוב – מצב משחק (v2.18-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--chip:#0b1325;--accent:#63c9ff;--accent2:#8ae9c9;--good:#19d19b;--warn:#ffd166}
@@ -41,6 +41,7 @@
   .tilePrev{display:flex;align-items:center;gap:10px}
   .tilePrev canvas{width:64px;height:64px;border-radius:10px;border:1px solid var(--line);background:#0b152a}
   .mini{font-size:12px;color:#9fb0c9}
+  .warn{color:#ffd166}
 </style>
 </head>
 <body>
@@ -48,7 +49,7 @@
   <div class="appbar-inner">
     <div class="row">
       <div class="title">רמיקוב – מצב משחק</div>
-      <div class="ver">v2.17-ml</div>
+      <div class="ver">v2.18-ml</div>
       <span id="backendBadge" class="badge">TF: —</span>
     </div>
     <div class="row">
@@ -111,12 +112,13 @@
       </div>
       <div class="row" style="gap:6px">
         <button id="addFromGallery" class="ghost"> הוסף מגזיר (גלריה)</button>
-        <input id="filePick" type="file" accept="image/*" class="hidden" multiple>
+        <input id="filePick" type="file" accept="image/*,.heic,.heif" class="hidden" multiple>
         <button id="addSingle" class="ghost"> הוסף תמונה בודדת</button>
-        <input id="filePickOne" type="file" accept="image/*" class="hidden">
+        <input id="filePickOne" type="file" accept="image/*,.heic,.heif" class="hidden">
         <button id="captureOne" class="ghost"> צילום מהמצלמה</button>
         <input id="filePickCam" type="file" accept="image/*" capture="environment" class="hidden">
       </div>
+      <div class="row mini warn" id="heicWarn" style="display:none">הערה: קובצי HEIC עלולים לא להיטען בדפדפן זה. אם ההעלאה נכשלת – צלם/י מהמצלמה כאן או שמור/י את התמונה כ‑JPG/PNG.</div>
       <div class="row">
         <button id="saveModel" class="ghost">שמור מודל</button>
         <button id="loadModel" class="ghost">טען מודל</button>
@@ -155,8 +157,8 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', async function(){
-  const KEY = 'rummi_game_state_v2.17-ml';
-  const MODEL_KEY = 'rummi_knn_v2.17-ml';
+  const KEY = 'rummi_game_state_v2.18-ml';
+  const MODEL_KEY = 'rummi_knn_v2.18-ml';
   let state = { players: [] };
   try { const raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw); } catch(e) { console.warn(e); }
 
@@ -233,7 +235,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     await tf.nextFrame(); refreshCounts();
   }
 
-  // ===== Trainer inputs (robust for mobile) =====
+  // ===== Trainer inputs =====
   const pickerMulti = document.getElementById('filePick');
   const pickerOne = document.getElementById('filePickOne');
   const pickerCam = document.getElementById('filePickCam');
@@ -241,25 +243,49 @@ document.addEventListener('DOMContentLoaded', async function(){
   const btnOne = document.getElementById('addSingle');
   const btnCam = document.getElementById('captureOne');
   const clsSel = document.getElementById('cls');
+  const heicWarn = document.getElementById('heicWarn');
 
   btnMulti.addEventListener('click', function(){ pickerMulti.click(); });
   btnOne.addEventListener('click', function(){ pickerOne.click(); });
   btnCam.addEventListener('click', function(){ pickerCam.click(); });
 
+  function isHeicFile(f){
+    const name=(f.name||'').toLowerCase();
+    return (f.type==='image/heic' || f.type==='image/heif' || name.endsWith('.heic') || name.endsWith('.heif'));
+  }
+
+  async function loadImageFromFile(f){
+    return new Promise(function(resolve,reject){
+      const img=new Image(); img.crossOrigin='anonymous';
+      // Prefer ObjectURL, but HEIC may fail → try DataURL
+      const u=URL.createObjectURL(f);
+      img.onload=function(){ URL.revokeObjectURL(u); resolve(img); };
+      img.onerror=function(){
+        URL.revokeObjectURL(u);
+        try{
+          const fr=new FileReader();
+          fr.onload=function(){ img.onload=function(){ resolve(img); }; img.onerror=function(e){ reject(e); }; img.src=fr.result; };
+          fr.onerror=reject; fr.readAsDataURL(f);
+        }catch(e){ reject(e); }
+      };
+      img.src=u;
+    });
+  }
+
   async function handleFiles(files){
     const label = clsSel.value;
     if(!files || !files.length){ const st=document.getElementById('status'); if(st) st.textContent='לא נבחרו קבצים'; return; }
     if(!label || label==='none'){ const st=document.getElementById('status'); if(st) st.textContent='בחר/י מספר לפני העלאה'; return; }
+    heicWarn.style.display = Array.from(files).some(isHeicFile) ? 'block' : 'none';
+
     const list = Array.from(files).slice(0,20);
-    let ok=0, fail=0; const status=document.getElementById('status'); const img = new Image();
+    let ok=0, fail=0; const status=document.getElementById('status');
     for(let i=0;i<list.length;i++){
-      const url=URL.createObjectURL(list[i]);
       try{
-        await new Promise((resolve,reject)=>{ img.onload=resolve; img.onerror=reject; img.src=url; });
+        const img = await loadImageFromFile(list[i]);
         await addExample(img,label); ok++;
         if(status) status.textContent='מאמן: '+(i+1)+'/'+list.length;
       }catch(e){ fail++; }
-      finally{ URL.revokeObjectURL(url); }
       await tf.nextFrame();
     }
     if(status) status.textContent='נוספו '+ok+' דוגמאות ל-'+label+(fail?(' (כשלו '+fail+')'):''); refreshCounts();
@@ -269,7 +295,7 @@ document.addEventListener('DOMContentLoaded', async function(){
   pickerOne  .addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
   pickerCam  .addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value=''; });
 
-  // ===== Detection helpers & OCR (unchanged) =====
+  // ===== OCR fallback & detection remain as בגרסה קודמת =====
   async function ocrFallback(canvas){
     try{
       const r=await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'});
@@ -279,7 +305,11 @@ document.addEventListener('DOMContentLoaded', async function(){
     }catch(e){}
     return null;
   }
-
+  async function predictClass(img){
+    await ensureEmbedder();
+    if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
+    const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res;
+  }
   function iou(a,b){ const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y); const x2=Math.min(a.x+a.width,b.x+b.width); const y2=Math.min(a.y+a.height,b.y+b.height); const w=Math.max(0,x2-x1), h=Math.max(0,y2-y1); const inter=w*h; const ua=a.width*a.height + b.width*b.height - inter; return ua>0? inter/ua : 0; }
   function centerInside(inner, outer){ const cx=inner.x+inner.width/2, cy=inner.y+inner.height/2; return cx>outer.x && cx<outer.x+outer.width && cy>outer.y && cy<outer.y+outer.height; }
   function nmsMerge(rects){
@@ -300,7 +330,6 @@ document.addEventListener('DOMContentLoaded', async function(){
     });
     return filtered;
   }
-
   async function ensureCvReady(){
     return new Promise(function(resolve,reject){
       if (typeof cv!=='undefined' && cv.Mat) return resolve();
@@ -349,7 +378,7 @@ document.addEventListener('DOMContentLoaded', async function(){
     return tiles;
   }
 
-  // ===== Last detected preview & OCR classify =====
+  // ===== Last detected preview & scoring =====
   const lastCanvas=document.getElementById('lastTile'); const lastLabel=document.getElementById('lastLabel');
   function setLastPreview(fromCanvas,labelText){
     const ctx=lastCanvas.getContext('2d');
@@ -360,6 +389,11 @@ document.addEventListener('DOMContentLoaded', async function(){
   }
   document.getElementById('clearLast')?.addEventListener('click', function(){ setLastPreview(null,'—'); });
 
+  async function predictClass(img){
+    await ensureEmbedder();
+    if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
+    const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res;
+  }
   async function ocrFallback(canvas){
     try{
       const r=await Tesseract.recognize(canvas,'eng',{config:'tessedit_char_whitelist=0123456789 --psm 10'});
@@ -368,11 +402,6 @@ document.addEventListener('DOMContentLoaded', async function(){
       m=t.match(/\\b[0-9]\\b/); if(m) return parseInt(m[0],10);
     }catch(e){}
     return null;
-  }
-  async function predictClass(img){
-    await ensureEmbedder();
-    if(classifier.getNumClasses()===0) return {label:'none', confidences:{none:1}};
-    const logits=embed(img); const res=await classifier.predictClass(logits); logits.dispose(); return res;
   }
   async function classifyTile(canvas){
     const res=await predictClass(canvas);
@@ -457,7 +486,7 @@ document.addEventListener('DOMContentLoaded', async function(){
       go.addEventListener('click', function(){ const d=Number(num.value); if(!Number.isNaN(d) && num.value!==''){ addPoints(p.id,d); num.value=''; } });
       const minus10=document.createElement('button'); minus10.textContent='-10'; minus10.addEventListener('click', function(){ addPoints(p.id,-10); });
       ctrls.appendChild(num); ctrls.appendChild(go); ctrls.appendChild(minus10);
-      card.appendChild(ctrlס);
+      card.appendChild(ctrls);
       card.appendChild(mount);
       panels.appendChild(card);
     });
