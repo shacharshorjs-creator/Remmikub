@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – משחק + אימון (v2.66-ml)</title>
+<title>רמיקוב – משחק + אימון (v3.0-ml)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
@@ -45,7 +45,7 @@
   <div class="wrap row" style="justify-content:space-between">
     <div class="badges">
       <span class="tag">רמיקוב – משחק + אימון</span>
-      <span id="ver" class="tag">v2.66-ml</span>
+      <span id="ver" class="tag">v3.0-ml</span>
       <span id="tfBadge" class="tag">TF: init…</span>
       <span id="mdlBadge" class="tag">model: loading…</span>
     </div>
@@ -711,6 +711,102 @@ document.addEventListener('click', (e)=>{
       if(window.openCamForPlayer) window.openCamForPlayer(i);
       else alert('צילום זמין ממשחק');
     }
+  });
+})();
+</script>
+
+
+<!-- ===== v3.1: Model Export/Import (JSON) ===== -->
+<style>
+  .backup-bar{position:fixed;right:12px;bottom:12px;z-index:9999;display:flex;gap:8px;flex-wrap:wrap}
+  .backup-bar .btn{padding:8px 12px;border-radius:10px;border:1px solid #2a2f3a;background:#0f1a2b;color:#cfe9ff}
+  .backup-bar .btn:active{transform:scale(0.98)}
+</style>
+<div class="backup-bar" dir="rtl">
+  <button id="btnExportJSON" class="btn">ייצא JSON</button>
+  <button id="btnImportJSON" class="btn">ייבא JSON</button>
+  <input type="file" id="fileImportJSON" accept="application/json" style="display:none">
+</div>
+<script>
+// Expect global: tf, mobilenet, knnClassifier, classifier, net
+// The code tries to reuse existing classifier; if missing, it creates an empty one.
+(function(){
+  function ensureClassifier(){
+    if(!window.classifier){
+      try{ window.classifier = knnClassifier.create(); }catch(_){}
+    }
+    return window.classifier;
+  }
+  function downloadText(text, filename){
+    const blob = new Blob([text], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename || 'rummi_model.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 250);
+  }
+  function exportJSON(){
+    try{
+      const cls = ensureClassifier();
+      if(!cls){ alert('Classifier not ready'); return; }
+      const ds = cls.getClassifierDataset();
+      const json = {};
+      Object.keys(ds).forEach(k=>{
+        // Convert each tensor to array
+        json[k] = Array.from(ds[k].dataSync());
+        json[k+'_shape'] = ds[k].shape;
+      });
+      // Optional labels map if you keep names separately
+      if(window.classNames) json['__classNames'] = window.classNames;
+      const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+      downloadText(JSON.stringify(json), `rummi_model_${stamp}.json`);
+    }catch(err){
+      console.error(err);
+      alert('ייצוא נכשל: '+err.message);
+    }
+  }
+  async function importJSON(file){
+    try{
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const cls = ensureClassifier();
+      const tensors = {};
+      Object.keys(json).forEach(k=>{
+        if(k.endsWith('_shape')) return;
+        const shape = json[k+'_shape'];
+        const data = json[k];
+        tensors[k] = tf.tensor(data, shape);
+      });
+      cls.setClassifierDataset(tensors);
+      if(json['__classNames']) window.classNames = json['__classNames'];
+      // Persist in localStorage too (for your existing auto-restore)
+      try{ localStorage.setItem('rummi_model_json', text); }catch(_){}
+      // Show small badge of dataset size
+      const keys = Object.keys(tensors);
+      const total = keys.reduce((s,k)=> s + (tensors[k].shape ? tensors[k].shape[0] : 0), 0);
+      const badge = document.querySelector('#modelBadge') || (function(){
+        const b = document.createElement('div');
+        b.id = 'modelBadge';
+        b.style.position='fixed'; b.style.left='12px'; b.style.bottom='12px';
+        b.style.padding='6px 10px'; b.style.background='#113'; b.style.border='1px solid #2a2f3a';
+        b.style.borderRadius='10px'; b.style.color='#cfe9ff'; b.style.zIndex=9999;
+        document.body.appendChild(b); return b;
+      })();
+      badge.textContent = 'model: restored • ' + (text.length/1024).toFixed(1) + ' KB • vectors: ' + total;
+      console.log('model restored from JSON. vectors:', total);
+    }catch(err){
+      console.error(err);
+      alert('ייבוא נכשל: '+err.message);
+    }
+  }
+  document.addEventListener('click', (e)=>{
+    if(e.target.id==='btnExportJSON') exportJSON();
+    if(e.target.id==='btnImportJSON') document.getElementById('fileImportJSON').click();
+  });
+  document.getElementById('fileImportJSON').addEventListener('change', (ev)=>{
+    const f = ev.target.files && ev.target.files[0]; if(!f) return;
+    importJSON(f);
+    ev.target.value='';
   });
 })();
 </script>
