@@ -49,7 +49,7 @@
 <div class="wrap" id="app">
   <div class="row" style="justify-content:space-between;align-items:center">
     <div class="flex">
-      <small class="tag" id="verBadge">v5.0-ml</small>
+      <small class="tag" id="verBadge">v5.1-ml</small>
       <small class="tag" id="tfBadge">TF: init</small>
       <small class="tag" id="modelBadge">model: —</small>
       <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -76,7 +76,7 @@
   </div>
 
   <!-- בחירת משתתפים -->
-  <div class="card">
+  <div class="card" id="setupCard">
     <h2>בחירת משתתפים (עד 4)</h2>
     <div class="grid2">
       <div><label class="hint">שחקן 1</label><input id="p1" type="text" placeholder="שם" /></div>
@@ -127,7 +127,7 @@
 
   <div class="footer row" style="justify-content:space-between">
     <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-    <div class="muted">© v5.0-ml</div>
+    <div class="muted">© v5.1-ml</div>
   </div>
 </div>
 
@@ -137,7 +137,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 
 <script>
-const VERSION = 'v5.0-ml';
+const VERSION = 'v5.1-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -253,7 +253,7 @@ saveNames();
 renderBoard();
 
 on($$('#btnSaveNames'),'click',()=>{ saveNames(); renderBoard(); });
-on($$('#btnStart'),'click',()=>{ saveNames(); renderBoard(); });
+on($$('#btnStart'),'click',()=>{ saveNames(); renderBoard();   const sc=$$('#setupCard'); if(sc) sc.style.display='none'; const lc=$$('#leaderCard'); if(lc) lc.scrollIntoView({behavior:'smooth',block:'start'}); });
 on($$('#btnResetScores'),'click',()=>{
   players.forEach(p=>p.score=0); renderBoard();
   localStorage.setItem('rk_players', JSON.stringify(players));
