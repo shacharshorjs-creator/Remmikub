@@ -1,13 +1,9 @@
-<!doctype html>
-<html lang="he" dir="rtl">
-<head>
-<style>
-#verBadge54{position:fixed;top:10px;left:10px;z-index:9999;background:#122038;color:#cfe0ff;
-border:1px solid #1f3154;border-radius:12px;padding:6px 10px;font:600 12px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-</style>
+<!DOCTYPE html>
 
+<html dir="rtl" lang="he">
+<head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
 <title>רמיקוב – ניקוד + אימון (CPU)</title>
 <style>
   :root{
@@ -50,97 +46,91 @@ border:1px solid #1f3154;border-radius:12px;padding:6px 10px;font:600 12px syste
   .copybtn{margin-inline-start:.5rem}
 </style>
 </head>
-<body><div id="verBadge54">v5.4-ml</div>
+<body>
 <div class="wrap" id="app">
-  <div class="row" style="justify-content:space-between;align-items:center">
-    <div class="flex">
-      <small class="tag" id="verBadge">v5.4-ml</small>
-      <small class="tag" id="tfBadge">TF: init</small>
-      <small class="tag" id="modelBadge">model: —</small>
-      <small class="tag" id="examplesBadge">דוגמאות: —</small>
-    </div>
-    <div class="flex">
-      <button class="btn inline" id="btnResetScores">איפוס נקודות</button>
-      <button class="btn inline" id="btnSaveNames">שמור שמות</button>
-    </div>
-  </div>
-
-  <!-- לוח הובלה יחיד -->
-  <div class="card board" id="leaderCard">
-    <div class="row" style="justify-content:space-between;align-items:center">
-      <h2 style="margin:0">לוח הובלה</h2>
-      <div class="hint">בחרו משתתפים למטה. לחיצה על <span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
-    </div>
-    <div class="thead">
-      <div>#</div>
-      <div>שם</div>
-      <div>נקודות</div>
-      <div>פעולות</div>
-    </div>
-    <div id="boardRows"></div>
-  </div>
-
-  <!-- בחירת משתתפים -->
-  <div class="card">
-    <h2>בחירת משתתפים (עד 4)</h2>
-    <div class="grid2">
-      <div><label class="hint">שחקן 1</label><input id="p1" type="text" placeholder="שם" /></div>
-      <div><label class="hint">שחקן 2</label><input id="p2" type="text" placeholder="שם" /></div>
-      <div><label class="hint">שחקן 3</label><input id="p3" type="text" placeholder="שם" /></div>
-      <div><label class="hint">שחקן 4</label><input id="p4" type="text" placeholder="שם" /></div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button class="btn acc" id="btnStart">התחל משחק</button>
-      <div class="hint">השמות נשמרים מקומית.</div>
-    </div>
-  </div>
-
-  <!-- אימון מודל – תמיד גלוי (על המכשיר) -->
-  <div class="card" id="trainCard">
-    <h2>אימון מודל זיהוי (CPU)</h2>
-    <div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
-    <div class="sep"></div>
-    <div class="row" style="align-items:center;gap:10px">
-      <label class="hint">בחר/י מחלקה (מספר):</label>
-      <input id="classId" type="number" min="1" max="4" value="1" style="width:5rem"/>
-      <button class="btn inline" id="btnNukeExamples">נקה הכל</button>
-      <button class="btn inline" id="btnInitModel">אתחל מודל</button>
-      <button class="btn inline" id="btnSaveModel">שמור מודל</button>
-      <button class="btn inline" id="btnLoadModel">שחזר מודל</button>
-      <button class="btn inline" id="btnExportJSON">JSON ייצא</button>
-      <label class="btn inline nowrap">
-        ייבא JSON
-        <input id="jsonIn" type="file" accept="application/json" hidden>
-      </label>
-      <span class="hint">מצב: <span id="statusSpan">מוכן</span></span>
-    </div>
-    <div class="row" style="margin-top:10px;align-items:center;gap:10px">
-      <label class="btn inline nowrap">
-        הוסף מגז’יר (גלריה)
-        <input id="filePick" type="file" accept="image/*" multiple hidden>
-      </label>
-      <label class="btn inline nowrap">
-        צילום מהמצלמה
-        <input id="filePickCam" type="file" accept="image/*" capture="environment" hidden>
-      </label>
-    </div>
-    <div class="sep"></div>
-    <div class="scrollx">
-      <pre id="debug" style="min-height:80px;margin:0;background:#0b1420;border:1px solid #22324a;border-radius:12px;padding:10px;white-space:pre-wrap"></pre>
-    </div>
-  </div>
-
-  <div class="footer row" style="justify-content:space-between">
-    <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-    <div class="muted">© v5.4-ml</div>
-  </div>
+<div class="row" style="justify-content:space-between;align-items:center">
+<div class="flex">
+<small class="tag" id="verBadge">v5.4-ml</small>
+<small class="tag" id="tfBadge">TF: init</small>
+<small class="tag" id="modelBadge">model: —</small>
+<small class="tag" id="examplesBadge">דוגמאות: —</small>
 </div>
-
+<div class="flex">
+<button class="btn inline" id="btnResetScores">איפוס נקודות</button>
+<button class="btn inline" id="btnSaveNames">שמור שמות</button>
+</div>
+</div>
+<!-- לוח הובלה יחיד -->
+<div class="card board" id="leaderCard">
+<div class="row" style="justify-content:space-between;align-items:center">
+<h2 style="margin:0">לוח הובלה</h2>
+<div class="hint">בחרו משתתפים למטה. לחיצה על <span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
+</div>
+<div class="thead">
+<div>#</div>
+<div>שם</div>
+<div>נקודות</div>
+<div>פעולות</div>
+</div>
+<div id="boardRows"></div>
+</div>
+<!-- בחירת משתתפים -->
+<div class="card">
+<h2>בחירת משתתפים (עד 4)</h2>
+<div class="grid2">
+<div><label class="hint">שחקן 1</label><input id="p1" placeholder="שם" type="text"/></div>
+<div><label class="hint">שחקן 2</label><input id="p2" placeholder="שם" type="text"/></div>
+<div><label class="hint">שחקן 3</label><input id="p3" placeholder="שם" type="text"/></div>
+<div><label class="hint">שחקן 4</label><input id="p4" placeholder="שם" type="text"/></div>
+</div>
+<div class="row" style="margin-top:10px">
+<button class="btn acc" id="btnStart">התחל משחק</button>
+<div class="hint">השמות נשמרים מקומית.</div>
+</div>
+</div>
+<!-- אימון מודל – תמיד גלוי (על המכשיר) -->
+<div class="card" id="trainCard">
+<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/></div><h2>אימון מודל זיהוי (CPU)</h2>
+<div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
+<div class="sep"></div>
+<div class="row" style="align-items:center;gap:10px">
+<label class="hint">בחר/י מחלקה (מספר):</label>
+<input id="classId" max="4" min="1" style="width:5rem" type="number" value="1"/>
+<button class="btn inline" id="btnNukeExamples">נקה הכל</button>
+<button class="btn inline" id="btnInitModel">אתחל מודל</button>
+<button class="btn inline" id="btnSaveModel">שמור מודל</button>
+<button class="btn inline" id="btnLoadModel">שחזר מודל</button>
+<button class="btn inline" id="btnExportJSON">JSON ייצא</button>
+<label class="btn inline nowrap">
+        ייבא JSON
+        <input accept="application/json" hidden="" id="jsonIn" type="file"/>
+</label>
+<span class="hint">מצב: <span id="statusSpan">מוכן</span></span>
+</div>
+<div class="row" style="margin-top:10px;align-items:center;gap:10px">
+<label class="btn inline nowrap">
+        הוסף מגז’יר (גלריה)
+        <input accept="image/*" hidden="" id="filePick" multiple="" type="file"/>
+</label>
+<label class="btn inline nowrap">
+        צילום מהמצלמה
+        <input accept="image/*" capture="environment" hidden="" id="filePickCam" type="file"/>
+</label>
+</div>
+<div class="sep"></div>
+<div class="scrollx">
+<pre id="debug" style="min-height:80px;margin:0;background:#0b1420;border:1px solid #22324a;border-radius:12px;padding:10px;white-space:pre-wrap"></pre>
+</div>
+</div>
+<div class="footer row" style="justify-content:space-between">
+<div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
+<div class="muted">© v5.4-ml</div>
+</div>
+</div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
-
 <script>
 const VERSION = 'v5.4-ml';
 const $$ = sel => document.querySelector(sel);
@@ -193,7 +183,8 @@ function renderBoard(){
     labelCam.querySelector('input.snap').onchange = async (e)=>{
       // תמונת שחקן -> כרגע רק מציגה חיווי; (המודל נשאר מודול אימון למטה).
       if(e.target.files?.length){
-        log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
+        log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
+        showLastDetect(idx, e.target.files[0]);
       }
     }
   });
@@ -202,6 +193,16 @@ function bump(index, delta){
   players[index].score += delta;
   $$('#sc_'+index).textContent = players[index].score;
   localStorage.setItem('rk_players', JSON.stringify(players));
+}
+
+
+// == זיהוי אחרון – תצוגה ==
+function showLastDetect(playerIndex, file){
+  const url = URL.createObjectURL(file);
+  const img = $$('#lastDetectImg');
+  const label = $$('#lastDetectLabel');
+  if(img){ img.src = url; img.style.display='block'; }
+  if(label){ label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`; }
 }
 
 // ====== אתחול שמות וניקוד ======
