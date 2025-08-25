@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.4-ml</small>
+<small class="tag" id="verBadge">v5.5-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,15 +124,93 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.4-ml</div>
+<div class="muted">© v5.5-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js">
+// === הוספת נקודות מהזיהוי לשחקן ===
+function awardPointsFromDetection(playerIdx, points) {
+  try {
+    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    if (Array.isArray(window.players) && window.players[playerIdx]) {
+      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+    }
+    // עדכון UI אם יש
+    let row = document.querySelectorAll('.board-row')[playerIdx];
+    let scoreEl = row ? row.querySelector('.score') : null;
+    if (scoreEl) {
+      const newScore = window.players[playerIdx].score;
+      scoreEl.textContent = newScore;
+    }
+    // הצגה בתחתית
+    const lastDetLabel = document.getElementById('lastDetectLabel');
+    if (lastDetLabel) {
+      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
+      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+  }
+}
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0">
+// === הוספת נקודות מהזיהוי לשחקן ===
+function awardPointsFromDetection(playerIdx, points) {
+  try {
+    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    if (Array.isArray(window.players) && window.players[playerIdx]) {
+      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+    }
+    // עדכון UI אם יש
+    let row = document.querySelectorAll('.board-row')[playerIdx];
+    let scoreEl = row ? row.querySelector('.score') : null;
+    if (scoreEl) {
+      const newScore = window.players[playerIdx].score;
+      scoreEl.textContent = newScore;
+    }
+    // הצגה בתחתית
+    const lastDetLabel = document.getElementById('lastDetectLabel');
+    if (lastDetLabel) {
+      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
+      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+  }
+}
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2">
+// === הוספת נקודות מהזיהוי לשחקן ===
+function awardPointsFromDetection(playerIdx, points) {
+  try {
+    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    if (Array.isArray(window.players) && window.players[playerIdx]) {
+      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+    }
+    // עדכון UI אם יש
+    let row = document.querySelectorAll('.board-row')[playerIdx];
+    let scoreEl = row ? row.querySelector('.score') : null;
+    if (scoreEl) {
+      const newScore = window.players[playerIdx].score;
+      scoreEl.textContent = newScore;
+    }
+    // הצגה בתחתית
+    const lastDetLabel = document.getElementById('lastDetectLabel');
+    if (lastDetLabel) {
+      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
+      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+  }
+}
+
+</script>
 <script>
-const VERSION = 'v5.4-ml';
+const VERSION = 'v5.5-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -185,6 +263,7 @@ function renderBoard(){
       if(e.target.files?.length){
         log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
         showLastDetect(idx, e.target.files[0]);
+        if(typeof detectedValue!=='undefined'){ awardPointsFromDetection(idx, detectedValue); }
       }
     }
   });
@@ -374,6 +453,32 @@ on($$('#btnInitModel'),'click',()=>{
     log('init error: '+err.message);
   }
 })();
+
+// === הוספת נקודות מהזיהוי לשחקן ===
+function awardPointsFromDetection(playerIdx, points) {
+  try {
+    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    if (Array.isArray(window.players) && window.players[playerIdx]) {
+      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+    }
+    // עדכון UI אם יש
+    let row = document.querySelectorAll('.board-row')[playerIdx];
+    let scoreEl = row ? row.querySelector('.score') : null;
+    if (scoreEl) {
+      const newScore = window.players[playerIdx].score;
+      scoreEl.textContent = newScore;
+    }
+    // הצגה בתחתית
+    const lastDetLabel = document.getElementById('lastDetectLabel');
+    if (lastDetLabel) {
+      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
+      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+  }
+}
+
 </script>
 </body>
 </html>
