@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.7-ml</small>
+<small class="tag" id="verBadge">v5.8-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,18 +124,43 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.7-ml</div>
+<div class="muted">© v5.8-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js">
 // === הוספת נקודות מהזיהוי לשחקן ===
+
 function awardPointsFromDetection(playerIdx, points) {
   try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    // logging input
+    try { log && log(`award: request idx=${playerIdx} points=${points}`); } catch (_){}
+    const n = Number(points);
+    if (!Number.isFinite(n) || n <= 0) { try{ log && log('award: skip (non-positive or NaN)'); }catch(_){ } return; }
+    // update model/state
     if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+      const before = Number(window.players[playerIdx].score||0);
+      window.players[playerIdx].score = before + n;
+      const after = window.players[playerIdx].score;
+      try { log && log(`award: state updated name="${window.players[playerIdx].name}" ${before} -> ${after}`); } catch(_){}
+    } else {
+      try { log && log('award: players[] missing or idx out of range'); } catch(_){}
     }
+    // update UI (#sc_idx)
+    const id = 'sc_' + playerIdx;
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = String(window.players[playerIdx]?.score ?? n);
+      try { log && log(`award: UI updated #${id} -> ${el.textContent}`); } catch(_){}
+    } else {
+      try { log && log(`award: UI element #${id} not found`); } catch(_){}
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+    try { log && log('award: error ' + (err?.message||err)); } catch(_){}
+  }
+}
+
     // עדכון UI אם יש
     let row = document.querySelectorAll('.board-row')[playerIdx];
     let scoreEl = row ? row.querySelector('.score') : null;
@@ -157,12 +182,37 @@ function awardPointsFromDetection(playerIdx, points) {
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0">
 // === הוספת נקודות מהזיהוי לשחקן ===
+
 function awardPointsFromDetection(playerIdx, points) {
   try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    // logging input
+    try { log && log(`award: request idx=${playerIdx} points=${points}`); } catch (_){}
+    const n = Number(points);
+    if (!Number.isFinite(n) || n <= 0) { try{ log && log('award: skip (non-positive or NaN)'); }catch(_){ } return; }
+    // update model/state
     if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+      const before = Number(window.players[playerIdx].score||0);
+      window.players[playerIdx].score = before + n;
+      const after = window.players[playerIdx].score;
+      try { log && log(`award: state updated name="${window.players[playerIdx].name}" ${before} -> ${after}`); } catch(_){}
+    } else {
+      try { log && log('award: players[] missing or idx out of range'); } catch(_){}
     }
+    // update UI (#sc_idx)
+    const id = 'sc_' + playerIdx;
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = String(window.players[playerIdx]?.score ?? n);
+      try { log && log(`award: UI updated #${id} -> ${el.textContent}`); } catch(_){}
+    } else {
+      try { log && log(`award: UI element #${id} not found`); } catch(_){}
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+    try { log && log('award: error ' + (err?.message||err)); } catch(_){}
+  }
+}
+
     // עדכון UI אם יש
     let row = document.querySelectorAll('.board-row')[playerIdx];
     let scoreEl = row ? row.querySelector('.score') : null;
@@ -184,12 +234,37 @@ function awardPointsFromDetection(playerIdx, points) {
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2">
 // === הוספת נקודות מהזיהוי לשחקן ===
+
 function awardPointsFromDetection(playerIdx, points) {
   try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    // logging input
+    try { log && log(`award: request idx=${playerIdx} points=${points}`); } catch (_){}
+    const n = Number(points);
+    if (!Number.isFinite(n) || n <= 0) { try{ log && log('award: skip (non-positive or NaN)'); }catch(_){ } return; }
+    // update model/state
     if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+      const before = Number(window.players[playerIdx].score||0);
+      window.players[playerIdx].score = before + n;
+      const after = window.players[playerIdx].score;
+      try { log && log(`award: state updated name="${window.players[playerIdx].name}" ${before} -> ${after}`); } catch(_){}
+    } else {
+      try { log && log('award: players[] missing or idx out of range'); } catch(_){}
     }
+    // update UI (#sc_idx)
+    const id = 'sc_' + playerIdx;
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = String(window.players[playerIdx]?.score ?? n);
+      try { log && log(`award: UI updated #${id} -> ${el.textContent}`); } catch(_){}
+    } else {
+      try { log && log(`award: UI element #${id} not found`); } catch(_){}
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+    try { log && log('award: error ' + (err?.message||err)); } catch(_){}
+  }
+}
+
     // עדכון UI אם יש
     let row = document.querySelectorAll('.board-row')[playerIdx];
     let scoreEl = row ? row.querySelector('.score') : null;
@@ -210,7 +285,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.7-ml';
+const VERSION = 'v5.8-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -266,12 +341,19 @@ function renderBoard(){
 // show textual indication only
 showLastDetect(idx, e.target.files[0]);
 try{
+  try{ log && log('detect: ensureModels...'); }catch(_){}
   await ensureModels?.();
+  try{ log && log('detect: models ready'); }catch(_){}
+  try{ log && log('detect: reading image...'); }catch(_){}
   const {img} = await imgToTensor(e.target.files[0]);
+  try{ log && log('detect: image ready'); }catch(_){}
   let detected = null, confPct = 0;
   if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
+    try{ log && log('detect: infer...'); }catch(_){}
     const emb = net.infer(img, true);
+    try{ log && log('detect: infer done'); }catch(_){}
     const res = await classifier.predictClass(emb, 3);
+    try{ log && log('detect: result ' + JSON.stringify({label:res?.label, confs:res?.confidences&&Object.keys(res.confidences).length})); }catch(_){}
     if(res && res.label != null){
       detected = parseInt(res.label,10);
       confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
@@ -488,12 +570,37 @@ on($$('#btnInitModel'),'click',()=>{
 })();
 
 // === הוספת נקודות מהזיהוי לשחקן ===
+
 function awardPointsFromDetection(playerIdx, points) {
   try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    // logging input
+    try { log && log(`award: request idx=${playerIdx} points=${points}`); } catch (_){}
+    const n = Number(points);
+    if (!Number.isFinite(n) || n <= 0) { try{ log && log('award: skip (non-positive or NaN)'); }catch(_){ } return; }
+    // update model/state
     if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+      const before = Number(window.players[playerIdx].score||0);
+      window.players[playerIdx].score = before + n;
+      const after = window.players[playerIdx].score;
+      try { log && log(`award: state updated name="${window.players[playerIdx].name}" ${before} -> ${after}`); } catch(_){}
+    } else {
+      try { log && log('award: players[] missing or idx out of range'); } catch(_){}
     }
+    // update UI (#sc_idx)
+    const id = 'sc_' + playerIdx;
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = String(window.players[playerIdx]?.score ?? n);
+      try { log && log(`award: UI updated #${id} -> ${el.textContent}`); } catch(_){}
+    } else {
+      try { log && log(`award: UI element #${id} not found`); } catch(_){}
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+    try { log && log('award: error ' + (err?.message||err)); } catch(_){}
+  }
+}
+
     // עדכון UI אם יש
     let row = document.querySelectorAll('.board-row')[playerIdx];
     let scoreEl = row ? row.querySelector('.score') : null;
