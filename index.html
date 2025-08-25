@@ -3,20 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – אימון מודל זיהוי (v2.57-ml)</title>
+<title>רמיקוב – אימון מודל זיהוי (v2.58-ml)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 <style>
-  :root{--bg:#0e1220;--card:#141a2b;--ink:#eaf1ff;--muted:#a2b3cc;--line:rgba(255,255,255,.12);--accent:#6dd6ff;}
+  :root{--bg:#0e1220;--card:#141a2b;--ink:#eaf1ff;--muted:#a2b3cc;--line:rgba(255,255,255,.12);}
   html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
   .appbar{position:sticky;top:0;background:#0b1222;z-index:20;border-bottom:1px solid var(--line)}
   .wrap{width:min(980px,94vw);margin:0 auto;padding:14px}
   .badges > *{display:inline-block;margin-inline-start:8px;background:#0a1a2f;border:1px solid #223b5c;padding:6px 10px;border-radius:999px;font-size:12px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:14px 0}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  button{border:none;border-radius:12px;background:#1d2743;color:#fff;padding:8px 12px;cursor:pointer}
+  button{border:none;border-radius:12px;background:#1d2743;color:#fff;padding:8px 12px;cursor:pointer;opacity:.9}
+  button[disabled]{opacity:.5;cursor:not-allowed}
   .danger{background:#3a1c1c;border:1px solid #5a2b2b}
   .drop{position:relative;border:2px dashed #34507a;border-radius:16px;padding:18px;text-align:center;background:#0d162b;user-select:none;overflow:hidden}
   .drop.drag{background:#0f1c36;border-color:#5984d6}
@@ -31,12 +32,11 @@
   <div class="wrap row" style="justify-content:space-between">
     <div class="badges">
       <span>רמיקוב – אימון מודל זיהוי</span>
-      <span id="ver" title="גרסה">v2.57-ml</span>
+      <span id="ver" title="גרסה">v2.58-ml</span>
       <span id="tfBadge">TF: init…</span>
+      <span id="mdlBadge">model: loading…</span>
     </div>
-    <div class="badges">
-      <span id="counts">דוגמאות: —</span>
-    </div>
+    <div class="badges"><span id="counts">דוגמאות: —</span></div>
   </div>
 </header>
 
@@ -44,20 +44,18 @@
   <section class="card">
     <div class="row">
       <label for="cls">בחר/י מספר</label>
-      <select id="cls">
-        <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option>
-      </select>
-      <button id="btnClear" class="danger">נקה הכל</button>
+      <select id="cls"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option></select>
+      <button id="btnClear" class="danger" disabled>נקה הכל</button>
     </div>
 
     <div id="drop" class="drop" style="margin-top:12px">
       גררו תמונות לכאן או לחצו לבחירה
-      <input id="file" type="file" accept="image/*,.heic,.heif" multiple>
+      <input id="file" type="file" accept="image/*,.heic,.heif" multiple disabled>
     </div>
 
     <div class="row" style="margin-top:10px">
-      <button id="btnCam">📷 מצלמה</button>
-      <input id="cam" type="file" accept="image/*" capture="environment" style="display:none">
+      <button id="btnCam" disabled>📷 מצלמה</button>
+      <input id="cam" type="file" accept="image/*" capture="environment" style="display:none" disabled>
       <progress id="prog" max="1" value="0" style="width:200px"></progress>
       <span id="status" style="font-size:12px;color:var(--muted)"></span>
     </div>
@@ -75,7 +73,7 @@
 <canvas id="work" width="224" height="224" style="display:none"></canvas>
 
 <script>
-let net, classifier;
+let net, classifier, ready=false;
 const dbg = (m)=>{ const el=document.getElementById('dbg'); el.textContent += (el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; };
 
 function setCounts(){
@@ -87,8 +85,24 @@ function setCounts(){
 async function init(){
   try{ await tf.setBackend('cpu'); await tf.ready(); document.getElementById('tfBadge').textContent = 'TF: '+tf.getBackend(); dbg('backend: '+tf.getBackend()); }
   catch(e){ dbg('TF init error: '+(e&&e.message||e)); }
-  try{ net = await mobilenet.load({version:2, alpha:0.35}); classifier = knnClassifier.create(); dbg('models loaded'); }
-  catch(e){ dbg('model load error: '+(e&&e.message||e)); }
+  try{ 
+    // use only valid alpha values (0.50 / 0.75 / 1.00)
+    net = await mobilenet.load({version:2, alpha:0.5}); 
+    classifier = knnClassifier.create(); 
+    document.getElementById('mdlBadge').textContent='model: ready';
+    ready=true;
+    enableInputs(true);
+    dbg('models loaded');
+  } catch(e){ 
+    document.getElementById('mdlBadge').textContent='model: error';
+    dbg('model load error: '+(e&&e.message||e)); 
+  }
+}
+
+function enableInputs(on){
+  ['file','cam','btnCam','btnClear'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.disabled = !on;
+  });
 }
 
 function addThumb(src){
@@ -103,7 +117,6 @@ function waitImage(url){
 }
 
 async function toTensor(img){
-  // Draw to 224x224 canvas to avoid IndexSizeError from zero/EXIF rotations.
   const c=document.getElementById('work'), ctx=c.getContext('2d', { willReadFrequently:true });
   const s=Math.min(img.naturalWidth||img.width, img.naturalHeight||img.height) || 1;
   const sx=((img.naturalWidth||img.width)-s)/2; const sy=((img.naturalHeight||img.height)-s)/2;
@@ -113,7 +126,7 @@ async function toTensor(img){
 
 async function handleFileList(list){
   if(!list || !list.length) return;
-  if(!net || !classifier){ dbg('models not ready'); return; }
+  if(!ready){ dbg('models not ready'); return; }
   const cls = document.getElementById('cls').value;
   const prog=document.getElementById('prog'); prog.max=list.length; prog.value=0;
   let ok=0, fail=0;
