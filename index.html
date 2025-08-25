@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.6-ml</small>
+<small class="tag" id="verBadge">v5.7-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.6-ml</div>
+<div class="muted">© v5.7-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.6-ml';
+const VERSION = 'v5.7-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -277,15 +277,19 @@ try{
       confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
     }
   }
-  const lbl = document.getElementById('lastDetectLabel');
-  if(lbl){
-    if(detected || detected===0){
-      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — זוהתה קובייה: ${detected} (${confPct}%)`;
-    }else{
-      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
-    }
+  
+const lbl = document.getElementById('lastDetectLabel');
+if(lbl){
+  if(Number.isFinite(detected)){
+    lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — זוהתה קובייה: ${detected} (${confPct}%)`;
+  }else{
+    lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
   }
-  // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
+}
+// הוספת נקודות אוטומטית לשחקן – שינוי יחיד לפי בקשתך
+if (Number.isFinite(detected) && typeof awardPointsFromDetection === 'function') {
+  awardPointsFromDetection(idx, Number(detected));
+}
   if(typeof detected !== 'undefined' && detected){
     if(typeof awardPointsFromDetection === 'function'){
       awardPointsFromDetection(idx, detected);
