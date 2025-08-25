@@ -3,68 +3,114 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – אימון מודל זיהוי (v2.58-ml)</title>
+<title>רמיקוב – משחק + אימון (v2.59-ml)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 <style>
-  :root{--bg:#0e1220;--card:#141a2b;--ink:#eaf1ff;--muted:#a2b3cc;--line:rgba(255,255,255,.12);}
+  :root{
+    --bg:#0e1220;--panel:#121a2e;--card:#141d33;--ink:#eaf1ff;--muted:#a2b3cc;--line:rgba(255,255,255,.12);
+    --accent:#8be9fd;--good:#02c39a;--bad:#e76f51;--btn:#1f2a48;--btn2:#23345b;
+  }
   html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
-  .appbar{position:sticky;top:0;background:#0b1222;z-index:20;border-bottom:1px solid var(--line)}
-  .wrap{width:min(980px,94vw);margin:0 auto;padding:14px}
+  .appbar{position:sticky;top:0;background:#0b1222;z-index:30;border-bottom:1px solid var(--line)}
+  .wrap{width:min(1000px,95vw);margin:0 auto;padding:14px}
   .badges > *{display:inline-block;margin-inline-start:8px;background:#0a1a2f;border:1px solid #223b5c;padding:6px 10px;border-radius:999px;font-size:12px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:14px 0}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px}
+  @media (min-width:920px){.grid{grid-template-columns:1fr 1fr;}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  button{border:none;border-radius:12px;background:#1d2743;color:#fff;padding:8px 12px;cursor:pointer;opacity:.9}
-  button[disabled]{opacity:.5;cursor:not-allowed}
-  .danger{background:#3a1c1c;border:1px solid #5a2b2b}
+  .btn{background:var(--btn);color:#fff;border:none;border-radius:12px;padding:8px 12px;cursor:pointer;opacity:.95}
+  .btn.secondary{background:var(--btn2)}
+  .btn.good{background:#114a3d;border:1px solid #1d7d66}
+  .btn.bad{background:#3a1c1c;border:1px solid #5a2b2b}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  input[type=text]{background:#0f162a;border:1px solid var(--line);color:var(--ink);padding:8px 10px;border-radius:10px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid var(--line);padding:10px 6px;text-align:center}
+  .pill{display:inline-block;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#0b1428;font-size:12px}
+  .tiny{font-size:12px;color:var(--muted)}
   .drop{position:relative;border:2px dashed #34507a;border-radius:16px;padding:18px;text-align:center;background:#0d162b;user-select:none;overflow:hidden}
   .drop.drag{background:#0f1c36;border-color:#5984d6}
   .drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
   .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-  .thumbs img{width:74px;height:74px;object-fit:cover;border-radius:10px;border:1px solid #2b3f63}
-  pre{white-space:pre-wrap;background:#0a1020;border:1px solid var(--line);padding:10px;border-radius:12px;max-height:280px;overflow:auto}
+  .thumbs img{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #2b3f63}
+  pre{white-space:pre-wrap;background:#0a1020;border:1px solid var(--line);padding:10px;border-radius:12px;max-height:220px;overflow:auto}
+  .tag{display:inline-block;background:#0a1a2f;border:1px solid #2b3d5e;border-radius:8px;padding:2px 6px;margin-inline-start:6px;font-size:12px}
 </style>
 </head>
 <body>
 <header class="appbar">
   <div class="wrap row" style="justify-content:space-between">
     <div class="badges">
-      <span>רמיקוב – אימון מודל זיהוי</span>
-      <span id="ver" title="גרסה">v2.58-ml</span>
-      <span id="tfBadge">TF: init…</span>
-      <span id="mdlBadge">model: loading…</span>
+      <span class="tag">רמיקוב – משחק + אימון</span>
+      <span id="ver" class="tag">v2.59-ml</span>
+      <span id="tfBadge" class="tag">TF: init…</span>
+      <span id="mdlBadge" class="tag">model: loading…</span>
     </div>
-    <div class="badges"><span id="counts">דוגמאות: —</span></div>
+    <div class="badges"><span id="counts" class="tag">דוגמאות: —</span></div>
   </div>
 </header>
 
-<main class="wrap">
-  <section class="card">
-    <div class="row">
-      <label for="cls">בחר/י מספר</label>
+<main class="wrap grid">
+  <!-- GAME SIDE -->
+  <section class="card" id="gameSetup">
+    <h3>בחירת משתתפים (עד 4)</h3>
+    <div class="row" style="margin-bottom:10px">
+      <input id="p1" type="text" placeholder="שחקן/ית 1">
+      <input id="p2" type="text" placeholder="שחקן/ית 2">
+      <input id="p3" type="text" placeholder="אופציונלי">
+      <input id="p4" type="text" placeholder="אופציונלי">
+      <button class="btn good" id="btnStart">התחל משחק</button>
+    </div>
+    <div class="tiny">שמות ריקים יידלגו.</div>
+  </section>
+
+  <section class="card" id="scoreBoard" style="display:none">
+    <div class="row" style="justify-content:space-between">
+      <h3 style="margin:0">לוח הובלה</h3>
+      <div class="row">
+        <button class="btn bad" id="btnResetPoints">איפוס נקודות</button>
+        <button class="btn secondary" id="btnBack">חזרה לשמות</button>
+      </div>
+    </div>
+    <table id="tbl">
+      <thead>
+        <tr><th>#</th><th>שם</th><th>נקודות</th><th>פעולות</th><th>📷</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="tiny" id="lastPred">זיהוי אחרון: —</div>
+  </section>
+
+  <!-- TRAINER ALWAYS OPEN -->
+  <section class="card" id="trainer">
+    <h3>אימון מודל זיהוי (CPU)</h3>
+    <div class="row" style="margin-bottom:8px">
+      <label for="cls" class="tiny">בחר/י מחלקה (מספר):</label>
       <select id="cls"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option></select>
-      <button id="btnClear" class="danger" disabled>נקה הכל</button>
+      <button id="btnClear" class="btn bad" disabled>נקה הכל</button>
+      <span class="tiny">upload → embedding (MobileNet) → KNN</span>
     </div>
 
-    <div id="drop" class="drop" style="margin-top:12px">
+    <div id="drop" class="drop">
       גררו תמונות לכאן או לחצו לבחירה
       <input id="file" type="file" accept="image/*,.heic,.heif" multiple disabled>
     </div>
 
-    <div class="row" style="margin-top:10px">
-      <button id="btnCam" disabled>📷 מצלמה</button>
+    <div class="row" style="margin-top:8px">
+      <button id="btnCam" class="btn" disabled>📷 מצלמה</button>
       <input id="cam" type="file" accept="image/*" capture="environment" style="display:none" disabled>
-      <progress id="prog" max="1" value="0" style="width:200px"></progress>
-      <span id="status" style="font-size:12px;color:var(--muted)"></span>
+      <progress id="prog" max="1" value="0" style="width:220px"></progress>
+      <span id="status" class="tiny"></span>
     </div>
 
     <div id="thumbs" class="thumbs"></div>
 
     <div class="card" style="margin-top:12px">
       <div class="row" style="justify-content:space-between"><b>Debug</b>
-        <button id="copyDbg">📋 העתק</button></div>
+        <button id="copyDbg" class="btn secondary">📋 העתק</button></div>
       <pre id="dbg"></pre>
     </div>
   </section>
@@ -73,94 +119,139 @@
 <canvas id="work" width="224" height="224" style="display:none"></canvas>
 
 <script>
+// ======== ML CORE ========
 let net, classifier, ready=false;
 const dbg = (m)=>{ const el=document.getElementById('dbg'); el.textContent += (el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; };
-
 function setCounts(){
   const ds = classifier.getClassifierDataset(); const ks = Object.keys(ds);
   const txt = ks.length? ks.map(k=> k+': '+(ds[k].shape[0]||0)).join(' | ') : '—';
   document.getElementById('counts').textContent = 'דוגמאות: '+txt;
 }
-
-async function init(){
-  try{ await tf.setBackend('cpu'); await tf.ready(); document.getElementById('tfBadge').textContent = 'TF: '+tf.getBackend(); dbg('backend: '+tf.getBackend()); }
+async function initML(){
+  try{ await tf.setBackend('cpu'); await tf.ready(); document.getElementById('tfBadge').textContent='TF: '+tf.getBackend(); dbg('backend: '+tf.getBackend()); }
   catch(e){ dbg('TF init error: '+(e&&e.message||e)); }
-  try{ 
-    // use only valid alpha values (0.50 / 0.75 / 1.00)
-    net = await mobilenet.load({version:2, alpha:0.5}); 
-    classifier = knnClassifier.create(); 
-    document.getElementById('mdlBadge').textContent='model: ready';
-    ready=true;
-    enableInputs(true);
-    dbg('models loaded');
-  } catch(e){ 
-    document.getElementById('mdlBadge').textContent='model: error';
-    dbg('model load error: '+(e&&e.message||e)); 
-  }
+  try{ net = await mobilenet.load({version:2, alpha:0.5}); classifier = knnClassifier.create(); ready=true;
+        document.getElementById('mdlBadge').textContent='model: ready'; enableTrainer(true); dbg('models loaded'); }
+  catch(e){ document.getElementById('mdlBadge').textContent='model: error'; dbg('model load error: '+(e&&e.message||e)); }
 }
-
-function enableInputs(on){
-  ['file','cam','btnCam','btnClear'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.disabled = !on;
-  });
+function enableTrainer(on){
+  ['file','cam','btnCam','btnClear'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=!on; });
 }
-
-function addThumb(src){
-  const img=new Image(); img.src=src; img.className='thumb';
-  document.getElementById('thumbs').appendChild(img);
-}
-
 function waitImage(url){
-  return new Promise((resolve,reject)=>{
-    const img=new Image(); img.onload=()=>resolve(img); img.onerror=()=>reject(new Error('image load failed')); img.src=url;
-  });
+  return new Promise((resolve,reject)=>{ const img=new Image(); img.onload=()=>resolve(img); img.onerror=()=>reject(new Error('image load failed')); img.src=url; });
 }
-
 async function toTensor(img){
   const c=document.getElementById('work'), ctx=c.getContext('2d', { willReadFrequently:true });
-  const s=Math.min(img.naturalWidth||img.width, img.naturalHeight||img.height) || 1;
-  const sx=((img.naturalWidth||img.width)-s)/2; const sy=((img.naturalHeight||img.height)-s)/2;
-  ctx.clearRect(0,0,224,224); ctx.drawImage(img, sx, sy, s, s, 0, 0, 224, 224);
+  const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height; const s=Math.min(w,h)||1;
+  const sx=(w-s)/2, sy=(h-s)/2; ctx.clearRect(0,0,224,224); ctx.drawImage(img,sx,sy,s,s,0,0,224,224);
   return tf.tidy(()=> tf.browser.fromPixels(c));
 }
-
-async function handleFileList(list){
+async function addExamplesFromFiles(list, cls){
   if(!list || !list.length) return;
   if(!ready){ dbg('models not ready'); return; }
-  const cls = document.getElementById('cls').value;
   const prog=document.getElementById('prog'); prog.max=list.length; prog.value=0;
   let ok=0, fail=0;
-  for (const f of list){
-    try{
-      const url=URL.createObjectURL(f);
-      addThumb(url);
-      const img=await waitImage(url); URL.revokeObjectURL(url);
-      const px=await toTensor(img);
-      const emb=tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
-      classifier.addExample(emb, cls); emb.dispose(); px.dispose(); ok++;
-      dbg('✅ added '+f.name+' to class '+cls);
-    }catch(e){ fail++; dbg('ERR addExample '+(e&&e.message||e)); }
+  for(const f of list){
+    try{ const url=URL.createObjectURL(f); addThumb(url);
+          const img=await waitImage(url); URL.revokeObjectURL(url);
+          const px=await toTensor(img);
+          const emb=tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
+          classifier.addExample(emb, cls); emb.dispose(); px.dispose(); ok++; dbg('✅ added '+f.name+' to class '+cls); }
+    catch(e){ fail++; dbg('ERR addExample '+(e&&e.message||e)); }
     prog.value = ok+fail;
   }
-  document.getElementById('status').textContent = 'הוספו '+ok+' | נכשלו '+fail;
-  setCounts();
+  document.getElementById('status').textContent='הוספו '+ok+' | נכשלו '+fail; setCounts();
+}
+function addThumb(src){ const img=new Image(); img.src=src; img.className='thumb'; document.getElementById('thumbs').appendChild(img);}
+async function classifyFile(file){
+  if(!ready) return {ok:false, reason:'not ready'};
+  if(!classifier.getNumClasses()) return {ok:false, reason:'no classes'};
+  try{ const url=URL.createObjectURL(file); const img=await waitImage(url); URL.revokeObjectURL(url);
+        const px=await toTensor(img); const emb=tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
+        const res=await classifier.predictClass(emb); emb.dispose(); px.dispose(); return {ok:true, res}; }
+  catch(e){ return {ok:false, reason:e&&e.message||e}; }
 }
 
+// ======== GAME ========
+let players = []; // [{name, score, id}]
+function saveState(){
+  localStorage.setItem('rummi.players', JSON.stringify(players));
+}
+function loadState(){
+  try{ players = JSON.parse(localStorage.getItem('rummi.players')||'[]'); }catch(_){}
+}
+function startGame(){
+  const names = [p1.value,p2.value,p3.value,p4.value].map(s=>s.trim()).filter(Boolean);
+  players = names.map((n,i)=>({id:i+1,name:n,score:0})); saveState(); renderBoard();
+  document.getElementById('gameSetup').style.display='none';
+  document.getElementById('scoreBoard').style.display='block';
+}
+function backToNames(){
+  document.getElementById('scoreBoard').style.display='none';
+  document.getElementById('gameSetup').style.display='block';
+}
+function delta(i, d){
+  players[i].score += d; renderBoard(); saveState();
+}
+async function snapAndAdd(i){
+  const input = document.createElement('input'); input.type='file'; input.accept='image/*'; input.capture='environment';
+  input.onchange = async (e)=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    const clsRes = await classifyFile(f);
+    if(!clsRes.ok){ document.getElementById('lastPred').textContent='זיהוי נכשל: '+clsRes.reason; return; }
+    const label = clsRes.res.label; const prob = (clsRes.res.confidences[label]||0);
+    document.getElementById('lastPred').textContent = 'זיהוי אחרון: '+label+' ('+(prob*100).toFixed(0)+'%) → לשחקן/ית '+players[i].name;
+    const val = parseInt(label,10)||0; players[i].score += val; renderBoard(); saveState();
+  };
+  input.click();
+}
+function renderBoard(){
+  const tb = document.querySelector('#tbl tbody'); tb.innerHTML='';
+  players.forEach((p,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td class="tiny">\${i+1}</td>
+      <td><b>\${p.name}</b></td>
+      <td><span class="pill">\${p.score}</span></td>
+      <td>
+        <button class="btn bad" data-i="\${i}" data-d="-10">-10</button>
+        <button class="btn" data-i="\${i}" data-d="10">+10</button>
+        <input class="custom" data-i="\${i}" type="text" inputmode="numeric" placeholder="+/- ערך">
+        <button class="btn secondary apply" data-i="\${i}">הוסף/י</button>
+      </td>
+      <td><button class="btn" data-snap="\${i}">📷</button></td>`;
+    tb.appendChild(tr);
+  });
+  // wire buttons
+  tb.querySelectorAll('button[data-d]').forEach(btn=> btn.onclick=()=> delta(parseInt(btn.dataset.i), parseInt(btn.dataset.d)));
+  tb.querySelectorAll('button.apply').forEach(btn=> btn.onclick=()=>{ const i=parseInt(btn.dataset.i);
+    const inp = btn.parentElement.querySelector('input.custom'); const v=parseInt((inp.value||'').trim(),10); if(!isNaN(v)) delta(i, v); inp.value='';
+  });
+  tb.querySelectorAll('button[data-snap]').forEach(btn=> btn.onclick=()=> snapAndAdd(parseInt(btn.dataset.snap)));
+}
+
+// ======== WIRING ========
 window.addEventListener('DOMContentLoaded',()=>{
-  init();
-  const drop=document.getElementById('drop');
-  const file=document.getElementById('file');
-  const cam=document.getElementById('cam');
+  initML();
+  loadState();
+  // If we have saved players, go straight to board
+  if(players.length){ document.getElementById('gameSetup').style.display='none'; document.getElementById('scoreBoard').style.display='block'; renderBoard(); }
+  document.getElementById('btnStart').onclick=startGame;
+  document.getElementById('btnBack').onclick=backToNames;
+  document.getElementById('btnResetPoints').onclick=()=>{ players.forEach(p=>p.score=0); saveState(); renderBoard(); };
+
+  // Trainer events
+  const drop=document.getElementById('drop'), file=document.getElementById('file'), cam=document.getElementById('cam');
   document.getElementById('btnCam').onclick=()=> cam.click();
   document.getElementById('btnClear').onclick=()=>{ classifier.clearAllClasses(); setCounts(); dbg('dataset cleared'); document.getElementById('thumbs').innerHTML=''; };
   document.getElementById('copyDbg').onclick=()=> navigator.clipboard.writeText(document.getElementById('dbg').textContent||'');
 
-  file.addEventListener('change', e=>{ dbg('filePick '+(e.target.files?.length||0)); handleFileList(e.target.files); });
-  cam.addEventListener('change', e=>{ dbg('camPick '+(e.target.files?.length||0)); handleFileList(e.target.files); });
+  file.addEventListener('change', e=>{ dbg('filePick '+(e.target.files?.length||0)); addExamplesFromFiles(e.target.files, document.getElementById('cls').value); });
+  cam.addEventListener('change', e=>{ dbg('camPick '+(e.target.files?.length||0)); addExamplesFromFiles(e.target.files, document.getElementById('cls').value); });
 
   ;['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.add('drag'); }, false));
   ;['dragleave','drop'].forEach(ev=> drop.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.remove('drag'); }, false));
-  drop.addEventListener('drop', e=>{ handleFileList(e.dataTransfer.files); }, false);
+  drop.addEventListener('drop', e=>{ addExamplesFromFiles(e.dataTransfer.files, document.getElementById('cls').value); }, false);
   drop.addEventListener('click', ()=> file.click());
 });
 </script>
