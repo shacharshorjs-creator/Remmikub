@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
-<head>
+\1
+<style>
+/* v4.2: hide any extra leaderboards detected (outside our #rummiBoard) */
+.rummi-hide{display:none !important;visibility:hidden !important;}
+</style>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>רמיקוב – משחק + אימון (v3.0-ml)</title>
@@ -952,6 +957,55 @@ document.addEventListener('click', (e)=>{
     importJSON(f);
     ev.target.value='';
   });
+})();
+</script>
+
+
+<script>
+// v4.2: Deduplicate leaderboards — keep only #rummiBoard, hide others.
+(function(){
+  function isInsideRummiBoard(el){
+    while(el){ if(el.id==='rummiBoard') return true; el = el.parentElement; }
+    return false;
+  }
+  function nearestCard(el){
+    // find a reasonable container to hide (section/div that groups the board UI)
+    let cur = el;
+    while(cur && cur.parentElement){
+      if(cur.matches('section,div,article') && cur.querySelector && /לוח הובלה/.test(cur.textContent||'')){
+        return cur;
+      }
+      cur = cur.parentElement;
+    }
+    return el;
+  }
+  function dedupe(){
+    // Hide any element with id="scoreBoard" if it's not our injected leaderboard
+    document.querySelectorAll('#scoreBoard').forEach(el=>{
+      if(!isInsideRummiBoard(el)){ el.classList.add('rummi-hide'); }
+    });
+    // Hide headings that say "לוח הובלה" that are not inside our rummiBoard
+    document.querySelectorAll('h1,h2,h3').forEach(h=>{
+      const txt = (h.textContent||'').trim();
+      if(txt.includes('לוח הובלה') && !isInsideRummiBoard(h)){
+        const card = nearestCard(h);
+        if(card && !isInsideRummiBoard(card)){ card.classList.add('rummi-hide'); }
+      }
+    });
+    // Hide tables that look like boards (has columns for name/points) not inside rummiBoard
+    document.querySelectorAll('table').forEach(t=>{
+      const txt = (t.textContent||'').trim();
+      if((/שם/.test(txt) && /נקודות/.test(txt)) && !isInsideRummiBoard(t)){
+        let card = nearestCard(t);
+        if(card && !isInsideRummiBoard(card)){ card.classList.add('rummi-hide'); }
+      }
+    });
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', dedupe);
+  }else{
+    dedupe();
+  }
 })();
 </script>
 
