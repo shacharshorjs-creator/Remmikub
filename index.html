@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – משחק + אימון (v2.64-ml)</title>
+<title>רמיקוב – משחק + אימון (v2.65-ml)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
@@ -45,7 +45,7 @@
   <div class="wrap row" style="justify-content:space-between">
     <div class="badges">
       <span class="tag">רמיקוב – משחק + אימון</span>
-      <span id="ver" class="tag">v2.64-ml</span>
+      <span id="ver" class="tag">v2.65-ml</span>
       <span id="tfBadge" class="tag">TF: init…</span>
       <span id="mdlBadge" class="tag">model: loading…</span>
     </div>
@@ -556,6 +556,43 @@ document.addEventListener('click', (e)=>{
     const i = parseInt(t.dataset.cam,10);
     if(!players[i]){ alert('לא נמצא שחקן לצילום'); return; }
     if(typeof openCamForPlayer === 'function'){ openCamForPlayer(i); }
+  }
+});
+</script>
+
+
+<script>
+// ---- v2.65 players name hardening ----
+function ensurePlayers(min=2){
+  if(!Array.isArray(window.players)) window.players = [];
+  // normalize
+  window.players = window.players.map((p,i)=>({
+    name: (p && (''+p.name).trim()) || ('שחקן ' + (i+1)),
+    score: (p && (p.score|0)) || 0
+  }));
+  while(window.players.length < min){
+    const i = window.players.length;
+    window.players.push({ name: 'שחקן ' + (i+1), score: 0 });
+  }
+  try{ localStorage.setItem('rummi_players', JSON.stringify(window.players)); }catch(_){}
+}
+window.addEventListener('DOMContentLoaded', ()=>{
+  try{
+    const s = localStorage.getItem('rummi_players');
+    if(s){
+      const arr = JSON.parse(s);
+      if(Array.isArray(arr)) window.players = arr;
+    }
+  }catch(_){}
+  ensurePlayers(2);
+  if(typeof renderBoard==='function') setTimeout(renderBoard, 50);
+});
+
+// Hook any start-game button to also ensure players are valid
+document.addEventListener('click', (e)=>{
+  if(e.target && e.target.matches('[data-start-game],#btnStartGame')){
+    ensurePlayers(2);
+    if(typeof renderBoard==='function') renderBoard();
   }
 });
 </script>
