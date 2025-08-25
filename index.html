@@ -186,51 +186,57 @@ function renderBoard(){
       if(!isNaN(v)) bump(idx, v);
     };
     
-    labelCam.querySelector('input.snap').onchange = async (e)=>{
-      if(!(e.target.files && e.target.files.length)) return;
-      const file = e.target.files[0];
-      try{
-        await ensureModels();
-        // load image
-        const {img} = await imgToTensor(file);
-        // infer embedding
-        const emb = net.infer(img, true);
-        // require trained/restored model
-        const ds = classifier.getClassifierDataset();
-        const hasAny = Object.keys(ds).some(k=> ds[k] && ds[k].size>0);
-        if(!hasAny){
-          log('⚠️ אין דוגמאות במודל — נא לאמן או לשחזר JSON'); 
-          alert('אין מודל מאומן/משוחזר. נא לאמן או לשחזר קודם.');
-          return;
-        }
-        const res = await classifier.predictClass(emb, 3);
-        const label = (res && res.label) ? String(res.label) : null;
-        const conf = (res && res.confidences) ? Math.max(...Object.values(res.confidences)) : 0;
-        // visual feedback: tiny canvas thumbnail + text
-        const thumb = document.createElement('canvas'); thumb.width=54; thumb.height=54;
-        const ctx = thumb.getContext('2d'); 
-        const s = Math.min(img.width,img.height);
-        ctx.drawImage(img, (img.width-s)/2,(img.height-s)/2, s,s, 0,0,54,54);
-        const info = document.createElement('span'); 
-        info.style.marginInlineStart = '6px';
-        if(label!=null){
-          const val = parseInt(label,10) || 0;
-          bump(idx, val); // add points to player
-          info.textContent = `זוהה: ${val} (${(conf*100|0)}%)`;
-        }else{
-          info.textContent = `לא זוהה`;
-        }
-        const holder = row.querySelector('.flex'); // actions container
-        const wrap = document.createElement('div'); wrap.className='flex'; wrap.appendChild(thumb); wrap.appendChild(info);
-        holder.parentElement.appendChild(wrap);
-      }catch(err){
-        console.error(err);
-        alert('שגיאה בזיהוי: ' + (err && err.message || err));
-      }finally{
-        e.target.value='';
-      }
+labelCam.querySelector('input.snap').onchange = async (e)=>{
+  try{
+    if(!(e.target.files && e.target.files.length)) return;
+    const file = e.target.files[0];
+    // Load models (no change to training logic)
+    await ensureModels();
+    // Make sure we have examples
+    const ds = knn.getClassifierDataset ? knn.getClassifierDataset() : (classifier && classifier.getClassifierDataset && classifier.getClassifierDataset());
+    const hasAny = ds && Object.keys(ds).some(k => ds[k] && ds[k].size > 0);
+    if(!hasAny){
+      log('⚠️ אין דוגמאות במודל — נא לאמן או לשחזר JSON');
+      alert('אין מודל מאומן/משוחזר. נא לאמן או לשחזר קודם.');
+      e.target.value='';
+      return;
     }
-    (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
+    // Read & embed
+    const {img} = await imgToTensor(file);
+    const emb = (net && net.infer) ? net.infer(img, true) : (await mobilenet.load()).infer(img, true);
+    // Predict
+    const clf = (typeof classifier !== 'undefined' && classifier) ? classifier : knn;
+    const res = await clf.predictClass(emb, 3);
+    const label = (res && res.label) ? String(res.label) : null;
+    const conf = (res && res.confidences) ? Math.max(...Object.values(res.confidences)) : 0;
+
+    // Visual feedback (thumbnail + text)
+    const thumb = document.createElement('canvas'); thumb.width=54; thumb.height=54;
+    const ctx = thumb.getContext('2d'); const s = Math.min(img.width,img.height);
+    ctx.drawImage(img, (img.width-s)/2,(img.height-s)/2, s,s, 0,0,54,54);
+    const info = document.createElement('span'); info.style.marginInlineStart = '6px';
+
+    if(label!=null){
+      const val = parseInt(label,10) || 0;
+      bump(idx, val); // add points to player
+      info.textContent = `זוהה: ${val} (${(conf*100|0)}%)`;
+      log(`✅ זוהתה קובייה ${val} לשחקן ${players[idx].name} (${(conf*100|0)}%)`);
+    }else{
+      info.textContent = `לא זוהה`;
+      log('ℹ️ לא זוהתה קובייה');
+    }
+    const holder = row.querySelector('.flex');
+    const wrap = document.createElement('div'); wrap.className='flex'; wrap.appendChild(thumb); wrap.appendChild(info);
+    holder.parentElement.appendChild(wrap);
+  }catch(err){
+    log('snap classify error: ' + (err && err.message || err));
+    console.error(err);
+    alert('שגיאה בזיהוי: ' + (err && err.message || err));
+  }finally{
+    e.target.value='';
+  }
+}
+ (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
       }
     }
   });
