@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.53-ml)</title>
+<title>רמיקוב – מצב משחק (v2.54-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--accent:#63c9ff}
@@ -12,13 +12,16 @@
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .badge{font-size:12px;padding:6px 10px;border-radius:999px;background:#0a1a2c;border:1px solid rgba(99,201,255,.4)}
-  .filebtn{appearance:none;-webkit-appearance:none;background:#1c2741;border:1px solid var(--line);color:#fff;border-radius:12px;padding:12px 16px}
   .appbar{position:fixed;inset:0 0 auto 0;height:90px;background:rgba(8,12,24,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:10;display:flex;align-items:center}
   .appbar-inner{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
   .mini{font-size:12px;color:var(--muted)}
   button{cursor:pointer;border:none;border-radius:12px;padding:8px 12px;background:#1c2741;color:#fff}
   .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
   progress{width:100%;height:10px}
+  .drop{border:2px dashed #2d4068;border-radius:16px;padding:18px;text-align:center;background:#0c1529;cursor:pointer}
+  .drop.drag{background:#0e1b33;border-color:#4c75c9}
+  .gallery{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .thumb{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #2a3f64}
 </style>
 </head>
 <body>
@@ -26,12 +29,12 @@
   <div class="appbar-inner">
     <div class="row">
       <div style="font-weight:800">רמיקוב – מצב משחק</div>
-      <div class="badge">v2.53-ml</div>
+      <div class="badge">v2.54-ml</div>
       <div id="tfBadge" class="badge">TF: init</div>
     </div>
     <div class="row">
       <span class="mini">כתובת:</span>
-      <span id="pageUrl" class="badge" style="background:#0b152a;border-color:#27415f">https://shacharshorjs-creator.github.io/Remmikub/?v=253</span>
+      <span id="pageUrl" class="badge" style="background:#0b152a;border-color:#27415f">https://shacharshorjs-creator.github.io/Remmikub/?v=254</span>
       <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
     </div>
   </div>
@@ -40,8 +43,9 @@
 <div class="container">
   <section class="card">
     <h2 style="margin:0">אימון מודל זיהוי (CPU)</h2>
-    <div class="mini">upload → embedding (MobileNet) → KNN</div>
-    <div class="row" style="gap:8px;margin-top:8px">
+    <div class="mini">upload/drag → embedding (MobileNet) → KNN</div>
+
+    <div class="row" style="gap:8px;margin-top:10px">
       <label>בחר/י מחלקה</label>
       <select id="cls">
         <option value="none">בחר/י מספר</option>
@@ -49,14 +53,23 @@
       </select>
       <button id="clearAll" class="danger">נקה הכל</button>
     </div>
-    <div class="row" style="gap:8px;margin-top:8px">
-      <input id="filePick" class="filebtn" type="file" accept="image/*" multiple>
-      <input id="filePickOne" class="filebtn" type="file" accept="image/*">
-      <input id="filePickCam" class="filebtn" type="file" accept="image/*" capture="environment">
+
+    <div id="drop" class="drop" style="margin-top:12px">
+      גרור/י תמונות לכאן או הקלק/י לבחירה
+      <input id="upFile" type="file" accept="image/*" multiple style="position:absolute;inset:0;opacity:0;cursor:pointer">
     </div>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <input id="upCam" type="file" accept="image/*" capture="environment" style="display:none">
+      <button id="camBtn">📷 מצלמה</button>
+      <button id="pickBtn">📁 בחר/י קבצים</button>
+    </div>
+
     <div id="countsRow" class="mini" style="margin-top:6px">דוגמאות: —</div>
     <progress id="prog" max="1" value="0" style="margin-top:8px"></progress>
-    <div class="card" style="margin-top:8px">
+
+    <div class="gallery" id="gallery"></div>
+
+    <div class="card" style="margin-top:10px">
       <div class="mini">Debug: <button onclick="navigator.clipboard.writeText(document.getElementById('dbgLog').textContent)">📋 העתק</button></div>
       <pre id="dbgLog" style="white-space:pre-wrap;max-height:260px;overflow:auto;margin:0"></pre>
     </div>
@@ -68,6 +81,7 @@
 (async function(){
   const log=(m)=>{ const el=document.getElementById('dbgLog'); if(el){ el.textContent+=(el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; } };
   const setBadge=(txt)=>{ const b=document.getElementById('tfBadge'); if(b) b.textContent=txt; };
+  const gallery=document.getElementById('gallery');
 
   function loadScript(url, name){
     return new Promise((res,rej)=>{
@@ -100,48 +114,62 @@
     const row=document.getElementById('countsRow'); if(row) row.textContent = keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')) : 'דוגמאות: —';
   }
 
-  // Decode helpers (createImageBitmap → <img> fallback)
+  function addThumb(file){
+    try{
+      const url = URL.createObjectURL(file);
+      const im = new Image(); im.src=url; im.className='thumb';
+      im.onload=()=>URL.revokeObjectURL(url);
+      gallery.appendChild(im);
+    }catch(_e){}
+  }
+
   async function fileToImageSource(file){
     const info = file.type+' '+Math.round(file.size/1024)+'KB';
-    log('picked: '+file.name+' ['+info+']');
+    log('picked: '+file.name+' ['+info+']'); addThumb(file);
     try{ if('createImageBitmap' in window){ const bmp = await createImageBitmap(file); log('decoded with createImageBitmap: '+file.name+' ('+bmp.width+'x'+bmp.height+')'); return {kind:'bitmap', bmp}; } }
     catch(e){ log('createImageBitmap fail: '+(e&&e.message||e)); }
     return await new Promise((res,rej)=>{ const url=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{ URL.revokeObjectURL(url); log('decoded with <img>: '+file.name+' ('+im.width+'x'+im.height+')'); res({kind:'img', im}); }; im.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('image load error')); }; im.src=url; });
   }
   async function sourceToTensor(src){ if(src.kind==='bitmap') return tf.browser.fromPixels(src.bmp); if(src.kind==='img') return tf.browser.fromPixels(src.im); throw new Error('unknown source'); }
 
-  const busy = new Set();
-  function bindPicker(id){
-    const el=document.getElementById(id); if(!el) return;
-    el.addEventListener('change', async ()=>{
-      if(busy.has(el)) return; busy.add(el);
-      const clsSel=document.getElementById('cls');
+  async function handleFiles(files){
+    const clsSel=document.getElementById('cls');
+    if(!files||!files.length) return;
+    if(!clsSel || clsSel.value==='none'){ log('NO CLASS SELECTED'); const s=document.getElementById('status'); if(s) s.textContent='בחר/י מספר לפני העלאה'; return; }
+    await ensureEmbedder();
+    const arr=[...files].slice(0,40);
+    const prog=document.getElementById('prog'); prog.max = arr.length; prog.value=0;
+    let ok=0,fail=0;
+    for(const f of arr){
       try{
-        const files=el.files; if(!files||!files.length) return;
-        if(!clsSel || clsSel.value==='none'){ log('NO CLASS SELECTED'); const s=document.getElementById('status'); if(s) s.textContent='בחר/י מספר לפני העלאה'; return; }
-        await ensureEmbedder();
-        const arr=[...files].slice(0,20);
-        const prog=document.getElementById('prog'); prog.max = arr.length; prog.value=0;
-        let ok=0,fail=0;
-        for(const f of arr){
-          try{
-            const src = await fileToImageSource(f);
-            const px = await sourceToTensor(src);
-            log('tensor shape: '+px.shape.join('x'));
-            const emb = tf.tidy(()=> mobilenetModel.infer(px.expandDims(0),'conv_preds'));
-            classifier.addExample(emb, clsSel.value); emb.dispose(); px.dispose(); ok++;
-            const s=document.getElementById('status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')';
-            log('✅ example added to class '+clsSel.value);
-          }catch(err){ fail++; log('ERR '+(err&&err.message||err)); }
-          prog.value = ok+fail; await tf.nextFrame();
-        }
-        updateCounts();
-      }finally{ const clone=el.cloneNode(true); el.parentNode.replaceChild(clone, el); bindPicker(id); busy.delete(el); }
-    }, false);
+        const src = await fileToImageSource(f);
+        const px = await sourceToTensor(src);
+        log('tensor shape: '+px.shape.join('x'));
+        const emb = tf.tidy(()=> mobilenetModel.infer(px.expandDims(0),'conv_preds'));
+        classifier.addExample(emb, clsSel.value); emb.dispose(); px.dispose(); ok++;
+        const s=document.getElementById('status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')';
+        log('✅ example added to class '+clsSel.value);
+      }catch(err){ fail++; log('ERR '+(err&&err.message||err)); }
+      prog.value = ok+fail; await tf.nextFrame();
+    }
+    updateCounts();
   }
-  bindPicker('filePick'); bindPicker('filePickOne'); bindPicker('filePickCam');
 
-  const clr=document.getElementById('clearAll'); if(clr) clr.onclick=()=>{ classifier.clearAllClasses(); updateCounts(); log('Cleared ALL'); };
+  // Bind UI
+  const upFile=document.getElementById('upFile');
+  const pickBtn=document.getElementById('pickBtn');
+  const camBtn=document.getElementById('camBtn');
+  const upCam=document.getElementById('upCam');
+  const drop=document.getElementById('drop');
+
+  pickBtn.onclick=()=>upFile.click();
+  camBtn.onclick=()=>upCam.click();
+  upFile.onchange=(e)=>handleFiles(e.target.files);
+  upCam.onchange=(e)=>handleFiles(e.target.files);
+
+  ;['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev,(e)=>{ e.preventDefault(); e.stopPropagation(); drop.classList.add('drag'); }, false));
+  ;['dragleave','drop'].forEach(ev=> drop.addEventListener(ev,(e)=>{ e.preventDefault(); e.stopPropagation(); drop.classList.remove('drag'); }, false));
+  drop.addEventListener('drop',(e)=>{ const dt=e.dataTransfer; const files=dt.files; handleFiles(files); }, false);
 })();
 </script>
 </body>
