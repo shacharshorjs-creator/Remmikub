@@ -1,362 +1,975 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>רמיקוב – ניקוד + אימון (CPU)</title>
 <style>
-  :root{
-    --bg:#0f1724; --panel:#121c2b; --muted:#9fb3c8; --text:#eaf6ff;
-    --acc:#89e3ff; --good:#2ecc71; --bad:#c14949;
-  }
-  html,body{height:100%}
-  body{margin:0;background:linear-gradient(180deg,#0b1420,#0e1623 40%,#0b1420);
-       color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji",sans-serif}
-  .wrap{max-width:920px;margin:0 auto;padding:14px 14px 48px}
-  .row{display:flex;flex-wrap:wrap;gap:12px}
-  .pill{display:inline-flex;align-items:center;gap:.5rem;padding:.35rem .7rem;border-radius:999px;background:#122235;color:#d7edff;font-size:.9rem}
-  .muted{color:var(--muted)}
-  h2{margin:.6rem 0 0.2rem;font-size:1.35rem}
-  h3{margin:1rem 0 .4rem;font-size:1.1rem;color:#cfeaff}
-  .card{background:var(--panel);border-radius:14px;padding:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);margin:10px 0}
-  .board .thead, .board .row{display:grid;grid-template-columns:42px 1fr 100px 190px;gap:10px;align-items:center}
-  .board .thead{opacity:.8;padding-bottom:6px;border-bottom:1px solid #1e2a3c}
-  .board .row{padding:6px 0;border-bottom:1px dashed #1a2537}
-  .btn{border:0;border-radius:10px;padding:.48rem .7rem;background:#16314a;color:#e9f6ff;cursor:pointer}
-  .btn:hover{filter:brightness(1.1)}
-  .btn.bad{background:#3a1e26;color:#ffc7c7}
-  .btn.good{background:#113021;color:#c6ffd9}
-  .btn.acc{background:#14344a;color:#bfefff}
-  .btn.cam{display:inline-flex;gap:.35rem;align-items:center}
-  input[type="text"], input[type="number"]{width:100%;padding:.48rem .6rem;border-radius:10px;background:#0d1522;border:1px solid #1c2a3c;color:#eaf6ff}
-  .hint{font-size:.85rem;color:#94adc4}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .kbd{background:#0b1420;border:1px solid #203049;padding:.15rem .45rem;border-radius:6px}
-  .sep{height:1px;background:#1a2738;margin:.75rem 0}
-  .footer{position:sticky;bottom:0;backdrop-filter:blur(8px);background:rgba(8,13,22,.75);border-top:1px solid #22324a;padding:10px;margin:0 -14px}
-  small.tag{background:#0f263a;color:#d2f1ff;border:1px solid #234761;border-radius:999px;padding:.15rem .55rem;margin-inline-end:.35rem}
-  .ghost{opacity:.35}
-  .flex{display:flex;gap:.5rem;align-items:center}
-  .btn.inline{padding:.35rem .55rem;border-radius:8px}
-  .nowrap{white-space:nowrap}
-  .danger{color:#ffb2b2}
-  .ok{color:#baffc3}
-  .scrollx{overflow:auto}
-  .copybtn{margin-inline-start:.5rem}
+/* === v4.5 minimal additions (non-invasive) === */
+.rummi-wrap{max-width:960px;margin:12px auto;padding:0 14px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.rummi-card{background:#121d2f;border:1px solid #203356;border-radius:14px;padding:14px;margin:12px 0;color:#d7e1ff}
+.rummi-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.rummi-btn{background:#1b2a44;border:1px solid #2a3e63;color:#d7e1ff;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer}
+.rummi-btn.danger{background:#3a1a1a;border-color:#7b3a3a}
+.rummi-grid{display:grid;grid-template-columns:40px 1fr 140px 1fr;gap:10px;align-items:center}
+.rummi-pill{display:inline-block;padding:6px 10px;border-radius:10px;background:#0f1a2b;border:1px solid #223456;color:#8aa0c8}
+.rummi-inp{background:#081224;border:1px solid #243657;color:#d7e1ff;border-radius:8px;padding:8px;width:100%}
+.rummi-inline{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#verBadgeV45{position:fixed;top:10px;left:10px;z-index:9999;background:#122038;color:#cfe0ff;border:1px solid #1f3154;border-radius:12px;padding:6px 10px;font:600 12px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.rummi-hide{display:none !important}
 </style>
-</head>
-<body>
-<div class="wrap" id="app">
-  <div class="row" style="justify-content:space-between;align-items:center">
-    <div class="flex">
-      <small class="tag" id="verBadge">v4.2-ml</small>
-      <small class="tag" id="tfBadge">TF: init</small>
-      <small class="tag" id="modelBadge">model: —</small>
-      <small class="tag" id="examplesBadge">דוגמאות: —</small>
-    </div>
-    <div class="flex">
-      <button class="btn inline" id="btnResetScores">איפוס נקודות</button>
-      <button class="btn inline" id="btnSaveNames">שמור שמות</button>
-    </div>
-  </div>
 
-  <!-- לוח הובלה יחיד -->
-  <div class="card board" id="leaderCard">
-    <div class="row" style="justify-content:space-between;align-items:center">
-      <h2 style="margin:0">לוח הובלה</h2>
-      <div class="hint">בחרו משתתפים למטה. לחיצה על <span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
-    </div>
-    <div class="thead">
-      <div>#</div>
-      <div>שם</div>
-      <div>נקודות</div>
-      <div>פעולות</div>
-    </div>
-    <div id="boardRows"></div>
-  </div>
-
-  <!-- בחירת משתתפים -->
-  <div class="card">
-    <h2>בחירת משתתפים (עד 4)</h2>
-    <div class="grid2">
-      <div><label class="hint">שחקן 1</label><input id="p1" type="text" placeholder="שם" /></div>
-      <div><label class="hint">שחקן 2</label><input id="p2" type="text" placeholder="שם" /></div>
-      <div><label class="hint">שחקן 3</label><input id="p3" type="text" placeholder="שם" /></div>
-      <div><label class="hint">שחקן 4</label><input id="p4" type="text" placeholder="שם" /></div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button class="btn acc" id="btnStart">התחל משחק</button>
-      <div class="hint">השמות נשמרים מקומית.</div>
-    </div>
-  </div>
-
-  <!-- אימון מודל – תמיד גלוי (על המכשיר) -->
-  <div class="card" id="trainCard">
-    <h2>אימון מודל זיהוי (CPU)</h2>
-    <div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
-    <div class="sep"></div>
-    <div class="row" style="align-items:center;gap:10px">
-      <label class="hint">בחר/י מחלקה (מספר):</label>
-      <input id="classId" type="number" min="1" max="4" value="1" style="width:5rem"/>
-      <button class="btn inline" id="btnNukeExamples">נקה הכל</button>
-      <button class="btn inline" id="btnSaveModel">שמור מודל</button>
-      <button class="btn inline" id="btnLoadModel">שחזר מודל</button>
-      <button class="btn inline" id="btnExportJSON">JSON ייצא</button>
-      <label class="btn inline nowrap">
-        ייבא JSON
-        <input id="jsonIn" type="file" accept="application/json" hidden>
-      </label>
-      <span class="hint">מצב: <span id="statusSpan">מוכן</span></span>
-    </div>
-    <div class="row" style="margin-top:10px;align-items:center;gap:10px">
-      <label class="btn inline nowrap">
-        הוסף מגז’יר (גלריה)
-        <input id="filePick" type="file" accept="image/*" multiple hidden>
-      </label>
-      <label class="btn inline nowrap">
-        צילום מהמצלמה
-        <input id="filePickCam" type="file" accept="image/*" capture="environment" hidden>
-      </label>
-    </div>
-    <div class="sep"></div>
-    <div class="scrollx">
-      <pre id="debug" style="min-height:80px;margin:0;background:#0b1420;border:1px solid #22324a;border-radius:12px;padding:10px;white-space:pre-wrap"></pre>
-    </div>
-  </div>
-
-  <div class="footer row" style="justify-content:space-between">
-    <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-    <div class="muted">© v4.2-ml</div>
-  </div>
-</div>
-
-<!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>רמיקוב – משחק + אימון (v3.0-ml)</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
+<style>
+  :root{
+    --bg:#0e1220;--panel:#121a2e;--card:#141d33;--ink:#eaf1ff;--muted:#a2b3cc;--line:rgba(255,255,255,.12);
+    --accent:#8be9fd;--good:#02c39a;--bad:#e76f51;--btn:#1f2a48;--btn2:#23345b;
+  }
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  .appbar{position:sticky;top:0;background:#0b1222;z-index:30;border-bottom:1px solid var(--line)}
+  .wrap{width:min(1000px,95vw);margin:0 auto;padding:14px}
+  .badges > *{display:inline-block;margin-inline-start:8px;background:#0a1a2f;border:1px solid #223b5c;padding:6px 10px;border-radius:999px;font-size:12px}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px}
+  @media (min-width:920px){.grid{grid-template-columns:1fr 1fr;}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .btn{background:var(--btn);color:#fff;border:none;border-radius:12px;padding:8px 12px;cursor:pointer;opacity:.95}
+  .btn.secondary{background:var(--btn2)}
+  .btn.good{background:#114a3d;border:1px solid #1d7d66}
+  .btn.bad{background:#3a1c1c;border:1px solid #5a2b2b}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  input[type=text]{background:#0f162a;border:1px solid var(--line);color:var(--ink);padding:8px 10px;border-radius:10px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid var(--line);padding:10px 6px;text-align:center}
+  .pill{display:inline-block;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:#0b1428;font-size:12px}
+  .tiny{font-size:12px;color:var(--muted)}
+  .drop{position:relative;border:2px dashed #34507a;border-radius:16px;padding:18px;text-align:center;background:#0d162b;user-select:none;overflow:hidden}
+  .drop.drag{background:#0f1c36;border-color:#5984d6}
+  .drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .thumbs img{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #2b3f63}
+  pre{white-space:pre-wrap;background:#0a1020;border:1px solid var(--line);padding:10px;border-radius:12px;max-height:220px;overflow:auto}
+  .tag{display:inline-block;background:#0a1a2f;border:1px solid #2b3d5e;border-radius:8px;padding:2px 6px;margin-inline-start:6px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="verBadgeV45">v4.5-ml</div>
+<section id="rummiBoard" class="rummi-wrap">
+  <div class="rummi-card">
+    <div class="rummi-row">
+      <h2 style="margin:0;font-size:1.1rem">לוח הובלה</h2>
+      <div class="rummi-inline">
+        <button id="rbSaveNames" class="rummi-btn">שמור שמות</button>
+        <button id="rbReset" class="rummi-btn danger">איפוס נקודות</button>
+      </div>
+    </div>
+    <div class="rummi-grid" id="rbGrid"></div>
+  </div>
+
+  <div class="rummi-card">
+    <h3 style="margin:0 0 8px">בחירת משתתפים</h3>
+    <div class="rummi-grid" id="rbInputs"></div>
+  </div>
+</section>
+
+<header class="appbar">
+  <div class="wrap row" style="justify-content:space-between">
+    <div class="badges">
+      <span class="tag">רמיקוב – משחק + אימון</span>
+      <span id="ver" class="tag">v3.0-ml</span>
+      <span id="tfBadge" class="tag">TF: init…</span>
+      <span id="mdlBadge" class="tag">model: loading…</span>
+    </div>
+    <div class="badges"><span id="counts" class="tag">דוגמאות: —</span></div>
+  </div>
+
+<span id="modelBadge" style="margin-inline-start:8px;padding:4px 8px;border-radius:12px;background:#24324d;color:#cfe3ff;font-size:.85rem;display:inline-block">model: —</span>
+</header>
+
+<main class="wrap grid">
+  <!-- GAME SIDE -->
+  <section class="card" id="gameSetup">
+    <h3>בחירת משתתפים (עד 4)</h3>
+    <div class="row" style="margin-bottom:10px">
+      <input id="p1" type="text" placeholder="שחקן/ית 1">
+      <input id="p2" type="text" placeholder="שחקן/ית 2">
+      <input id="p3" type="text" placeholder="אופציונלי">
+      <input id="p4" type="text" placeholder="אופציונלי">
+      <button class="btn good" id="btnStart">התחל משחק</button>
+    </div>
+    <div class="tiny">שמות ריקים יידלגו.</div>
+  </section>
+
+  <section class="card" id="scoreBoard" style="display:none">
+    <div class="row" style="justify-content:space-between">
+      <h3 style="margin:0">לוח הובלה</h3>
+      <div class="row">
+        <button class="btn bad" id="btnResetPoints">איפוס נקודות</button>
+        <button class="btn secondary" id="btnBack">חזרה לשמות</button>
+      </div>
+    </div>
+    <table id="tbl">
+      <thead>
+        <tr><th>#</th><th>שם</th><th>נקודות</th><th>פעולות</th><th>📷</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="tiny" id="lastPred">זיהוי אחרון: —</div>
+  </section>
+
+  <!-- TRAINER ALWAYS OPEN -->
+  <section class="card" id="trainer">
+    <h3>אימון מודל זיהוי (CPU)</h3>
+    <div class="row" style="margin-bottom:8px">
+      <label for="cls" class="tiny">בחר/י מחלקה (מספר):</label>
+      <select id="cls"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option></select>
+      <button id="btnClear" class="btn bad" disabled>נקה הכל</button>
+      <span class="tiny">upload → embedding (MobileNet) → KNN</span>
+    </div>
+
+    <div id="drop" class="drop">
+      גררו תמונות לכאן או לחצו לבחירה
+      <input id="file" type="file" accept="image/*,.heic,.heif" multiple disabled>
+    </div>
+
+    <div class="row" style="margin-top:8px">
+      <button id="btnCam" class="btn" disabled>📷 מצלמה</button>
+      <input id="cam" type="file" accept="image/jpeg,image/jpg" capture="environment" style="display:none" disabled>
+      <progress id="prog" max="1" value="0" style="width:220px"></progress>
+      <span id="status" class="tiny"></span>
+    </div>
+
+    <div id="thumbs" class="thumbs"></div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between"><b>Debug</b>
+        <button id="copyDbg" class="btn secondary">📋 העתק</button></div>
+      <pre id="dbg"></pre>
+    </div>
+  </section>
+</main>
+
+<canvas id="work" width="224" height="224" style="display:none"></canvas>
 
 <script>
-const VERSION = 'v4.2-ml';
-const $$ = sel => document.querySelector(sel);
-const on = (el,ev,fn) => el.addEventListener(ev,fn);
-const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
-
-// ====== מצב אפליקציה בסיסי (שמות + ניקוד) ======
-let players = []; // {name, score}
-function loadNames(){
-  const saved = JSON.parse(localStorage.getItem('rk_players') || '[]');
-  for(let i=0;i<4;i++){
-    const val = saved[i]?.name || '';
-    $$('#p'+(i+1)).value = val;
-  }
+// ======== ML CORE ========
+let net, classifier, ready=false;
+const dbg = (m)=>{ const el=document.getElementById('dbg'); el.textContent += (el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; };
+function setCounts(){
+  const ds = classifier.getClassifierDataset(); const ks = Object.keys(ds);
+  const txt = ks.length? ks.map(k=> k+': '+(ds[k].shape[0]||0)).join(' | ') : '—';
+  document.getElementById('counts').textContent = 'דוגמאות: '+txt;
 }
-function saveNames(){
-  players = [];
-  for(let i=0;i<4;i++){
-    const name = ($$('#p'+(i+1)).value || '').trim() || ('שחקן ' + (i+1));
-    players.push({name, score:0});
+async function initML(){
+  try{ await tf.setBackend('cpu'); await tf.ready(); document.getElementById('tfBadge').textContent='TF: '+tf.getBackend(); dbg('backend: '+tf.getBackend()); }
+  catch(e){ dbg('TF init error: '+(e&&e.message||e)); }
+  try{ net = await mobilenet.load({version:2, alpha:0.5}); classifier = knnClassifier.create(); ready=true;
+        document.getElementById('mdlBadge').textContent='model: ready'; enableTrainer(true); dbg('models loaded'); }
+  catch(e){ document.getElementById('mdlBadge').textContent='model: error'; dbg('model load error: '+(e&&e.message||e)); }
+}
+function enableTrainer(on){
+  ['file','cam','btnCam','btnClear'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=!on; });
+}
+function waitImage(url){
+  return new Promise((resolve,reject)=>{ const img=new Image(); img.onload=()=>resolve(img); img.onerror=()=>reject(new Error('image load failed')); img.src=url; });
+}
+async function toTensor(img){
+  const c=document.getElementById('work'), ctx=c.getContext('2d', { willReadFrequently:true });
+  const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height; const s=Math.min(w,h)||1;
+  const sx=(w-s)/2, sy=(h-s)/2; ctx.clearRect(0,0,224,224); ctx.drawImage(img,sx,sy,s,s,0,0,224,224);
+  return tf.tidy(()=> tf.browser.fromPixels(c));
+}
+async function addExamplesFromFiles(list, cls){
+  if(!list || !list.length) return;
+  if(!ready){ dbg('models not ready'); return; }
+  const prog=document.getElementById('prog'); prog.max=list.length; prog.value=0;
+  let ok=0, fail=0;
+  for(const f of list){
+    try{ const url=URL.createObjectURL(f); addThumb(url);
+          const img=await waitImage(url); URL.revokeObjectURL(url);
+          const px=await toTensor(img);
+          const emb=tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
+          classifier.addExample(emb, cls); emb.dispose(); px.dispose(); ok++; dbg('✅ added '+f.name+' to class '+cls); }
+    catch(e){ fail++; dbg('ERR addExample '+(e&&e.message||e)); }
+    prog.value = ok+fail;
   }
-  localStorage.setItem('rk_players', JSON.stringify(players));
+  document.getElementById('status').textContent='הוספו '+ok+' | נכשלו '+fail; setCounts();
+}
+function addThumb(src){ const img=new Image(); img.src=src; img.className='thumb'; document.getElementById('thumbs').appendChild(img);}
+async function classifyFile(file){
+  if(!ready) return {ok:false, reason:'not ready'};
+  if(!classifier.getNumClasses()) return {ok:false, reason:'no classes'};
+  try{ const url=URL.createObjectURL(file); const img=await waitImage(url); URL.revokeObjectURL(url);
+        const px=await toTensor(img); const emb=tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
+        const res=await classifier.predictClass(emb); emb.dispose(); px.dispose(); return {ok:true, res}; }
+  catch(e){ return {ok:false, reason:e&&e.message||e}; }
+}
+
+// ======== GAME ========
+let players = []; // [{name, score, id}]
+function saveState(){
+  localStorage.setItem('rummi.players', JSON.stringify(players));
+}
+function loadState(){
+  try{ players = JSON.parse(localStorage.getItem('rummi.players')||'[]'); }catch(_){}
+}
+function startGame(){
+  const names = [p1.value,p2.value,p3.value,p4.value].map(s=>s.trim()).filter(Boolean);
+  players = names.map((n,i)=>({id:i+1,name:n,score:0})); saveState(); renderBoard();
+  document.getElementById('gameSetup').style.display='none';
+  document.getElementById('scoreBoard').style.display='block';
+}
+function backToNames(){
+  document.getElementById('scoreBoard').style.display='none';
+  document.getElementById('gameSetup').style.display='block';
+}
+function delta(i, d){
+  players[i].score += d; renderBoard(); saveState();
+}
+async function snapAndAdd(i){
+  return openCamForPlayer(i);
+  /* old file-input path is disabled to avoid HEIC issues */
+
+  const input = document.createElement('input'); input.type='file'; input.accept='image/jpeg,image/jpg'; input.capture='environment';
+  input.onchange = async (e)=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    const clsRes = await classifyFile(f);
+    if(!clsRes.ok){ document.getElementById('lastPred').textContent='זיהוי נכשל: '+clsRes.reason; return; }
+    const label = clsRes.res.label; const prob = (clsRes.res.confidences[label]||0);
+    document.getElementById('lastPred').textContent = 'זיהוי אחרון: '+label+' ('+(prob*100).toFixed(0)+'%) → לשחקן/ית '+players[i].name;
+    const val = parseInt(label,10)||0; players[i].score += val; renderBoard(); saveState();
+  };
+  input.click();
 }
 function renderBoard(){
-  const holder = $$('#boardRows'); holder.innerHTML='';
-  players.forEach((p,idx)=>{
-    const row=document.createElement('div'); row.className='row';
-    row.innerHTML = `
-      <div>${idx+1}</div>
-      <div>${p.name}</div>
-      <div><span id="sc_${idx}">${p.score}</span></div>
-      <div class="flex">
-        <button class="btn good" data-d="+10">+10</button>
-        <button class="btn bad" data-d="-10">-10</button>
-        <input class="manual" type="number" placeholder="ערך" style="width:92px">
-        <button class="btn acc" data-d="manual">הוסף</button>
-        <label class="btn cam nowrap">📷
-          <input class="snap" type="file" accept="image/*" capture="environment" hidden>
-        </label>
-      </div>`;
-    holder.appendChild(row);
-    // אירועים
-    const [bPlus,bMinus,inputManual,bManual,labelCam] = row.querySelectorAll('button,input,label');
-    bPlus.onclick=()=>bump(idx, +10);
-    bMinus.onclick=()=>bump(idx, -10);
-    bManual.onclick=()=>{
-      const v = parseInt(inputManual.value||'0',10);
-      if(!isNaN(v)) bump(idx, v);
-    };
-    labelCam.querySelector('input.snap').onchange = async (e)=>{
-      // תמונת שחקן -> כרגע רק מציגה חיווי; (המודל נשאר מודול אימון למטה).
-      if(e.target.files?.length){
-        log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
+  const tb = document.querySelector('#tbl tbody'); tb.innerHTML='';
+  players.forEach((p,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td class="tiny">\${i+1}</td>
+      <td><b>\${p.name}</b></td>
+      <td><span class="pill">\${p.score}</span></td>
+      <td>
+        <button class="btn bad" data-i="\${i}" data-d="-10">-10</button>
+        <button class="btn" data-i="\${i}" data-d="10">+10</button>
+        <input class="custom" data-i="\${i}" type="text" inputmode="numeric" placeholder="+/- ערך">
+        <button class="btn secondary apply" data-i="\${i}">הוסף/י</button>
+      </td>
+      <td><button class="btn" data-snap="\${i}">📷</button></td>`;
+    tb.appendChild(tr);
+  });
+  // wire buttons
+  tb.querySelectorAll('button[data-d]').forEach(btn=> btn.onclick=()=> delta(parseInt(btn.dataset.i), parseInt(btn.dataset.d)));
+  tb.querySelectorAll('button.apply').forEach(btn=> btn.onclick=()=>{ const i=parseInt(btn.dataset.i);
+    const inp = btn.parentElement.querySelector('input.custom'); const v=parseInt((inp.value||'').trim(),10); if(!isNaN(v)) delta(i, v); inp.value='';
+  });
+  tb.querySelectorAll('button[data-snap]').forEach(btn=> btn.onclick=()=> snapAndAdd(parseInt(btn.dataset.snap)));
+}
+
+// ======== WIRING ========
+window.addEventListener('DOMContentLoaded',()=>{
+  initML();
+  loadState();
+  // If we have saved players, go straight to board
+  if(players.length){ document.getElementById('gameSetup').style.display='none'; document.getElementById('scoreBoard').style.display='block'; renderBoard(); }
+  document.getElementById('btnStart').onclick=startGame;
+  document.getElementById('btnBack').onclick=backToNames;
+  document.getElementById('btnResetPoints').onclick=()=>{ players.forEach(p=>p.score=0); saveState(); renderBoard(); };
+
+  // Trainer events
+  const drop=document.getElementById('drop'), file=document.getElementById('file'), cam=document.getElementById('cam');
+  document.getElementById('btnCam').onclick=()=> cam.click();
+  document.getElementById('btnClear').onclick=()=>{ classifier.clearAllClasses(); setCounts(); dbg('dataset cleared'); document.getElementById('thumbs').innerHTML=''; };
+  document.getElementById('copyDbg').onclick=()=> navigator.clipboard.writeText(document.getElementById('dbg').textContent||'');
+
+  file.addEventListener('change', e=>{ dbg('filePick '+(e.target.files?.length||0)); addExamplesFromFiles(e.target.files, document.getElementById('cls').value); });
+  cam.addEventListener('change', e=>{ dbg('camPick '+(e.target.files?.length||0)); addExamplesFromFiles(e.target.files, document.getElementById('cls').value); });
+
+  ;['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.add('drag'); }, false));
+  ;['dragleave','drop'].forEach(ev=> drop.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.remove('drag'); }, false));
+  drop.addEventListener('drop', e=>{ addExamplesFromFiles(e.dataTransfer.files, document.getElementById('cls').value); }, false);
+  drop.addEventListener('click', ()=> file.click());
+});
+
+// ======== CAMERA OVERLAY (for player capture) ========
+let camStream=null, camTargetIndex=null;
+async function openCamForPlayer(index){
+  try{
+    camTargetIndex = index; if(index==null){alert("לא נבחר שחקן"); return; }
+    const dlg = document.getElementById('camDlg');
+    const video = document.getElementById('camVideo');
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      alert('הדפדפן לא תומך ב‑getUserMedia.');
+      return;
+    }
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = camStream;
+    if(typeof dlg.showModal==='function') dlg.showModal(); else dlg.setAttribute('open','');
+  }catch(e){
+    dbg('openCam error: '+(e&&e.message||e));
+    alert('לא ניתן לפתוח מצלמה. בדוק/י הרשאות.');
+  }
+}
+function closeCam(){
+  const dlg = document.getElementById('camDlg');
+  try{ if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; } }catch(_){}
+  if(typeof dlg.close==='function'){ try{ dlg.close(); }catch(_){ dlg.removeAttribute('open'); } }
+  else dlg.removeAttribute('open');
+}
+
+async function snapFromCamAndClassify(){
+  // Guards
+  if (typeof players === 'undefined' || !Array.isArray(players) || players.length === 0){
+    alert('אין שחקנים במשחק. בחר/י שחקנים והתחל/י משחק.');
+    return;
+  }
+  if (camTargetIndex == null || !players[camTargetIndex]){
+    alert('לא נבחר שחקן לצילום.');
+    return;
+  }
+  if(!ready){ alert('המודל עדיין לא הוכן.'); return; }
+  if(!classifier.getNumClasses()){ alert('אין דוגמאות במודל. הוסף/י באימון.'); return; }
+  try{
+    const video = document.getElementById('camVideo');
+    // ensure video has frames
+    if(!(video && (video.readyState === 4 || video.videoWidth))){
+      await new Promise(r => setTimeout(r, 120));
+    }
+    const c = document.getElementById('work');
+    const ctx = c.getContext('2d', { willReadFrequently:true });
+    const w = video.videoWidth || 224, h = video.videoHeight || 224;
+    const s = Math.min(w,h), sx = (w - s)/2, sy = (h - s)/2;
+    ctx.clearRect(0,0,224,224);
+    ctx.drawImage(video, sx, sy, s, s, 0, 0, 224, 224);
+
+    // classify
+    const px = tf.browser.fromPixels(c);
+    const emb = tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
+    const res = await classifier.predictClass(emb);
+    emb.dispose(); px.dispose();
+
+    const label = res.label;
+    const prob = (res.confidences && res.confidences[label]) || 0;
+    const player = players[camTargetIndex];
+    document.getElementById('lastPred').textContent =
+      'זיהוי אחרון: ' + label + ' (' + (prob*100).toFixed(0) + '%) → ' + player.name;
+
+    const val = parseInt(label, 10) || 0;
+    player.score += val;
+    renderBoard();
+    saveState();
+  }catch(e){
+    dbg('snap classify error: '+(e && e.message || e));
+    alert('הצילום נכשל.');
+  }finally{
+    closeCam();
+  }
+}
+
+document.addEventListener('click',(e)=>{
+  if(e.target && e.target.id==='camClose') closeCam();
+  if(e.target && e.target.id==='camSnap') snapFromCamAndClassify();
+});
+// ======== END CAMERA OVERLAY ========
+
+
+// ======== PERSIST TRAINED MODEL (localStorage) ========
+const MODEL_LS_KEY = 'rummi_knn_v1';
+
+function datasetToJSON(ds) {
+  const out = {};
+  let total = 0;
+  Object.keys(ds).forEach(label => {
+    const t = ds[label]; // Tensor2D
+    const data = Array.from(t.dataSync());
+    out[label] = {shape: t.shape, data};
+    total += t.shape[0];
+  });
+  return { version: 1, total, ds: out };
+}
+
+function jsonToDataset(obj) {
+  const out = {};
+  Object.keys(obj.ds).forEach(label => {
+    const item = obj.ds[label];
+    out[label] = tf.tensor(item.data, item.shape, 'float32');
+  });
+  return out;
+}
+
+function saveModelLS() {
+  try {
+    const ds = classifier.getClassifierDataset();
+    if (!ds || !Object.keys(ds).length) return {saved:false, msg:'empty'};
+    const json = datasetToJSON(ds);
+    const str = JSON.stringify(json);
+    localStorage.setItem(MODEL_LS_KEY, str);
+    updateModelBadge(`saved • ${json.total} ex • ${(str.length/1024).toFixed(1)} KB`);
+    return {saved:true, size: str.length, total: json.total};
+  } catch (e) {
+    dbg('saveModelLS error: ' + (e && e.message || e));
+    updateModelBadge('save failed');
+    return {saved:false, msg: e && e.message};
+  }
+}
+
+async function loadModelLS() {
+  try {
+    const str = localStorage.getItem(MODEL_LS_KEY);
+    if (!str) { updateModelBadge('model: none'); return {loaded:false}; }
+    const obj = JSON.parse(str);
+    const ds = jsonToDataset(obj);
+    classifier.setClassifierDataset(ds);
+    updateModelBadge(`loaded • ${obj.total} ex • ${(str.length/1024).toFixed(1)} KB`);
+    return {loaded:true, total: obj.total, size: str.length};
+  } catch (e) {
+    dbg('loadModelLS error: ' + (e && e.message || e));
+    updateModelBadge('load failed');
+    return {loaded:false, msg: e && e.message};
+  }
+}
+
+function updateModelBadge(text){
+  const el = document.getElementById('modelBadge');
+  if (el) el.textContent = text;
+}
+
+// Auto-save throttle: if dataset changes size, save after 1s
+let lastSaveTotal = 0;
+function getTotalExamples(){
+  try{
+    const ds = classifier.getClassifierDataset();
+    if(!ds) return 0;
+    let tot=0; Object.values(ds).forEach(t=> tot += t.shape[0]);
+    return tot;
+  }catch(_){ return 0; }
+}
+async function autoSaveTick(){
+  try{
+    const tot = getTotalExamples();
+    if(tot && tot !== lastSaveTotal){
+      const r = saveModelLS();
+      if(r.saved){ lastSaveTotal = r.total || tot; }
+    }
+  }finally{
+    setTimeout(autoSaveTick, 1500);
+  }
+}
+
+// Load on startup (after models are ready); if loaded -> set lastSaveTotal so we don't resave immediately.
+window.addEventListener('DOMContentLoaded', ()=>{
+  // defer a bit to let classifier exist
+  setTimeout(async ()=>{
+    try{
+      if (typeof classifier !== 'undefined'){
+        const r = await loadModelLS();
+        if(r.loaded){ lastSaveTotal = r.total || 0; }
+        autoSaveTick();
+      }
+    }catch(e){ dbg('persist init error: '+(e&&e.message||e)); }
+  }, 800);
+});
+// ======== END PERSIST ========
+
+</script>
+
+<dialog id="camDlg" style="border:none;border-radius:16px;padding:0;overflow:hidden;max-width:96vw">
+  <div style="background:#0b1428;color:#eaf1ff;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.12);display:flex;justify-content:space-between;align-items:center">
+    <b>מצלמה</b>
+    <button id="camClose" class="btn secondary">סגור</button>
+  </div>
+  <div style="background:#000;display:flex;justify-content:center;align-items:center">
+    <video id="camVideo" autoplay playsinline style="max-width:96vw;max-height:60vh"></video>
+  </div>
+  <div style="background:#0b1428;color:#eaf1ff;padding:10px;display:flex;gap:10px;justify-content:center;border-top:1px solid rgba(255,255,255,.12)">
+    <button id="camSnap" class="btn good">צלם</button>
+  </div>
+</dialog>
+
+
+<div style="position:fixed;inset-inline-end:10px;inset-block-end:10px;display:flex;gap:8px;z-index:30">
+  <button id="btnSaveModelNow" class="btn secondary" style="opacity:.85">שמור מודל</button>
+  <button id="btnClearModelLS" class="btn danger" style="opacity:.85">איפוס מודל</button>
+</div>
+<script>
+document.addEventListener('click',(e)=>{
+  if(e.target && e.target.id==='btnSaveModelNow'){ saveModelLS(); }
+  if(e.target && e.target.id==='btnClearModelLS'){
+    localStorage.removeItem(MODEL_LS_KEY);
+    updateModelBadge('model: cleared');
+  }
+});
+</script>
+
+<script>
+// ------- Patch: robust player names + rendering -------
+function safeName(x, idx){
+  const t = (x||'').toString().trim();
+  return t ? t : ('שחקן ' + (idx+1));
+}
+function fmtScore(n){ try{ return (n|0).toString(); }catch(_){ return '0'; } }
+
+// Override startGame to normalize names and persist
+if (typeof startGame === 'function'){
+  const _origStartGame = startGame;
+  startGame = function(){
+    try{
+      if(Array.isArray(players)){
+        players = players.map((p,i)=>({ name: safeName(p && p.name, i), score: (p && p.score|0)||0 }));
+        localStorage.setItem('rummi_players', JSON.stringify(players));
+      }
+    }catch(_){}
+    _origStartGame();
+    renderBoard(); // ensure UI refresh
+  }
+}
+
+// Read players from LS on load
+window.addEventListener('DOMContentLoaded', ()=>{
+  try{
+    const s = localStorage.getItem('rummi_players');
+    if(s){
+      const arr = JSON.parse(s);
+      if(Array.isArray(arr) && arr.length){
+        players = arr.map((p,i)=>({ name: safeName(p && p.name, i), score: (p && p.score|0)||0 }));
       }
     }
-  });
-}
-function bump(index, delta){
-  players[index].score += delta;
-  $$('#sc_'+index).textContent = players[index].score;
-  localStorage.setItem('rk_players', JSON.stringify(players));
-}
-
-// ====== אתחול שמות וניקוד ======
-loadNames();
-saveNames();
-renderBoard();
-
-on($$('#btnSaveNames'),'click',()=>{ saveNames(); renderBoard(); });
-on($$('#btnStart'),'click',()=>{ saveNames(); renderBoard(); });
-on($$('#btnResetScores'),'click',()=>{
-  players.forEach(p=>p.score=0); renderBoard();
-  localStorage.setItem('rk_players', JSON.stringify(players));
+  }catch(_){}
+  if(typeof renderBoard === 'function') setTimeout(renderBoard, 200);
 });
 
-// ====== מודול אימון (MobileNet+KNN) – כמו בגרסה הבסיסית, ללא שינוי מהותי ======
-let net, classifier;
-let totalExamples = 0;
-
-// הכרחת CPU – לביציבות במובייל
-(async ()=>{
+// Override renderBoard safely
+window.renderBoard = function(){
   try{
-    await tf.setBackend('cpu');
-  }catch(e){}
-  $$('#tfBadge').textContent = 'TF: ' + tf.getBackend();
+    const tbody = document.getElementById('playersTbody') || document.querySelector('[data-players-tbody]');
+    if(!tbody || !Array.isArray(players)) return;
+    tbody.innerHTML = players.map((p, i)=>{
+      const name = safeName(p.name, i);
+      const score = fmtScore(p.score||0);
+      return `
+      <tr>
+        <td class="idx">${i+1}</td>
+        <td class="name">${name}</td>
+        <td class="score" id="score_${i}">${score}</td>
+        <td class="actions">
+          <button class="btn add10" data-idx="${i}" data-delta="10">+10</button>
+          <button class="btn sub10" data-idx="${i}" data-delta="-10">-10</button>
+          <div class="adder">
+            <input type="number" inputmode="numeric" class="narrow" id="add_${i}" placeholder="ערך">
+            <button class="btn doadd" data-idx="${i}">הוסף/י</button>
+          </div>
+          <button class="btn cam" data-cam="${i}">📷</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }catch(e){ console.log('renderBoard error', e); }
+};
+
+// Actions delegation
+document.addEventListener('click', (e)=>{
+  const t = e.target;
+  if(t.matches('.doadd')){
+    const i = parseInt(t.dataset.idx,10);
+    const el = document.getElementById('add_'+i);
+    const val = parseInt(el && el.value, 10) || 0;
+    if(players[i]){ players[i].score = (players[i].score|0) + val; }
+    localStorage.setItem('rummi_players', JSON.stringify(players));
+    renderBoard();
+  }
+  if(t.matches('.add10, .sub10')){
+    const i = parseInt(t.dataset.idx,10);
+    const d = parseInt(t.dataset.delta,10);
+    if(players[i]){ players[i].score = (players[i].score|0) + d; }
+    localStorage.setItem('rummi_players', JSON.stringify(players));
+    renderBoard();
+  }
+  if(t.matches('.cam')){
+    const i = parseInt(t.dataset.cam,10);
+    if(!players[i]){ alert('לא נמצא שחקן לצילום'); return; }
+    if(typeof openCamForPlayer === 'function'){ openCamForPlayer(i); }
+  }
+});
+</script>
+
+
+<script>
+// ---- v2.65 players name hardening ----
+function ensurePlayers(min=2){
+  if(!Array.isArray(window.players)) window.players = [];
+  // normalize
+  window.players = window.players.map((p,i)=>({
+    name: (p && (''+p.name).trim()) || ('שחקן ' + (i+1)),
+    score: (p && (p.score|0)) || 0
+  }));
+  while(window.players.length < min){
+    const i = window.players.length;
+    window.players.push({ name: 'שחקן ' + (i+1), score: 0 });
+  }
+  try{ localStorage.setItem('rummi_players', JSON.stringify(window.players)); }catch(_){}
+}
+window.addEventListener('DOMContentLoaded', ()=>{
+  try{
+    const s = localStorage.getItem('rummi_players');
+    if(s){
+      const arr = JSON.parse(s);
+      if(Array.isArray(arr)) window.players = arr;
+    }
+  }catch(_){}
+  ensurePlayers(2);
+  if(typeof renderBoard==='function') setTimeout(renderBoard, 50);
+});
+
+// Hook any start-game button to also ensure players are valid
+document.addEventListener('click', (e)=>{
+  if(e.target && e.target.matches('[data-start-game],#btnStartGame')){
+    ensurePlayers(2);
+    if(typeof renderBoard==='function') renderBoard();
+  }
+});
+</script>
+
+
+<script>
+// ===== v2.66 players mount hardening =====
+(function(){
+  const heb = {
+    boardTitle: 'לוח הובלה',
+    idx: '#',
+    name: 'שם',
+    points: 'נקודות',
+    actions: 'פעולות',
+    add10: '+10',
+    sub10: '-10',
+    add: 'הוספ/י',
+    value: 'ערך',
+  };
+  function ensurePlayers(min=2){
+    if(!Array.isArray(window.players)) window.players = [];
+    window.players = window.players.map((p,i)=>({
+      name: (p && (''+p.name).trim()) || ('שחקן ' + (i+1)),
+      score: (p && (p.score|0)) || 0
+    }));
+    while(window.players.length < min){
+      const i = window.players.length;
+      window.players.push({ name: 'שחקן ' + (i+1), score: 0 });
+    }
+    try{ localStorage.setItem('rummi_players', JSON.stringify(window.players)); }catch(_){}
+  }
+  function mountTable(){
+    let root = document.querySelector('[data-players-root]');
+    if(!root){
+      // try to find existing leaderboard container
+      root = document.getElementById('playersRoot');
+    }
+    if(!root){
+      // create compact board near top if not found
+      const host = document.createElement('section');
+      host.setAttribute('dir','rtl');
+      host.style.margin="12px 0";
+      host.innerHTML = `
+        <div class="card" style="padding:12px;border-radius:10px;background:#0e1726;border:1px solid #223;box-shadow:0 2px 6px rgba(0,0,0,.3)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h3 style="margin:0;font-size:18px">${heb.boardTitle}</h3>
+          </div>
+          <div class="tableWrap" style="overflow:auto">
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:right;padding:6px">${heb.idx}</th>
+                  <th style="text-align:right;padding:6px">${heb.name}</th>
+                  <th style="text-align:right;padding:6px">${heb.points}</th>
+                  <th style="text-align:right;padding:6px">${heb.actions}</th>
+                </tr>
+              </thead>
+              <tbody id="playersTbody" data-players-tbody></tbody>
+            </table>
+          </div>
+        </div>`;
+      document.body.insertBefore(host, document.body.firstChild.nextSibling);
+    }
+  }
+  function renderBoard(){
+    ensurePlayers(2);
+    mountTable();
+    const tbody = document.getElementById('playersTbody') || document.querySelector('[data-players-tbody]');
+    if(!tbody) return;
+    const rows = window.players.map((p,i)=>{
+      const name = (p && (''+p.name).trim()) || ('שחקן ' + (i+1));
+      const score = (p && (p.score|0)) || 0;
+      return `<tr>
+        <td style="padding:6px">${i+1}</td>
+        <td style="padding:6px">${name}</td>
+        <td style="padding:6px" id="score_${i}">${score}</td>
+        <td style="padding:6px;display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn small delta" data-idx="${i}" data-delta="10">${heb.add10}</button>
+          <button class="btn small delta" data-idx="${i}" data-delta="-10">${heb.sub10}</button>
+          <input type="number" inputmode="numeric" class="narrow" id="add_${i}" placeholder="${heb.value}" style="width:70px">
+          <button class="btn small doadd" data-idx="${i}">${heb.add}</button>
+          <button class="btn small cam" data-cam="${i}">📷</button>
+        </td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = rows;
+  }
+  window.renderBoard = renderBoard;
+  window.addEventListener('DOMContentLoaded', ()=>{
+    // attempt load from LS
+    try{
+      const s = localStorage.getItem('rummi_players');
+      if(s){
+        const arr = JSON.parse(s);
+        if(Array.isArray(arr)) window.players = arr;
+      }
+    }catch(_){}
+    renderBoard();
+  });
+  document.addEventListener('click', (e)=>{
+    const t = e.target;
+    if(t.matches('.delta')){
+      const i = parseInt(t.dataset.idx,10), d = parseInt(t.dataset.delta,10);
+      if(window.players[i]) window.players[i].score = (window.players[i].score|0) + d;
+      try{ localStorage.setItem('rummi_players', JSON.stringify(window.players)); }catch(_){}
+      renderBoard();
+    }else if(t.matches('.doadd')){
+      const i = parseInt(t.dataset.idx,10);
+      const el = document.getElementById('add_'+i);
+      const v = parseInt(el && el.value, 10) || 0;
+      if(window.players[i]) window.players[i].score = (window.players[i].score|0) + v;
+      try{ localStorage.setItem('rummi_players', JSON.stringify(window.players)); }catch(_){}
+      renderBoard();
+    }else if(t.matches('.cam')){
+      const i = parseInt(t.dataset.cam,10);
+      if(window.openCamForPlayer) window.openCamForPlayer(i);
+      else alert('צילום זמין ממשחק');
+    }
+  });
 })();
+</script>
 
-async function ensureModels(){
-  if(net && classifier) return;
-  log('loading mobilenet/knn...');
-  classifier = knnClassifier.create();
-  net = await mobilenet.load();
-  log('models loaded');
-  $$('#modelBadge').textContent = 'model: ready';
-}
 
-function imgToTensor(file){
-  return new Promise((resolve,reject)=>{
-    const img = new Image();
-    img.onload=()=>{
-      const t = tf.tidy(()=>tf.browser.fromPixels(img).toFloat());
-      resolve({img, tensor:t});
+<!-- ===== v3.1: Model Export/Import (JSON) ===== -->
+<style>
+  .backup-bar{position:fixed;right:12px;bottom:12px;z-index:9999;display:flex;gap:8px;flex-wrap:wrap}
+  .backup-bar .btn{padding:8px 12px;border-radius:10px;border:1px solid #2a2f3a;background:#0f1a2b;color:#cfe9ff}
+  .backup-bar .btn:active{transform:scale(0.98)}
+</style>
+<div class="backup-bar" dir="rtl">
+  <button id="btnExportJSON" class="btn">ייצא JSON</button>
+  <button id="btnImportJSON" class="btn">ייבא JSON</button>
+  <input type="file" id="fileImportJSON" accept="application/json" style="display:none">
+</div>
+<script>
+// Expect global: tf, mobilenet, knnClassifier, classifier, net
+// The code tries to reuse existing classifier; if missing, it creates an empty one.
+(function(){
+  function ensureClassifier(){
+    if(!window.classifier){
+      try{ window.classifier = knnClassifier.create(); }catch(_){}
+    }
+    return window.classifier;
+  }
+  function downloadText(text, filename){
+    const blob = new Blob([text], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename || 'rummi_model.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 250);
+  }
+  function exportJSON(){
+    try{
+      const cls = ensureClassifier();
+      if(!cls){ alert('Classifier not ready'); return; }
+      const ds = cls.getClassifierDataset();
+      const json = {};
+      Object.keys(ds).forEach(k=>{
+        // Convert each tensor to array
+        json[k] = Array.from(ds[k].dataSync());
+        json[k+'_shape'] = ds[k].shape;
+      });
+      // Optional labels map if you keep names separately
+      if(window.classNames) json['__classNames'] = window.classNames;
+      const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+      downloadText(JSON.stringify(json), `rummi_model_${stamp}.json`);
+    }catch(err){
+      console.error(err);
+      alert('ייצוא נכשל: '+err.message);
+    }
+  }
+  async function importJSON(file){
+    try{
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const cls = ensureClassifier();
+      const tensors = {};
+      Object.keys(json).forEach(k=>{
+        if(k.endsWith('_shape')) return;
+        const shape = json[k+'_shape'];
+        const data = json[k];
+        tensors[k] = tf.tensor(data, shape);
+      });
+      cls.setClassifierDataset(tensors);
+      if(json['__classNames']) window.classNames = json['__classNames'];
+      // Persist in localStorage too (for your existing auto-restore)
+      try{ localStorage.setItem('rummi_model_json', text); }catch(_){}
+      // Show small badge of dataset size
+      const keys = Object.keys(tensors);
+      const total = keys.reduce((s,k)=> s + (tensors[k].shape ? tensors[k].shape[0] : 0), 0);
+      const badge = document.querySelector('#modelBadge') || (function(){
+        const b = document.createElement('div');
+        b.id = 'modelBadge';
+        b.style.position='fixed'; b.style.left='12px'; b.style.bottom='12px';
+        b.style.padding='6px 10px'; b.style.background='#113'; b.style.border='1px solid #2a2f3a';
+        b.style.borderRadius='10px'; b.style.color='#cfe9ff'; b.style.zIndex=9999;
+        document.body.appendChild(b); return b;
+      })();
+      badge.textContent = 'model: restored • ' + (text.length/1024).toFixed(1) + ' KB • vectors: ' + total;
+      console.log('model restored from JSON. vectors:', total);
+    }catch(err){
+      console.error(err);
+      alert('ייבוא נכשל: '+err.message);
+    }
+  }
+  document.addEventListener('click', (e)=>{
+    if(e.target.id==='btnExportJSON') exportJSON();
+    if(e.target.id==='btnImportJSON') document.getElementById('fileImportJSON').click();
+  });
+  document.getElementById('fileImportJSON').addEventListener('change', (ev)=>{
+    const f = ev.target.files && ev.target.files[0]; if(!f) return;
+    importJSON(f);
+    ev.target.value='';
+  });
+})();
+</script>
+
+
+<script>
+// === v4.5 leaderboard overlay (does NOT modify trainer code) ===
+(function(){
+  const nameIds = ['p1','p2','p3','p4'];
+  const LS = 'rummi_state_v45';
+  let players = [];
+
+  function sanitizeName(v,i){ v=(v||'').trim(); return v? v : `שחקנ/ית ${i+1}`; }
+  function loadState(){
+    try{ const raw = localStorage.getItem(LS); if(raw){ const s = JSON.parse(raw); if(Array.isArray(s.players)) return s.players; } }catch(_){}
+    return [{name:'שחקנ/ית 1',score:0},{name:'שחקנ/ית 2',score:0}];
+  }
+  function saveState(){ try{ localStorage.setItem(LS, JSON.stringify({players})); }catch(_){ } }
+
+  function renderInputs(){
+    const host = document.getElementById('rbInputs'); if(!host) return;
+    host.innerHTML = '';
+    for(let i=0;i<4;i++){
+      const wrap = document.createElement('div');
+      wrap.className = 'rummi-inline';
+      const idx = document.createElement('div'); idx.className='rummi-pill'; idx.textContent = (i+1);
+      const inp = document.createElement('input'); inp.className='rummi-inp'; inp.placeholder = i<2?'חובה':'אופציונלי';
+      inp.value = players[i]?.name || '';
+      inp.id = 'rbName_'+i;
+      wrap.append(idx, inp);
+      host.appendChild(wrap);
+    }
+  }
+
+  function changeScore(i,delta){
+    if(!players[i]) return;
+    players[i].score = (players[i].score|0) + (delta|0);
+    saveState(); renderBoard();
+  }
+
+  async function captureAndClassify(i){
+    // use global 'classifier' and 'net' provided by the existing trainer code
+    if(typeof classifier==='undefined' || typeof net==='undefined'){
+      alert('המודל לא מוכן. נא לאמן או לשחזר מודל במודול האימון.');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type='file'; input.accept='image/*'; input.capture='environment';
+    input.onchange = async ()=>{
+      const f = input.files && input.files[0]; if(!f) return;
+      const img = new Image(); img.src = URL.createObjectURL(f);
+      await new Promise(r=> img.onload=r);
+      try{
+        const feat = net.infer(img, 'conv_preds');
+        const res = await classifier.predictClass(feat, 3);
+        const label = res && res.label;
+        const conf = res && res.confidences && Math.max(...Object.values(res.confidences)) || 0;
+        if(label!=null){
+          const val = parseInt(label,10) || 0;
+          players[i].score = (players[i].score|0) + val;
+          saveState(); renderBoard();
+          alert(`זוהתה קובייה ${val} (${(conf*100).toFixed(0)}%) והתווספה לשחקנ/ית ${players[i].name}`);
+        }else{
+          alert('לא זוהתה קובייה.');
+        }
+      }catch(e){
+        alert('שגיאה בזיהוי: '+(e && e.message || e));
+      }finally{
+        URL.revokeObjectURL(img.src);
+      }
     };
-    img.onerror=reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-async function addExample(file, classId){
-  await ensureModels();
-  const {img, tensor} = await imgToTensor(file);
-  const activation = net.infer(img, true);
-  classifier.addExample(activation, classId);
-  activation.dispose(); tensor.dispose();
-  totalExamples++;
-  $$('#examplesBadge').textContent = 'דוגמאות: ' + totalExamples;
-}
-
-async function handleFiles(files, classId){
-  if(!files || files.length===0) return;
-  for(const f of files){
-    await addExample(f, classId);
+    input.click();
   }
-  $$('#statusSpan').textContent = `נוספו ${files.length} דוגמאות למחלקה ${classId}`;
-}
 
-on($$('#filePick'),'change',e=>{
-  const classId = parseInt($$('#classId').value,10)||1;
-  handleFiles(e.target.files, classId);
-});
-on($$('#filePickCam'),'change',e=>{
-  const classId = parseInt($$('#classId').value,10)||1;
-  handleFiles(e.target.files, classId);
-});
-
-// ניהול מודל (ייצוא/ייבוא/שמירה מקומית)
-function exportJSON(){
-  if(!classifier){ alert('אין מודל טעון'); return; }
-  const dataset = classifier.getClassifierDataset();
-  const dataObj = {};
-  Object.keys(dataset).forEach(key=>{
-    const data = dataset[key].dataSync();
-    dataObj[key] = Array.from(data);
-  });
-  const json = JSON.stringify({dataObj, shape: dataset[Object.keys(dataset)[0]]?.shape || []});
-  const blob = new Blob([json], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'rk_model.json';
-  a.click();
-}
-on($$('#btnExportJSON'),'click', exportJSON);
-
-on($$('#jsonIn'),'change',async e=>{
-  const file = e.target.files?.[0]; if(!file) return;
-  const text = await file.text();
-  restoreFromJSON(text,true);
-});
-
-function restoreFromJSON(text, show=true){
-  try{
-    const obj = JSON.parse(text);
-    classifier = knnClassifier.create();
-    const dataset = {};
-    Object.keys(obj.dataObj).forEach(key=>{
-      const tensor = tf.tensor(obj.dataObj[key], obj.shape);
-      dataset[key] = tensor;
+  function renderBoard(){
+    const host = document.getElementById('rbGrid'); if(!host) return;
+    host.innerHTML='';
+    players.forEach((p,i)=>{
+      const idx = document.createElement('div'); idx.className='rummi-pill'; idx.textContent=String(i+1);
+      const name= document.createElement('div'); name.className='rummi-pill'; name.textContent=p.name;
+      const score=document.createElement('div'); score.className='rummi-pill'; score.textContent='נקודות: '+p.score;
+      const actions=document.createElement('div'); actions.className='rummi-inline';
+      const plus = document.createElement('button'); plus.className='rummi-btn'; plus.textContent='+10'; plus.onclick=()=>changeScore(i,10);
+      const minus= document.createElement('button'); minus.className='rummi-btn danger'; minus.textContent='-10'; minus.onclick=()=>changeScore(i,-10);
+      const inp  = document.createElement('input'); inp.className='rummi-inp'; inp.type='number'; inp.placeholder='ערך';
+      const add  = document.createElement('button'); add.className='rummi-btn'; add.textContent='הוסף'; add.onclick=()=>{ const v=parseInt(inp.value||'0',10); if(v){ changeScore(i,v); inp.value=''; } };
+      const cam  = document.createElement('button'); cam.className='rummi-btn'; cam.textContent='📷'; cam.onclick = ()=>captureAndClassify(i);
+      actions.append(plus,minus,inp,add,cam);
+      host.append(idx,name,score,actions);
     });
-    classifier.setClassifierDataset(dataset);
-    const vectors = Object.values(dataset).reduce((a,t)=>a+(t.shape?.[0]||0),0);
-    totalExamples = vectors;
-    $$('#examplesBadge').textContent = 'דוגמאות: ' + totalExamples;
-    if(show) log('✅ model restored from JSON');
-    $$('#modelBadge').textContent = 'model: restored';
-  }catch(err){
-    log('ERR restore: '+err.message);
-    alert('ייבוא נכשל');
   }
-}
 
-// שמירה/שחזור ל-localStorage
-on($$('#btnSaveModel'),'click',()=>{
-  if(!classifier){ alert('אין מודל'); return; }
-  const dataset = classifier.getClassifierDataset();
-  const dataObj = {};
-  Object.keys(dataset).forEach(key=> dataObj[key] = Array.from(dataset[key].dataSync()));
-  const payload = JSON.stringify({dataObj, shape: dataset[Object.keys(dataset)[0]]?.shape || []});
-  localStorage.setItem('rk_model', payload);
-  const bytes = new Blob([payload]).size;
-  log(`💾 נשמר מקומית • ~${(bytes/1024).toFixed(1)} KB`);
-  $$('#modelBadge').textContent = 'model: saved';
-});
+  function applyNames(){
+    const names = [];
+    for(let i=0;i<4;i++){ const el=document.getElementById('rbName_'+i); names.push(sanitizeName(el && el.value, i)); }
+    if(players.length===0){
+      players = names.filter((n,idx)=> (idx<2 || (n && n.trim()))).map(n=>({name:n, score:0}));
+    }else{
+      players.forEach((p,i)=>{ if(names[i]) p.name = names[i]; });
+    }
+    saveState(); renderBoard();
+  }
 
-on($$('#btnLoadModel'),'click',()=>{
-  const payload = localStorage.getItem('rk_model');
-  if(!payload){ alert('לא נמצא מודל'); return; }
-  restoreFromJSON(payload,false);
-  const bytes = new Blob([payload]).size;
-  log(`📦 שוחזר מקומית • ${(bytes/1024).toFixed(1)} KB`);
-  $$('#modelBadge').textContent = 'model: restored';
-});
+  // Deduplicate: hide legacy boards not inside our container (do not touch trainer)
+  function isInsideBoard(el){
+    while(el){ if(el.id==='rummiBoard') return true; el = el.parentElement; }
+    return false;
+  }
+  function dedupeBoards(){
+    document.querySelectorAll('#scoreBoard, .leaderboard, section').forEach(el=>{
+      if( /לוח הובלה/.test(el.textContent||'') && !isInsideBoard(el) ){
+        el.classList.add('rummi-hide');
+      }
+    });
+  }
 
-on($$('#btnNukeExamples'),'click',()=>{
-  classifier = knnClassifier.create();
-  totalExamples = 0;
-  $$('#examplesBadge').textContent = 'דוגמאות: —';
-  log('🧹 נוקה.');
-});
+  // init
+  players = loadState();
+  renderInputs(); renderBoard();
+  document.getElementById('rbSaveNames').addEventListener('click', applyNames);
+  document.getElementById('rbReset').addEventListener('click', ()=>{ players.forEach(p=>p.score=0); saveState(); renderBoard(); });
 
-// אתחול ראשוני
-(async function init(){
-  $$('#verBadge').textContent = VERSION;
-  try{
-    await ensureModels();
-    $$('#modelBadge').textContent = 'model: ready';
-    // נסיון לשחזר אוטומטית
-    const payload = localStorage.getItem('rk_model');
-    if(payload){ restoreFromJSON(payload,false); log('auto-restore: ok'); }
-  }catch(err){
-    log('init error: '+err.message);
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', dedupeBoards);
+  } else {
+    dedupeBoards();
   }
 })();
 </script>
+
 </body>
 </html>
