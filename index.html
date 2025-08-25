@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – מצב משחק (v2.50-ml)</title>
+<title>רמיקוב – מצב משחק (v2.53-ml)</title>
 <meta name="theme-color" content="#0e1220">
 <style>
   :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--accent:#63c9ff}
@@ -26,12 +26,12 @@
   <div class="appbar-inner">
     <div class="row">
       <div style="font-weight:800">רמיקוב – מצב משחק</div>
-      <div class="badge">v2.50-ml</div>
+      <div class="badge">v2.53-ml</div>
       <div id="tfBadge" class="badge">TF: init</div>
     </div>
     <div class="row">
       <span class="mini">כתובת:</span>
-      <span id="pageUrl" class="badge" style="background:#0b152a;border-color:#27415f">https://shacharshorjs-creator.github.io/Remmikub/?v=250</span>
+      <span id="pageUrl" class="badge" style="background:#0b152a;border-color:#27415f">https://shacharshorjs-creator.github.io/Remmikub/?v=253</span>
       <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
     </div>
   </div>
@@ -79,19 +79,19 @@
   }
 
   // TF init (CPU)
-  try{
+  try{ 
     await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js','tfjs');
     await tf.setBackend('cpu'); await tf.ready();
     setBadge('TF: '+tf.getBackend()); log('backend forced: '+tf.getBackend()+' (ready)');
   }catch(e){ log('TF init error: '+(e&&e.message||e)); return; }
 
   // Models
-  try{
+  try{ 
     await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0','mobilenet');
     await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2','knn-classifier');
   }catch(e){ log('Models load error: '+(e&&e.message||e)); return; }
 
-  const classifier = knn-classifier.create ? knn-classifier.create() : knnClassifier.create();
+  const classifier = knnClassifier.create();
   let mobilenetModel=null;
   async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2,alpha:0.35}); }
 
@@ -100,23 +100,15 @@
     const row=document.getElementById('countsRow'); if(row) row.textContent = keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')) : 'דוגמאות: —';
   }
 
-  async function fileToTensor(file){
-    // Prefer createImageBitmap on iOS/Chrome (אמין ומהיר יותר)
-    try{
-      if('createImageBitmap' in window){
-        const bmp = await createImageBitmap(file);
-        const t = tf.browser.fromPixels(bmp);
-        return t;
-      }
-    }catch(e){ log('createImageBitmap fail: '+(e&&e.message||e)); }
-    // Fallback via <img>
-    return await new Promise((res,rej)=>{
-      const url = URL.createObjectURL(file);
-      const im = new Image(); im.onload=()=>{ URL.revokeObjectURL(url); res(tf.browser.fromPixels(im)); };
-      im.onerror=(ev)=>{ URL.revokeObjectURL(url); rej(new Error('image load error')); };
-      im.src=url;
-    });
+  // Decode helpers (createImageBitmap → <img> fallback)
+  async function fileToImageSource(file){
+    const info = file.type+' '+Math.round(file.size/1024)+'KB';
+    log('picked: '+file.name+' ['+info+']');
+    try{ if('createImageBitmap' in window){ const bmp = await createImageBitmap(file); log('decoded with createImageBitmap: '+file.name+' ('+bmp.width+'x'+bmp.height+')'); return {kind:'bitmap', bmp}; } }
+    catch(e){ log('createImageBitmap fail: '+(e&&e.message||e)); }
+    return await new Promise((res,rej)=>{ const url=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{ URL.revokeObjectURL(url); log('decoded with <img>: '+file.name+' ('+im.width+'x'+im.height+')'); res({kind:'img', im}); }; im.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('image load error')); }; im.src=url; });
   }
+  async function sourceToTensor(src){ if(src.kind==='bitmap') return tf.browser.fromPixels(src.bmp); if(src.kind==='img') return tf.browser.fromPixels(src.im); throw new Error('unknown source'); }
 
   const busy = new Set();
   function bindPicker(id){
@@ -133,18 +125,18 @@
         let ok=0,fail=0;
         for(const f of arr){
           try{
-            log('process '+f.name+' ('+Math.round(f.size/1024)+'KB, '+f.type+')');
-            const px = await fileToTensor(f); // shape [h,w,3]
+            const src = await fileToImageSource(f);
+            const px = await sourceToTensor(src);
+            log('tensor shape: '+px.shape.join('x'));
             const emb = tf.tidy(()=> mobilenetModel.infer(px.expandDims(0),'conv_preds'));
             classifier.addExample(emb, clsSel.value); emb.dispose(); px.dispose(); ok++;
             const s=document.getElementById('status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')';
+            log('✅ example added to class '+clsSel.value);
           }catch(err){ fail++; log('ERR '+(err&&err.message||err)); }
           prog.value = ok+fail; await tf.nextFrame();
         }
         updateCounts();
-      }finally{
-        const clone=el.cloneNode(true); el.parentNode.replaceChild(clone, el); bindPicker(id); busy.delete(el);
-      }
+      }finally{ const clone=el.cloneNode(true); el.parentNode.replaceChild(clone, el); bindPicker(id); busy.delete(el); }
     }, false);
   }
   bindPicker('filePick'); bindPicker('filePickOne'); bindPicker('filePickCam');
