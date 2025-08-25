@@ -49,7 +49,7 @@
 <div class="wrap" id="app">
   <div class="row" style="justify-content:space-between;align-items:center">
     <div class="flex">
-      <small class="tag" id="verBadge">v5.3</small>
+      <small class="tag" id="verBadge">v5.0-ml</small>
       <small class="tag" id="tfBadge">TF: init</small>
       <small class="tag" id="modelBadge">model: —</small>
       <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -99,6 +99,7 @@
       <label class="hint">בחר/י מחלקה (מספר):</label>
       <input id="classId" type="number" min="1" max="4" value="1" style="width:5rem"/>
       <button class="btn inline" id="btnNukeExamples">נקה הכל</button>
+      <button class="btn inline" id="btnInitModel">אתחל מודל</button>
       <button class="btn inline" id="btnSaveModel">שמור מודל</button>
       <button class="btn inline" id="btnLoadModel">שחזר מודל</button>
       <button class="btn inline" id="btnExportJSON">JSON ייצא</button>
@@ -126,7 +127,7 @@
 
   <div class="footer row" style="justify-content:space-between">
     <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-    <div class="muted">© v5.3</div>
+    <div class="muted">© v5.0-ml</div>
   </div>
 </div>
 
@@ -136,7 +137,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 
 <script>
-const VERSION = 'v5.3';
+const VERSION = 'v5.0-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -174,7 +175,6 @@ function renderBoard(){
         <label class="btn cam nowrap">📷
           <input class="snap" type="file" accept="image/*" capture="environment" hidden>
         </label>
-        <div class="detected" id="det_${idx}" style="font-size:12px;opacity:.8;margin-top:4px;min-height:18px"></div>
       </div>`;
     holder.appendChild(row);
     // אירועים
@@ -186,35 +186,9 @@ function renderBoard(){
       if(!isNaN(v)) bump(idx, v);
     };
     labelCam.querySelector('input.snap').onchange = async (e)=>{
-      try{
-        const el = row.querySelector('#det_'+idx);
-        if(!e.target.files?.length){ el.textContent=''; return; }
-        const file = e.target.files[0];
-        // תצוגה מקדימה
-        const url = URL.createObjectURL(file);
-        el.innerHTML = `<span>⏳ מזהה...</span>`;
-        // ודא שהמודלים נטענו (ללא שינוי במודול האימון)
-        await ensureModels();
-        // טען לתג תמונה
-        const img = new Image();
-        img.onload = async ()=>{
-          try{
-            const logits = net.infer(img, 'conv_preds');
-            const res = await classifier.predictClass(logits);
-            const label = res.label ?? res.classIndex ?? '?';
-            const conf = (res.confidences? Math.max(...Object.values(res.confidences)) : res.confidence)||0;
-            el.innerHTML = `<img src="${url}" style="height:22px;vertical-align:middle;border-radius:3px;margin-inline-end:6px">`+
-                           `זוהתה קובייה: <b>${label}</b> · אמון ${(conf*100).toFixed(0)}%`;
-          }catch(err){
-            el.textContent = 'שגיאת חיזוי: '+(err.message||err);
-          }finally{
-            URL.revokeObjectURL(url);
-          }
-        };
-        img.onerror = ()=>{ el.textContent='לא ניתן לטעון תמונה'; URL.revokeObjectURL(url); };
-        img.src = url;
-      }catch(err){
-        log('snap classify error: '+(err.message||err));
+      // תמונת שחקן -> כרגע רק מציגה חיווי; (המודל נשאר מודול אימון למטה).
+      if(e.target.files?.length){
+        log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
       }
     }
   });
@@ -369,6 +343,16 @@ on($$('#btnNukeExamples'),'click',()=>{
   totalExamples = 0;
   $$('#examplesBadge').textContent = 'דוגמאות: —';
   log('🧹 נוקה.');
+});
+
+on($$('#btnInitModel'),'click',()=>{
+  // Initialize model: wipe in-memory KNN and clear saved model
+  classifier = knnClassifier.create();
+  totalExamples = 0;
+  $$('#examplesBadge').textContent = 'דוגמאות: —';
+  localStorage.removeItem('rk_model'); // forget saved model
+  $$('#modelBadge').textContent = 'model: initialized';
+  log('♻️ אתחול מודל: הדאטה נוקה וה־localStorage הוסר');
 });
 
 // אתחול ראשוני
