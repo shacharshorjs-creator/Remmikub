@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.9-ml</small>
+<small class="tag" id="verBadge">v5.6-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.9-ml</div>
+<div class="muted">© v5.6-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.9-ml';
+const VERSION = 'v5.6-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -509,5 +509,86 @@ function awardPointsFromDetection(playerIdx, points) {
 }
 
 </script>
+
+<!-- v5.10-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<script>
+(function(){
+  // Helper: safe debug log
+  function dlog(msg){
+    try {
+      var dbg = document.getElementById('debug') || document.querySelector('.debug, #Debug');
+      if (!dbg) return;
+      var line = (dbg.value ?? dbg.textContent ?? '');
+      var add = String(msg);
+      if ('value' in dbg) dbg.value = (line ? line + '\n' : '') + add;
+      else dbg.textContent = (line ? line + '\n' : '') + add;
+      dbg.scrollTop = dbg.scrollHeight;
+    } catch(_) {}
+  }
+
+  // Try to find the UI row for a given player index
+  function getPlayerRow(idx){
+    // 1) Preferred: data attribute
+    var row = document.querySelector('[data-player-index="'+idx+'"]');
+    if (row) return row;
+    // 2) Common containers
+    var candidates = document.querySelectorAll('#players > * , .boardGrid > * , .board-row, .leaderboard-row, .player-row');
+    if (candidates && candidates.length){
+      // assume 4 columns per row -> try grouping by 4 (index*4 … index*4+3)
+      if (candidates.length >= (idx*4+1)) {
+        var groupStart = idx*4;
+        // wrap a div to represent the row if needed
+        var wrapper = document.createElement('div');
+        for (var i=groupStart;i<Math.min(groupStart+4, candidates.length);i++){
+          wrapper.appendChild(candidates[i].cloneNode(true));
+        }
+        return wrapper; // fallback (will still allow finding an input inside if structure matches)
+      }
+    }
+    // 3) As a last resort, take nth occurrence of a row-like block
+    var rows = document.querySelectorAll('.row, .grid, .line');
+    if (rows && rows[idx]) return rows[idx];
+    return null;
+  }
+
+  function fillDetectedValue(idx, val){
+    try{
+      if (!Number.isFinite(val)) return;
+      var row = getPlayerRow(idx);
+      // If wrapper fallback returned, we cannot set inside cloned nodes; so try a more direct search:
+      var input = (row && row.querySelector && row.querySelector('input[type="number"]')) ||
+                  document.querySelectorAll('input[type="number"]')[idx] ||
+                  document.querySelector('input[placeholder="ערך"]') ||
+                  document.querySelector('input[name="value"]') ||
+                  document.querySelector('input[data-role="value"]');
+      if (input){
+        input.value = val;
+        dlog('fill: idx='+idx+' val='+val+' -> set into value input');
+      } else {
+        dlog('fill: idx='+idx+' val='+val+' -> input not found');
+      }
+    }catch(err){
+      dlog('fill error: '+(err && err.message || err));
+    }
+  }
+
+  // If awardPointsFromDetection exists, wrap it to ALSO fill the input (without changing its behavior).
+  if (typeof window.awardPointsFromDetection === 'function'){
+    var __origAward = window.awardPointsFromDetection;
+    window.awardPointsFromDetection = function(idx, points){
+      // Fill the number box for manual confirmation if desired
+      try { fillDetectedValue(idx, Number(points)); } catch(_){}
+      // Preserve original behavior exactly
+      return __origAward.apply(this, arguments);
+    };
+    dlog('patch v5.10: wrapped awardPointsFromDetection to fill input');
+  } else {
+    // Expose a helper for your detection code to call explicitly:
+    window.__afterDetected_fillValue_v510 = fillDetectedValue;
+    dlog('patch v5.10: expose __afterDetected_fillValue_v510(idx,val)');
+  }
+})();
+</script>
+
 </body>
 </html>
