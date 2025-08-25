@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>רמיקוב – מצב משחק (v2.56-ml)</title>
+<meta name="theme-color" content="#0e1220">
+<style>
+  :root{--bg:#0e1220;--card:#151a2b;--ink:#eaf1ff;--muted:#9fb0c9;--line:rgba(255,255,255,.14);--accent:#63c9ff}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  .container{width:min(980px,94vw);margin:0 auto;padding:112px 0 120px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .badge{font-size:12px;padding:6px 10px;border-radius:999px;background:#0a1a2c;border:1px solid rgba(99,201,255,.4)}
+  .appbar{position:fixed;inset:0 0 auto 0;height:90px;background:rgba(8,12,24,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:10;display:flex;align-items:center}
+  .appbar-inner{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;justify-content:space-between}
+  .mini{font-size:12px;color:var(--muted)}
+  button{cursor:pointer;border:none;border-radius:12px;padding:8px 12px;background:#1c2741;color:#fff}
+  .danger{background:#3a1c1c;color:#ffd9d9;border:1px solid #5a2a2a}
+  progress{width:100%;height:10px}
+  .drop{position:relative;border:2px dashed #2d4068;border-radius:16px;padding:18px;text-align:center;background:#0c1529;cursor:pointer;overflow:hidden;user-select:none}
+  .drop.drag{background:#0e1b33;border-color:#4c75c9}
+  .drop input[type=file]{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer}
+  .gallery{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .thumb{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #2a3f64}
+</style>
+</head>
+<body>
+<div class="appbar">
+  <div class="appbar-inner">
+    <div class="row">
+      <div style="font-weight:800">רמיקוב – מצב משחק</div>
+      <div class="badge">v2.56-ml</div>
+      <div id="tfBadge" class="badge">TF: init</div>
+    </div>
+    <div class="row">
+      <span class="mini">כתובת:</span>
+      <span id="pageUrl" class="badge" style="background:#0b152a;border-color:#27415f">https://shacharshorjs-creator.github.io/Remmikub/?v=256</span>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('pageUrl').textContent)">📋 העתק</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <section class="card">
+    <h2 style="margin:0">אימון מודל זיהוי (CPU)</h2>
+    <div class="mini">upload/drag → embedding (MobileNet) → KNN</div>
+
+    <div class="row" style="gap:8px;margin-top:10px">
+      <label for="cls">בחר/י מחלקה</label>
+      <select id="cls">
+        <option value="none">בחר/י מספר</option>
+        <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option>
+      </select>
+      <button id="clearAll" class="danger">נקה הכל</button>
+    </div>
+
+    <div id="drop" class="drop" style="margin-top:12px">
+      גרור/י תמונות לכאן או הקלק/י לבחירה
+      <input id="upFile" type="file" accept="image/*,.heic,.heif,.jpg,.jpeg,.png" multiple aria-label="בחר/י תמונות להעלאה">
+    </div>
+    <div class="row" style="gap:8px;margin-top:8px;align-items:center">
+      <input id="upPlain" type="file" accept="image/*,.heic,.heif,.jpg,.jpeg,.png" multiple>
+      <button id="camBtn">📷 מצלמה</button>
+      <input id="upCam" type="file" accept="image/*,.heic,.heif,.jpg,.jpeg,.png" capture="environment" style="display:none">
+    </div>
+
+    <div id="countsRow" class="mini" style="margin-top:6px">דוגמאות: —</div>
+    <progress id="prog" max="1" value="0" style="margin-top:8px"></progress>
+
+    <div class="gallery" id="gallery"></div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="mini">Debug: <button onclick="navigator.clipboard.writeText(document.getElementById('dbgLog').textContent)">📋 העתק</button></div>
+      <pre id="dbgLog" style="white-space:pre-wrap;max-height:260px;overflow:auto;margin:0"></pre>
+    </div>
+    <div class="row"><span id="status" class="badge">אין מודל</span></div>
+  </section>
+</div>
+
+<script>
+(async function(){
+  const log=(m)=>{ const el=document.getElementById('dbgLog'); if(el){ el.textContent+=(el.textContent?'\n':'')+m; el.scrollTop=el.scrollHeight; } };
+  const setBadge=(txt)=>{ const b=document.getElementById('tfBadge'); if(b) b.textContent=txt; };
+  const gallery=document.getElementById('gallery');
+
+  window.addEventListener('error', (e)=>log('window error: '+(e && (e.message||e.filename+':'+e.lineno) || e)), true);
+
+  function loadScript(url, name){
+    return new Promise((res,rej)=>{
+      const s=document.createElement('script'); s.src=url; s.async=true;
+      s.onload=()=>{ log('loaded '+name+': '+url); res(true); };
+      s.onerror=()=>{ log('FAILED '+name+': '+url); rej(new Error('load fail '+name)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // TF init (CPU)
+  try{ 
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js','tfjs');
+    await tf.setBackend('cpu'); await tf.ready();
+    setBadge('TF: '+tf.getBackend()); log('backend forced: '+tf.getBackend()+' (ready)');
+  }catch(e){ log('TF init error: '+(e&&e.message||e)); return; }
+
+  // Models
+  try{ 
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0','mobilenet');
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2','knn-classifier');
+  }catch(e){ log('Models load error: '+(e&&e.message||e)); return; }
+
+  const classifier = knnClassifier.create();
+  let mobilenetModel=null;
+  async function ensureEmbedder(){ if(!mobilenetModel) mobilenetModel = await mobilenet.load({version:2,alpha:0.35}); }
+
+  function updateCounts(){
+    const ds = classifier.getClassifierDataset(); const keys=Object.keys(ds);
+    const row=document.getElementById('countsRow'); if(row) row.textContent = keys.length? ('דוגמאות: '+keys.map(k=>k+': '+(ds[k].shape[0]||0)).join(' | ')) : 'דוגמאות: —';
+  }
+
+  function addThumb(file){
+    try{ const url=URL.createObjectURL(file); const im=new Image(); im.src=url; im.className='thumb'; im.onload=()=>URL.revokeObjectURL(url); gallery.appendChild(im); }catch(_e){}
+  }
+
+  async function fileToImageSource(file){
+    const info = file.type+' '+Math.round(file.size/1024)+'KB';
+    log('picked: '+file.name+' ['+info+']'); addThumb(file);
+    try{ if('createImageBitmap' in window){ const bmp = await createImageBitmap(file); log('decoded with createImageBitmap: '+file.name+' ('+bmp.width+'x'+bmp.height+')'); return {kind:'bitmap', bmp}; } }
+    catch(e){ log('createImageBitmap fail: '+(e&&e.message||e)); }
+    return await new Promise((res,rej)=>{ const url=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{ URL.revokeObjectURL(url); log('decoded with <img>: '+file.name+' ('+im.width+'x'+im.height+')'); res({kind:'img', im}); }; im.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('image load error')); }; im.src=url; });
+  }
+  async function sourceToTensor(src){ if(src.kind==='bitmap') return tf.browser.fromPixels(src.bmp); if(src.kind==='img') return tf.browser.fromPixels(src.im); throw new Error('unknown source'); }
+
+  async function handleFiles(files){
+    const clsSel=document.getElementById('cls');
+    if(!files||!files.length) return;
+    if(!clsSel || clsSel.value==='none'){ log('NO CLASS SELECTED'); const s=document.getElementById('status'); if(s) s.textContent='בחר/י מספר לפני העלאה'; return; }
+    await ensureEmbedder();
+    const arr=[...files].slice(0,40);
+    const prog=document.getElementById('prog'); prog.max = arr.length; prog.value=0;
+    let ok=0,fail=0;
+    for(const f of arr){
+      try{
+        const src = await fileToImageSource(f);
+        const px = await sourceToTensor(src);
+        log('tensor shape: '+px.shape.join('x'));
+        const emb = tf.tidy(()=> mobilenetModel.infer(px.expandDims(0),'conv_preds'));
+        classifier.addExample(emb, clsSel.value); emb.dispose(); px.dispose(); ok++;
+        const s=document.getElementById('status'); if(s) s.textContent='מאמן: '+ok+'/'+arr.length+' (נכשלו: '+fail+')';
+        log('✅ example added to class '+clsSel.value);
+      }catch(err){ fail++; log('ERR '+(err&&err.message||err)); }
+      prog.value = ok+fail; await tf.nextFrame();
+    }
+    updateCounts();
+  }
+
+  // Bind UI with extra debug
+  const drop=document.getElementById('drop');
+  const upFile=document.getElementById('upFile');
+  const upPlain=document.getElementById('upPlain');
+  const upCam=document.getElementById('upCam');
+  const camBtn=document.getElementById('camBtn');
+
+  document.getElementById('cls').addEventListener('click', (e)=>e.stopPropagation());
+
+  const onPick=(e)=>{ log('onPick event: '+e.type); const files=e.target && e.target.files; if(files) log('onPick files: '+files.length); handleFiles(files); };
+  ['change','input'].forEach(ev=> upFile.addEventListener(ev, onPick, false));
+  ['change','input'].forEach(ev=> upPlain.addEventListener(ev, onPick, false));
+  ['change','input'].forEach(ev=> upCam.addEventListener(ev, onPick, false));
+
+  camBtn.onclick=(e)=>{ e.preventDefault(); upCam.click(); };
+
+  ;['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev,(e)=>{ e.preventDefault(); e.stopPropagation(); drop.classList.add('drag'); }, false));
+  ;['dragleave','drop'].forEach(ev=> drop.addEventListener(ev,(e)=>{ e.preventDefault(); e.stopPropagation(); drop.classList.remove('drag'); }, false));
+  drop.addEventListener('drop',(e)=>{ const dt=e.dataTransfer; const files=dt.files; log('drop files: '+(files && files.length)); handleFiles(files); }, false));
+  drop.addEventListener('click', ()=> upFile.click(), false);
+
+  log('bindings ready');
+})();
+</script>
+</body>
+</html>
