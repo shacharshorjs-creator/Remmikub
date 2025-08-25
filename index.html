@@ -49,7 +49,7 @@
 <div class="wrap" id="app">
   <div class="row" style="justify-content:space-between;align-items:center">
     <div class="flex">
-      <small class="tag" id="verBadge">v5.1-ml</small>
+      <small class="tag" id="verBadge">v4.2-ml</small>
       <small class="tag" id="tfBadge">TF: init</small>
       <small class="tag" id="modelBadge">model: —</small>
       <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -76,7 +76,7 @@
   </div>
 
   <!-- בחירת משתתפים -->
-  <div class="card" id="setupCard">
+  <div class="card">
     <h2>בחירת משתתפים (עד 4)</h2>
     <div class="grid2">
       <div><label class="hint">שחקן 1</label><input id="p1" type="text" placeholder="שם" /></div>
@@ -99,7 +99,6 @@
       <label class="hint">בחר/י מחלקה (מספר):</label>
       <input id="classId" type="number" min="1" max="4" value="1" style="width:5rem"/>
       <button class="btn inline" id="btnNukeExamples">נקה הכל</button>
-      <button class="btn inline" id="btnInitModel">אתחל מודל</button>
       <button class="btn inline" id="btnSaveModel">שמור מודל</button>
       <button class="btn inline" id="btnLoadModel">שחזר מודל</button>
       <button class="btn inline" id="btnExportJSON">JSON ייצא</button>
@@ -127,7 +126,7 @@
 
   <div class="footer row" style="justify-content:space-between">
     <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-    <div class="muted">© v5.1-ml</div>
+    <div class="muted">© v4.2-ml</div>
   </div>
 </div>
 
@@ -137,7 +136,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 
 <script>
-const VERSION = 'v5.1-ml';
+const VERSION = 'v4.2-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -185,58 +184,10 @@ function renderBoard(){
       const v = parseInt(inputManual.value||'0',10);
       if(!isNaN(v)) bump(idx, v);
     };
-    
-labelCam.querySelector('input.snap').onchange = async (e)=>{
-  try{
-    if(!(e.target.files && e.target.files.length)) return;
-    const file = e.target.files[0];
-    // Load models (no change to training logic)
-    await ensureModels();
-    // Make sure we have examples
-    const ds = knn.getClassifierDataset ? knn.getClassifierDataset() : (classifier && classifier.getClassifierDataset && classifier.getClassifierDataset());
-    const hasAny = ds && Object.keys(ds).some(k => ds[k] && ds[k].size > 0);
-    if(!hasAny){
-      log('⚠️ אין דוגמאות במודל — נא לאמן או לשחזר JSON');
-      alert('אין מודל מאומן/משוחזר. נא לאמן או לשחזר קודם.');
-      e.target.value='';
-      return;
-    }
-    // Read & embed
-    const {img} = await imgToTensor(file);
-    const emb = (net && net.infer) ? net.infer(img, true) : (await mobilenet.load()).infer(img, true);
-    // Predict
-    const clf = (typeof classifier !== 'undefined' && classifier) ? classifier : knn;
-    const res = await clf.predictClass(emb, 3);
-    const label = (res && res.label) ? String(res.label) : null;
-    const conf = (res && res.confidences) ? Math.max(...Object.values(res.confidences)) : 0;
-
-    // Visual feedback (thumbnail + text)
-    const thumb = document.createElement('canvas'); thumb.width=54; thumb.height=54;
-    const ctx = thumb.getContext('2d'); const s = Math.min(img.width,img.height);
-    ctx.drawImage(img, (img.width-s)/2,(img.height-s)/2, s,s, 0,0,54,54);
-    const info = document.createElement('span'); info.style.marginInlineStart = '6px';
-
-    if(label!=null){
-      const val = parseInt(label,10) || 0;
-      bump(idx, val); // add points to player
-      info.textContent = `זוהה: ${val} (${(conf*100|0)}%)`;
-      log(`✅ זוהתה קובייה ${val} לשחקן ${players[idx].name} (${(conf*100|0)}%)`);
-    }else{
-      info.textContent = `לא זוהה`;
-      log('ℹ️ לא זוהתה קובייה');
-    }
-    const holder = row.querySelector('.flex');
-    const wrap = document.createElement('div'); wrap.className='flex'; wrap.appendChild(thumb); wrap.appendChild(info);
-    holder.parentElement.appendChild(wrap);
-  }catch(err){
-    log('snap classify error: ' + (err && err.message || err));
-    console.error(err);
-    alert('שגיאה בזיהוי: ' + (err && err.message || err));
-  }finally{
-    e.target.value='';
-  }
-}
- (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
+    labelCam.querySelector('input.snap').onchange = async (e)=>{
+      // תמונת שחקן -> כרגע רק מציגה חיווי; (המודל נשאר מודול אימון למטה).
+      if(e.target.files?.length){
+        log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
       }
     }
   });
@@ -253,7 +204,7 @@ saveNames();
 renderBoard();
 
 on($$('#btnSaveNames'),'click',()=>{ saveNames(); renderBoard(); });
-on($$('#btnStart'),'click',()=>{ saveNames(); renderBoard();   const sc=$$('#setupCard'); if(sc) sc.style.display='none'; const lc=$$('#leaderCard'); if(lc) lc.scrollIntoView({behavior:'smooth',block:'start'}); });
+on($$('#btnStart'),'click',()=>{ saveNames(); renderBoard(); });
 on($$('#btnResetScores'),'click',()=>{
   players.forEach(p=>p.score=0); renderBoard();
   localStorage.setItem('rk_players', JSON.stringify(players));
@@ -391,16 +342,6 @@ on($$('#btnNukeExamples'),'click',()=>{
   totalExamples = 0;
   $$('#examplesBadge').textContent = 'דוגמאות: —';
   log('🧹 נוקה.');
-});
-
-on($$('#btnInitModel'),'click',()=>{
-  // Initialize model: wipe in-memory KNN and clear saved model
-  classifier = knnClassifier.create();
-  totalExamples = 0;
-  $$('#examplesBadge').textContent = 'דוגמאות: —';
-  localStorage.removeItem('rk_model'); // forget saved model
-  $$('#modelBadge').textContent = 'model: initialized';
-  log('♻️ אתחול מודל: הדאטה נוקה וה־localStorage הוסר');
 });
 
 // אתחול ראשוני
