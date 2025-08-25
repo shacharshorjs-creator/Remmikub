@@ -553,20 +553,29 @@ function awardPointsFromDetection(playerIdx, points) {
     return null;
   }
 
+  
   function fillDetectedValue(idx, val){
     try{
       if (!Number.isFinite(val)) return;
-      var row = getPlayerRow(idx);
-      // If wrapper fallback returned, we cannot set inside cloned nodes; so try a more direct search:
-      var input = (row && row.querySelector && row.querySelector('input[type="number"]')) ||
-                  document.querySelectorAll('input[type="number"]')[idx] ||
-                  document.querySelector('input[placeholder="ערך"]') ||
-                  document.querySelector('input[name="value"]') ||
-                  document.querySelector('input[data-role="value"]');
+      // strictly target the player's own row by data attribute
+      var row = document.querySelector('[data-player-index="'+idx+'"]');
+      if (!row) return;
+      var input = row.querySelector('input.manual') ||
+                  row.querySelector('input[type="number"]') ||
+                  row.querySelector('input[placeholder="ערך"]') ||
+                  row.querySelector('input[name="value"]') ||
+                  row.querySelector('input[data-role="value"]');
       if (input){
         input.value = val;
-        dlog('fill: idx='+idx+' val='+val+' -> set into value input');
+        dlog('fill(row-only): idx='+idx+' val='+val);
       } else {
+        dlog('fill(row-only): input not found in row for idx='+idx);
+      }
+    }catch(err){
+      dlog('fill error: '+(err && err.message || err));
+    }
+  }
+else {
         dlog('fill: idx='+idx+' val='+val+' -> input not found');
       }
     }catch(err){
