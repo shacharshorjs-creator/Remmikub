@@ -1,0 +1,98 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rummikub Trainer v2.56-ml</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
+  <style>
+    body { background:#111; color:#eee; font-family:Arial; text-align:center; }
+    .zone { border:2px dashed #555; padding:20px; margin:10px; border-radius:8px; }
+    #thumbs img { max-height:80px; margin:5px; border:1px solid #444; }
+    select,button,input { margin:5px; padding:6px; }
+  </style>
+</head>
+<body>
+  <h2>רמיקוב – אימון מודל זיהוי (CPU)</h2>
+  <div>גרסה: <b>v2.56-ml</b> | TF: <span id="tfBadge">init...</span></div>
+
+  <div>
+    <label>בחר/י מחלקה:</label>
+    <select id="classSelect">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+    </select>
+  </div>
+
+  <div class="zone" id="dropZone">
+    גרור/י תמונות לכאן או
+    <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif">
+    <button onclick="camInput.click()">📷 מצלמה</button>
+    <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
+  </div>
+
+  <div id="thumbs"></div>
+  <div id="status"></div>
+  <pre id="debug"></pre>
+
+<script>
+let net, classifier;
+async function init() {
+  document.getElementById("tfBadge").innerText = "loading...";
+  net = await mobilenet.load();
+  classifier = knnClassifier.create();
+  tf.setBackend("cpu");
+  await tf.ready();
+  document.getElementById("tfBadge").innerText = tf.getBackend();
+}
+init();
+
+function log(msg){ 
+  let d=document.getElementById("debug");
+  d.textContent += msg+"\n"; 
+  d.scrollTop=d.scrollHeight; 
+}
+
+function handleFiles(files){
+  let thumbs=document.getElementById("thumbs");
+  [...files].forEach(f=>{
+    let img=document.createElement("img");
+    img.src=URL.createObjectURL(f);
+    thumbs.appendChild(img);
+    log("picked "+f.name);
+    addExample(img);
+  });
+}
+
+async function addExample(imgEl){
+  try{
+    let emb=await net.infer(imgEl,true);
+    let cls=document.getElementById("classSelect").value;
+    classifier.addExample(emb,cls);
+    log("✅ example added to class "+cls);
+  }catch(e){ log("ERR addExample "+e); }
+}
+
+document.getElementById("fileInput").addEventListener("change",e=>{
+  log("filePick event, "+e.target.files.length+" files");
+  handleFiles(e.target.files);
+});
+document.getElementById("camInput").addEventListener("change",e=>{
+  log("camPick event");
+  handleFiles(e.target.files);
+});
+
+let drop=document.getElementById("dropZone");
+drop.addEventListener("dragover",e=>{e.preventDefault();});
+drop.addEventListener("drop",e=>{
+  e.preventDefault();
+  log("drop "+e.dataTransfer.files.length+" files");
+  handleFiles(e.dataTransfer.files);
+});
+</script>
+</body>
+</html>
