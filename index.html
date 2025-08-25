@@ -174,6 +174,7 @@ function renderBoard(){
         <label class="btn cam nowrap">📷
           <input class="snap" type="file" accept="image/*" capture="environment" hidden>
         </label>
+        <div class="detected" id="det_${idx}" style="font-size:12px;opacity:.8;margin-top:4px;min-height:18px"></div>
       </div>`;
     holder.appendChild(row);
     // אירועים
@@ -184,43 +185,36 @@ function renderBoard(){
       const v = parseInt(inputManual.value||'0',10);
       if(!isNaN(v)) bump(idx, v);
     };
-    
-labelCam.querySelector('input.snap').onchange = async (e)=>{
-  try{
-    if(!(e.target.files && e.target.files.length)) return;
-    const file = e.target.files[0];
-    // Use existing helpers/models without changing them
-    await ensureModels?.();
-    const {img} = await imgToTensor(file);
-    // Try prediction (no scoring side-effects)
-    let detected = null, confPct = 0;
-    if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
+    labelCam.querySelector('input.snap').onchange = async (e)=>{
       try{
-        const emb = net.infer(img, true);
-        const res = await classifier.predictClass(emb, 3);
-        if(res && res.label != null){
-          detected = String(res.label);
-          confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
-        }
-      }catch(_){ /* keep silent: indication only */ }
-    }
-    // Visual indication near the player's row
-    const thumb = document.createElement('canvas'); thumb.width=48; thumb.height=48;
-    const ctx = thumb.getContext('2d'); const s = Math.min(img.width,img.height);
-    ctx.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,48,48);
-    const info = document.createElement('span'); info.style.marginInlineStart = '6px';
-    info.textContent = detected ? `זוהתה קובייה: ${detected} (${confPct}%)` : 'לא זוהתה קובייה';
-    const feed = document.createElement('div'); feed.className = 'flex'; feed.style.marginTop='6px';
-    feed.appendChild(thumb); feed.appendChild(info);
-    if (row && row.parentElement) row.parentElement.appendChild(feed);
-    try{ log && log(detected ? `indication: ${detected} (${confPct}%)` : 'indication: no-detect'); }catch(_){}
-  }catch(err){
-    try{ log && log('indication error: ' + (err?.message||err)); }catch(_){}
-  }finally{
-    try{ e.target.value=''; }catch(_){}
-  }
-}
- (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
+        const el = row.querySelector('#det_'+idx);
+        if(!e.target.files?.length){ el.textContent=''; return; }
+        const file = e.target.files[0];
+        // תצוגה מקדימה
+        const url = URL.createObjectURL(file);
+        el.innerHTML = `<span>⏳ מזהה...</span>`;
+        // ודא שהמודלים נטענו (ללא שינוי במודול האימון)
+        await ensureModels();
+        // טען לתג תמונה
+        const img = new Image();
+        img.onload = async ()=>{
+          try{
+            const logits = net.infer(img, 'conv_preds');
+            const res = await classifier.predictClass(logits);
+            const label = res.label ?? res.classIndex ?? '?';
+            const conf = (res.confidences? Math.max(...Object.values(res.confidences)) : res.confidence)||0;
+            el.innerHTML = `<img src="${url}" style="height:22px;vertical-align:middle;border-radius:3px;margin-inline-end:6px">`+
+                           `זוהתה קובייה: <b>${label}</b> · אמון ${(conf*100).toFixed(0)}%`;
+          }catch(err){
+            el.textContent = 'שגיאת חיזוי: '+(err.message||err);
+          }finally{
+            URL.revokeObjectURL(url);
+          }
+        };
+        img.onerror = ()=>{ el.textContent='לא ניתן לטעון תמונה'; URL.revokeObjectURL(url); };
+        img.src = url;
+      }catch(err){
+        log('snap classify error: '+(err.message||err));
       }
     }
   });
