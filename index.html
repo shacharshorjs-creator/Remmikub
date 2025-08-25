@@ -1,6 +1,11 @@
 <!doctype html>
 <html lang="he" dir="rtl">
 <head>
+<style>
+#verBadge54{position:fixed;top:10px;left:10px;z-index:9999;background:#122038;color:#cfe0ff;
+border:1px solid #1f3154;border-radius:12px;padding:6px 10px;font:600 12px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+</style>
+
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>רמיקוב – ניקוד + אימון (CPU)</title>
@@ -45,11 +50,11 @@
   .copybtn{margin-inline-start:.5rem}
 </style>
 </head>
-<body>
+<body><div id="verBadge54">v5.4-ml</div>
 <div class="wrap" id="app">
   <div class="row" style="justify-content:space-between;align-items:center">
     <div class="flex">
-      <small class="tag" id="verBadge">v5.0-ml</small>
+      <small class="tag" id="verBadge">v5.4-ml</small>
       <small class="tag" id="tfBadge">TF: init</small>
       <small class="tag" id="modelBadge">model: —</small>
       <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -127,7 +132,7 @@
 
   <div class="footer row" style="justify-content:space-between">
     <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-    <div class="muted">© v5.0-ml</div>
+    <div class="muted">© v5.4-ml</div>
   </div>
 </div>
 
@@ -137,7 +142,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 
 <script>
-const VERSION = 'v5.0-ml';
+const VERSION = 'v5.4-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
