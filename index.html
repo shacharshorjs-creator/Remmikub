@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – משחק + אימון (v2.60-ml)</title>
+<title>רמיקוב – משחק + אימון (v2.61-ml)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
@@ -45,7 +45,7 @@
   <div class="wrap row" style="justify-content:space-between">
     <div class="badges">
       <span class="tag">רמיקוב – משחק + אימון</span>
-      <span id="ver" class="tag">v2.60-ml</span>
+      <span id="ver" class="tag">v2.61-ml</span>
       <span id="tfBadge" class="tag">TF: init…</span>
       <span id="mdlBadge" class="tag">model: loading…</span>
     </div>
@@ -194,6 +194,9 @@ function delta(i, d){
   players[i].score += d; renderBoard(); saveState();
 }
 async function snapAndAdd(i){
+  return openCamForPlayer(i);
+  /* old file-input path is disabled to avoid HEIC issues */
+
   const input = document.createElement('input'); input.type='file'; input.accept='image/jpeg,image/jpg'; input.capture='environment';
   input.onchange = async (e)=>{
     const f=e.target.files&&e.target.files[0]; if(!f) return;
@@ -254,6 +257,73 @@ window.addEventListener('DOMContentLoaded',()=>{
   drop.addEventListener('drop', e=>{ addExamplesFromFiles(e.dataTransfer.files, document.getElementById('cls').value); }, false);
   drop.addEventListener('click', ()=> file.click());
 });
+
+// ======== CAMERA OVERLAY (for player capture) ========
+let camStream=null, camTargetIndex=null;
+async function openCamForPlayer(index){
+  try{
+    camTargetIndex = index;
+    const dlg = document.getElementById('camDlg');
+    const video = document.getElementById('camVideo');
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      alert('הדפדפן לא תומך ב‑getUserMedia.');
+      return;
+    }
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = camStream;
+    if(typeof dlg.showModal==='function') dlg.showModal(); else dlg.setAttribute('open','');
+  }catch(e){
+    dbg('openCam error: '+(e&&e.message||e));
+    alert('לא ניתן לפתוח מצלמה. בדוק/י הרשאות.');
+  }
+}
+function closeCam(){
+  const dlg = document.getElementById('camDlg');
+  try{ if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; } }catch(_){}
+  if(typeof dlg.close==='function'){ try{ dlg.close(); }catch(_){ dlg.removeAttribute('open'); } }
+  else dlg.removeAttribute('open');
+}
+async function snapFromCamAndClassify(){
+  if(camTargetIndex==null) return;
+  const video = document.getElementById('camVideo');
+  if(!ready){ alert('המודל עדיין לא הוכן.'); return; }
+  if(!classifier.getNumClasses()){ alert('אין דוגמאות במודל. הוסף/י תמונות באימון.'); return; }
+  try{
+    const c=document.getElementById('work'), ctx=c.getContext('2d', { willReadFrequently:true });
+    const w=video.videoWidth||224, h=video.videoHeight||224, s=Math.min(w,h), sx=(w-s)/2, sy=(h-s)/2;
+    ctx.clearRect(0,0,224,224); ctx.drawImage(video, sx, sy, s, s, 0, 0, 224, 224);
+    const px=tf.browser.fromPixels(c);
+    const emb=tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
+    const res=await classifier.predictClass(emb);
+    emb.dispose(); px.dispose();
+    const label = res.label; const prob = (res.confidences[label]||0);
+    document.getElementById('lastPred').textContent = 'זיהוי אחרון: '+label+' ('+(prob*100).toFixed(0)+'%) → לשחקן/ית '+players[camTargetIndex].name;
+    const val = parseInt(label,10)||0; players[camTargetIndex].score += val; renderBoard(); saveState();
+  }catch(e){
+    dbg('snap classify error: '+(e&&e.message||e));
+    alert('הצילום נכשל.');
+  }finally{ closeCam(); }
+}
+document.addEventListener('click',(e)=>{
+  if(e.target && e.target.id==='camClose') closeCam();
+  if(e.target && e.target.id==='camSnap') snapFromCamAndClassify();
+});
+// ======== END CAMERA OVERLAY ========
+
 </script>
+
+<dialog id="camDlg" style="border:none;border-radius:16px;padding:0;overflow:hidden;max-width:96vw">
+  <div style="background:#0b1428;color:#eaf1ff;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.12);display:flex;justify-content:space-between;align-items:center">
+    <b>מצלמה</b>
+    <button id="camClose" class="btn secondary">סגור</button>
+  </div>
+  <div style="background:#000;display:flex;justify-content:center;align-items:center">
+    <video id="camVideo" autoplay playsinline style="max-width:96vw;max-height:60vh"></video>
+  </div>
+  <div style="background:#0b1428;color:#eaf1ff;padding:10px;display:flex;gap:10px;justify-content:center;border-top:1px solid rgba(255,255,255,.12)">
+    <button id="camSnap" class="btn good">צלם</button>
+  </div>
+</dialog>
+
 </body>
 </html>
