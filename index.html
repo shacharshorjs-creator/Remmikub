@@ -49,7 +49,7 @@
 <div class="wrap" id="app">
   <div class="row" style="justify-content:space-between;align-items:center">
     <div class="flex">
-      <small class="tag" id="verBadge">v4.2-ml</small>
+      <small class="tag" id="verBadge">v5.3</small>
       <small class="tag" id="tfBadge">TF: init</small>
       <small class="tag" id="modelBadge">model: —</small>
       <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -126,7 +126,7 @@
 
   <div class="footer row" style="justify-content:space-between">
     <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-    <div class="muted">© v4.2-ml</div>
+    <div class="muted">© v5.3</div>
   </div>
 </div>
 
@@ -136,7 +136,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 
 <script>
-const VERSION = 'v4.2-ml';
+const VERSION = 'v5.3';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -184,10 +184,43 @@ function renderBoard(){
       const v = parseInt(inputManual.value||'0',10);
       if(!isNaN(v)) bump(idx, v);
     };
-    labelCam.querySelector('input.snap').onchange = async (e)=>{
-      // תמונת שחקן -> כרגע רק מציגה חיווי; (המודל נשאר מודול אימון למטה).
-      if(e.target.files?.length){
-        log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
+    
+labelCam.querySelector('input.snap').onchange = async (e)=>{
+  try{
+    if(!(e.target.files && e.target.files.length)) return;
+    const file = e.target.files[0];
+    // Use existing helpers/models without changing them
+    await ensureModels?.();
+    const {img} = await imgToTensor(file);
+    // Try prediction (no scoring side-effects)
+    let detected = null, confPct = 0;
+    if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
+      try{
+        const emb = net.infer(img, true);
+        const res = await classifier.predictClass(emb, 3);
+        if(res && res.label != null){
+          detected = String(res.label);
+          confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
+        }
+      }catch(_){ /* keep silent: indication only */ }
+    }
+    // Visual indication near the player's row
+    const thumb = document.createElement('canvas'); thumb.width=48; thumb.height=48;
+    const ctx = thumb.getContext('2d'); const s = Math.min(img.width,img.height);
+    ctx.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,48,48);
+    const info = document.createElement('span'); info.style.marginInlineStart = '6px';
+    info.textContent = detected ? `זוהתה קובייה: ${detected} (${confPct}%)` : 'לא זוהתה קובייה';
+    const feed = document.createElement('div'); feed.className = 'flex'; feed.style.marginTop='6px';
+    feed.appendChild(thumb); feed.appendChild(info);
+    if (row && row.parentElement) row.parentElement.appendChild(feed);
+    try{ log && log(detected ? `indication: ${detected} (${confPct}%)` : 'indication: no-detect'); }catch(_){}
+  }catch(err){
+    try{ log && log('indication error: ' + (err?.message||err)); }catch(_){}
+  }finally{
+    try{ e.target.value=''; }catch(_){}
+  }
+}
+ (${players[idx].name}) – (תמיכה בחיזוי לציון נשמרה לגרסאות הבסיס).`);
       }
     }
   });
