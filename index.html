@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – משחק + אימון (v2.61-ml)</title>
+<title>רמיקוב – משחק + אימון (v2.62-ml)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
@@ -45,7 +45,7 @@
   <div class="wrap row" style="justify-content:space-between">
     <div class="badges">
       <span class="tag">רמיקוב – משחק + אימון</span>
-      <span id="ver" class="tag">v2.61-ml</span>
+      <span id="ver" class="tag">v2.62-ml</span>
       <span id="tfBadge" class="tag">TF: init…</span>
       <span id="mdlBadge" class="tag">model: loading…</span>
     </div>
@@ -262,7 +262,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 let camStream=null, camTargetIndex=null;
 async function openCamForPlayer(index){
   try{
-    camTargetIndex = index;
+    camTargetIndex = index; if(index==null){alert("לא נבחר שחקן"); return; }
     const dlg = document.getElementById('camDlg');
     const video = document.getElementById('camVideo');
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
@@ -283,27 +283,56 @@ function closeCam(){
   if(typeof dlg.close==='function'){ try{ dlg.close(); }catch(_){ dlg.removeAttribute('open'); } }
   else dlg.removeAttribute('open');
 }
+
 async function snapFromCamAndClassify(){
-  if(camTargetIndex==null) return;
-  const video = document.getElementById('camVideo');
+  // Guards
+  if (typeof players === 'undefined' || !Array.isArray(players) || players.length === 0){
+    alert('אין שחקנים במשחק. בחר/י שחקנים והתחל/י משחק.');
+    return;
+  }
+  if (camTargetIndex == null || !players[camTargetIndex]){
+    alert('לא נבחר שחקן לצילום.');
+    return;
+  }
   if(!ready){ alert('המודל עדיין לא הוכן.'); return; }
-  if(!classifier.getNumClasses()){ alert('אין דוגמאות במודל. הוסף/י תמונות באימון.'); return; }
+  if(!classifier.getNumClasses()){ alert('אין דוגמאות במודל. הוסף/י באימון.'); return; }
   try{
-    const c=document.getElementById('work'), ctx=c.getContext('2d', { willReadFrequently:true });
-    const w=video.videoWidth||224, h=video.videoHeight||224, s=Math.min(w,h), sx=(w-s)/2, sy=(h-s)/2;
-    ctx.clearRect(0,0,224,224); ctx.drawImage(video, sx, sy, s, s, 0, 0, 224, 224);
-    const px=tf.browser.fromPixels(c);
-    const emb=tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
-    const res=await classifier.predictClass(emb);
+    const video = document.getElementById('camVideo');
+    // ensure video has frames
+    if(!(video && (video.readyState === 4 || video.videoWidth))){
+      await new Promise(r => setTimeout(r, 120));
+    }
+    const c = document.getElementById('work');
+    const ctx = c.getContext('2d', { willReadFrequently:true });
+    const w = video.videoWidth || 224, h = video.videoHeight || 224;
+    const s = Math.min(w,h), sx = (w - s)/2, sy = (h - s)/2;
+    ctx.clearRect(0,0,224,224);
+    ctx.drawImage(video, sx, sy, s, s, 0, 0, 224, 224);
+
+    // classify
+    const px = tf.browser.fromPixels(c);
+    const emb = tf.tidy(()=> net.infer(px.expandDims(0),'conv_preds'));
+    const res = await classifier.predictClass(emb);
     emb.dispose(); px.dispose();
-    const label = res.label; const prob = (res.confidences[label]||0);
-    document.getElementById('lastPred').textContent = 'זיהוי אחרון: '+label+' ('+(prob*100).toFixed(0)+'%) → לשחקן/ית '+players[camTargetIndex].name;
-    const val = parseInt(label,10)||0; players[camTargetIndex].score += val; renderBoard(); saveState();
+
+    const label = res.label;
+    const prob = (res.confidences && res.confidences[label]) || 0;
+    const player = players[camTargetIndex];
+    document.getElementById('lastPred').textContent =
+      'זיהוי אחרון: ' + label + ' (' + (prob*100).toFixed(0) + '%) → ' + player.name;
+
+    const val = parseInt(label, 10) || 0;
+    player.score += val;
+    renderBoard();
+    saveState();
   }catch(e){
-    dbg('snap classify error: '+(e&&e.message||e));
+    dbg('snap classify error: '+(e && e.message || e));
     alert('הצילום נכשל.');
-  }finally{ closeCam(); }
+  }finally{
+    closeCam();
+  }
 }
+
 document.addEventListener('click',(e)=>{
   if(e.target && e.target.id==='camClose') closeCam();
   if(e.target && e.target.id==='camSnap') snapFromCamAndClassify();
