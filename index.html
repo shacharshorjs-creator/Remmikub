@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>רמיקוב – משחק + אימון (v2.62-ml)</title>
+<title>רמיקוב – משחק + אימון (v2.64-ml)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
@@ -45,12 +45,14 @@
   <div class="wrap row" style="justify-content:space-between">
     <div class="badges">
       <span class="tag">רמיקוב – משחק + אימון</span>
-      <span id="ver" class="tag">v2.62-ml</span>
+      <span id="ver" class="tag">v2.64-ml</span>
       <span id="tfBadge" class="tag">TF: init…</span>
       <span id="mdlBadge" class="tag">model: loading…</span>
     </div>
     <div class="badges"><span id="counts" class="tag">דוגמאות: —</span></div>
   </div>
+
+<span id="modelBadge" style="margin-inline-start:8px;padding:4px 8px;border-radius:12px;background:#24324d;color:#cfe3ff;font-size:.85rem;display:inline-block">model: —</span>
 </header>
 
 <main class="wrap grid">
@@ -339,6 +341,105 @@ document.addEventListener('click',(e)=>{
 });
 // ======== END CAMERA OVERLAY ========
 
+
+// ======== PERSIST TRAINED MODEL (localStorage) ========
+const MODEL_LS_KEY = 'rummi_knn_v1';
+
+function datasetToJSON(ds) {
+  const out = {};
+  let total = 0;
+  Object.keys(ds).forEach(label => {
+    const t = ds[label]; // Tensor2D
+    const data = Array.from(t.dataSync());
+    out[label] = {shape: t.shape, data};
+    total += t.shape[0];
+  });
+  return { version: 1, total, ds: out };
+}
+
+function jsonToDataset(obj) {
+  const out = {};
+  Object.keys(obj.ds).forEach(label => {
+    const item = obj.ds[label];
+    out[label] = tf.tensor(item.data, item.shape, 'float32');
+  });
+  return out;
+}
+
+function saveModelLS() {
+  try {
+    const ds = classifier.getClassifierDataset();
+    if (!ds || !Object.keys(ds).length) return {saved:false, msg:'empty'};
+    const json = datasetToJSON(ds);
+    const str = JSON.stringify(json);
+    localStorage.setItem(MODEL_LS_KEY, str);
+    updateModelBadge(`saved • ${json.total} ex • ${(str.length/1024).toFixed(1)} KB`);
+    return {saved:true, size: str.length, total: json.total};
+  } catch (e) {
+    dbg('saveModelLS error: ' + (e && e.message || e));
+    updateModelBadge('save failed');
+    return {saved:false, msg: e && e.message};
+  }
+}
+
+async function loadModelLS() {
+  try {
+    const str = localStorage.getItem(MODEL_LS_KEY);
+    if (!str) { updateModelBadge('model: none'); return {loaded:false}; }
+    const obj = JSON.parse(str);
+    const ds = jsonToDataset(obj);
+    classifier.setClassifierDataset(ds);
+    updateModelBadge(`loaded • ${obj.total} ex • ${(str.length/1024).toFixed(1)} KB`);
+    return {loaded:true, total: obj.total, size: str.length};
+  } catch (e) {
+    dbg('loadModelLS error: ' + (e && e.message || e));
+    updateModelBadge('load failed');
+    return {loaded:false, msg: e && e.message};
+  }
+}
+
+function updateModelBadge(text){
+  const el = document.getElementById('modelBadge');
+  if (el) el.textContent = text;
+}
+
+// Auto-save throttle: if dataset changes size, save after 1s
+let lastSaveTotal = 0;
+function getTotalExamples(){
+  try{
+    const ds = classifier.getClassifierDataset();
+    if(!ds) return 0;
+    let tot=0; Object.values(ds).forEach(t=> tot += t.shape[0]);
+    return tot;
+  }catch(_){ return 0; }
+}
+async function autoSaveTick(){
+  try{
+    const tot = getTotalExamples();
+    if(tot && tot !== lastSaveTotal){
+      const r = saveModelLS();
+      if(r.saved){ lastSaveTotal = r.total || tot; }
+    }
+  }finally{
+    setTimeout(autoSaveTick, 1500);
+  }
+}
+
+// Load on startup (after models are ready); if loaded -> set lastSaveTotal so we don't resave immediately.
+window.addEventListener('DOMContentLoaded', ()=>{
+  // defer a bit to let classifier exist
+  setTimeout(async ()=>{
+    try{
+      if (typeof classifier !== 'undefined'){
+        const r = await loadModelLS();
+        if(r.loaded){ lastSaveTotal = r.total || 0; }
+        autoSaveTick();
+      }
+    }catch(e){ dbg('persist init error: '+(e&&e.message||e)); }
+  }, 800);
+});
+// ======== END PERSIST ========
+
 </script>
 
 <dialog id="camDlg" style="border:none;border-radius:16px;padding:0;overflow:hidden;max-width:96vw">
@@ -353,6 +454,111 @@ document.addEventListener('click',(e)=>{
     <button id="camSnap" class="btn good">צלם</button>
   </div>
 </dialog>
+
+
+<div style="position:fixed;inset-inline-end:10px;inset-block-end:10px;display:flex;gap:8px;z-index:30">
+  <button id="btnSaveModelNow" class="btn secondary" style="opacity:.85">שמור מודל</button>
+  <button id="btnClearModelLS" class="btn danger" style="opacity:.85">איפוס מודל</button>
+</div>
+<script>
+document.addEventListener('click',(e)=>{
+  if(e.target && e.target.id==='btnSaveModelNow'){ saveModelLS(); }
+  if(e.target && e.target.id==='btnClearModelLS'){
+    localStorage.removeItem(MODEL_LS_KEY);
+    updateModelBadge('model: cleared');
+  }
+});
+</script>
+
+<script>
+// ------- Patch: robust player names + rendering -------
+function safeName(x, idx){
+  const t = (x||'').toString().trim();
+  return t ? t : ('שחקן ' + (idx+1));
+}
+function fmtScore(n){ try{ return (n|0).toString(); }catch(_){ return '0'; } }
+
+// Override startGame to normalize names and persist
+if (typeof startGame === 'function'){
+  const _origStartGame = startGame;
+  startGame = function(){
+    try{
+      if(Array.isArray(players)){
+        players = players.map((p,i)=>({ name: safeName(p && p.name, i), score: (p && p.score|0)||0 }));
+        localStorage.setItem('rummi_players', JSON.stringify(players));
+      }
+    }catch(_){}
+    _origStartGame();
+    renderBoard(); // ensure UI refresh
+  }
+}
+
+// Read players from LS on load
+window.addEventListener('DOMContentLoaded', ()=>{
+  try{
+    const s = localStorage.getItem('rummi_players');
+    if(s){
+      const arr = JSON.parse(s);
+      if(Array.isArray(arr) && arr.length){
+        players = arr.map((p,i)=>({ name: safeName(p && p.name, i), score: (p && p.score|0)||0 }));
+      }
+    }
+  }catch(_){}
+  if(typeof renderBoard === 'function') setTimeout(renderBoard, 200);
+});
+
+// Override renderBoard safely
+window.renderBoard = function(){
+  try{
+    const tbody = document.getElementById('playersTbody') || document.querySelector('[data-players-tbody]');
+    if(!tbody || !Array.isArray(players)) return;
+    tbody.innerHTML = players.map((p, i)=>{
+      const name = safeName(p.name, i);
+      const score = fmtScore(p.score||0);
+      return `
+      <tr>
+        <td class="idx">${i+1}</td>
+        <td class="name">${name}</td>
+        <td class="score" id="score_${i}">${score}</td>
+        <td class="actions">
+          <button class="btn add10" data-idx="${i}" data-delta="10">+10</button>
+          <button class="btn sub10" data-idx="${i}" data-delta="-10">-10</button>
+          <div class="adder">
+            <input type="number" inputmode="numeric" class="narrow" id="add_${i}" placeholder="ערך">
+            <button class="btn doadd" data-idx="${i}">הוסף/י</button>
+          </div>
+          <button class="btn cam" data-cam="${i}">📷</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }catch(e){ console.log('renderBoard error', e); }
+};
+
+// Actions delegation
+document.addEventListener('click', (e)=>{
+  const t = e.target;
+  if(t.matches('.doadd')){
+    const i = parseInt(t.dataset.idx,10);
+    const el = document.getElementById('add_'+i);
+    const val = parseInt(el && el.value, 10) || 0;
+    if(players[i]){ players[i].score = (players[i].score|0) + val; }
+    localStorage.setItem('rummi_players', JSON.stringify(players));
+    renderBoard();
+  }
+  if(t.matches('.add10, .sub10')){
+    const i = parseInt(t.dataset.idx,10);
+    const d = parseInt(t.dataset.delta,10);
+    if(players[i]){ players[i].score = (players[i].score|0) + d; }
+    localStorage.setItem('rummi_players', JSON.stringify(players));
+    renderBoard();
+  }
+  if(t.matches('.cam')){
+    const i = parseInt(t.dataset.cam,10);
+    if(!players[i]){ alert('לא נמצא שחקן לצילום'); return; }
+    if(typeof openCamForPlayer === 'function'){ openCamForPlayer(i); }
+  }
+});
+</script>
 
 </body>
 </html>
