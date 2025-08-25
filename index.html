@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.5-ml</small>
+<small class="tag" id="verBadge">v5.6-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.5-ml</div>
+<div class="muted">© v5.6-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.5-ml';
+const VERSION = 'v5.6-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -262,8 +262,37 @@ function renderBoard(){
       // תמונת שחקן -> כרגע רק מציגה חיווי; (המודל נשאר מודול אימון למטה).
       if(e.target.files?.length){
         log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
-        showLastDetect(idx, e.target.files[0]);
-        if(typeof detectedValue!=='undefined'){ awardPointsFromDetection(idx, detectedValue); }
+        
+// show textual indication only
+showLastDetect(idx, e.target.files[0]);
+try{
+  await ensureModels?.();
+  const {img} = await imgToTensor(e.target.files[0]);
+  let detected = null, confPct = 0;
+  if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
+    const emb = net.infer(img, true);
+    const res = await classifier.predictClass(emb, 3);
+    if(res && res.label != null){
+      detected = parseInt(res.label,10);
+      confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
+    }
+  }
+  const lbl = document.getElementById('lastDetectLabel');
+  if(lbl){
+    if(detected || detected===0){
+      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — זוהתה קובייה: ${detected} (${confPct}%)`;
+    }else{
+      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
+    }
+  }
+  // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
+  if(typeof detected !== 'undefined' && detected){
+    if(typeof awardPointsFromDetection === 'function'){
+      awardPointsFromDetection(idx, detected);
+    }
+  }
+}catch(_){ /* keep silent */ }
+if(typeof detectedValue!=='undefined'){ awardPointsFromDetection(idx, detectedValue); }
       }
     }
   });
@@ -278,9 +307,9 @@ function bump(index, delta){
 // == זיהוי אחרון – תצוגה ==
 function showLastDetect(playerIndex, file){
   const url = URL.createObjectURL(file);
-  const img = $$('#lastDetectImg');
+  const img = null;
   const label = $$('#lastDetectLabel');
-  if(img){ img.src = url; img.style.display='block'; }
+  // no image preview
   if(label){ label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`; }
 }
 
