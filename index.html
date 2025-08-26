@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.15-ml</small>
+<small class="tag" id="verBadge">v5.16-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.15-ml</div>
+<div class="muted">© v5.16-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.15-ml';
+const VERSION = 'v5.16-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -512,7 +512,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.15-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.16-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -605,7 +605,7 @@ else {
 
 /*! multi_dice_addon_v5_15.js - non-invasive multi-dice detection + thumbnails */
 (function () {
-  const VERSION = 'v5.15-ml';
+  const VERSION = 'v5.16-ml';
   const MAX_THUMBS = 6;
   const THRESH = 170;       // luminance threshold for highlights
   const MIN_AREA = 900;     // minimal region size (px) to consider as a tile
@@ -819,6 +819,118 @@ else {
   _obs.observe(document.documentElement, {subtree:true, childList:true});
 })();
 
+</script>
+
+<!-- v5.16-ml — KNN partial model save/restore (non-invasive) -->
+<script>
+(function(){
+  if (window.__knnPartialPersistPatched) return;
+  window.__knnPartialPersistPatched = true;
+
+  const KEY = 'remi_knn_v2';
+  const MAX_BYTES = 5 * 1024 * 1024; // guard: 5MB
+
+  function now(){ return new Date().toISOString(); }
+  function kb(n){ return (n/1024).toFixed(1)+' KB'; }
+  function safeLog(msg){ try{ (window.log||console.log)('[knn-store]', msg); }catch(e){} }
+
+  function getClassifier(){
+    // prefer existing global 'classifier', else create if possible
+    if (window.classifier && typeof window.classifier.getClassifierDataset === 'function') return window.classifier;
+    if (window.knnClassifier && typeof window.knnClassifier.create === 'function'){
+      if (!window.__fallbackKnn) window.__fallbackKnn = window.knnClassifier.create();
+      return window.__fallbackKnn;
+    }
+    return null;
+  }
+
+  // Serialize current dataset to JSON (supports partial classes)
+  async function serialize(){
+    const knn = getClassifier();
+    if (!knn) throw new Error('KNN not ready');
+    const ds = knn.getClassifierDataset();
+    const out = { meta:{ver:'v2', savedAt: now()}, classes:{}, shapes:{} };
+    const classIds = Object.keys(ds);
+    for (const cid of classIds){
+      const t = ds[cid];
+      if (!t) continue;
+      const data = await t.data(); // Float32Array
+      out.classes[cid] = Array.from(data);
+      out.shapes[cid]  = Array.from(t.shape||[]);
+    }
+    const json = JSON.stringify(out);
+    if (json.length > MAX_BYTES) throw new Error('model too large: '+kb(json.length));
+    return json;
+  }
+
+  // Restore dataset from JSON; loads **whatever exists** (partial ok)
+  function deserialize(json){
+    const knn = getClassifier();
+    if (!knn) throw new Error('KNN not ready');
+    let parsed=null;
+    try{ parsed = JSON.parse(json); }catch(e){ throw new Error('bad json'); }
+    const {classes={}, shapes={}} = parsed;
+    const ds = {};
+    let clsCount = 0, vecCount = 0;
+    for (const cid of Object.keys(classes)){
+      const arr = classes[cid]; const shape = shapes[cid] || [arr.length];
+      if (!arr || !arr.length) continue;
+      const tensor = tf.tensor(arr, shape, 'float32');
+      ds[cid] = tensor; clsCount++;
+      // shape like [N, D] → vecCount += N
+      if (shape && shape.length && shape[0]) vecCount += shape[0];
+    }
+    if (clsCount===0){
+      safeLog('no classes in stored model'); 
+      return {clsCount:0, vecCount:0, bytes: (json||'').length};
+    }
+    knn.setClassifierDataset(ds);
+    return {clsCount, vecCount, bytes:(json||'').length};
+  }
+
+  // Public API
+  window.remiModel = window.remiModel || {};
+  window.remiModel.save = async function(){
+    try{
+      const json = await serialize();
+      localStorage.setItem(KEY, json);
+      const info = { ok:true, bytes: json.length };
+      safeLog('saved '+kb(json.length));
+      // UI hint if element exists
+      const el = document.getElementById('modelStatus') || document.getElementById('modelSize');
+      if (el) el.textContent = 'saved • '+kb(json.length);
+      return info;
+    }catch(e){
+      safeLog('save error: '+(e && e.message || e));
+      return { ok:false, error: (e && e.message || String(e))};
+    }
+  };
+  window.remiModel.load = function(){
+    try{
+      const json = localStorage.getItem(KEY);
+      if (!json){ safeLog('no saved model'); return {ok:false, empty:true}; }
+      const info = deserialize(json);
+      safeLog('restored classes='+info.clsCount+' vecs~'+info.vecCount+' size='+kb(info.bytes));
+      const el = document.getElementById('modelStatus') || document.getElementById('modelSize');
+      if (el) el.textContent = 'restored • '+kb(info.bytes)+' • '+info.clsCount+' classes';
+      return { ok:true, ...info };
+    }catch(e){
+      safeLog('load error: '+(e && e.message || e));
+      return { ok:false, error:(e && e.message || String(e)) };
+    }
+  };
+
+  // Auto-load on startup (non-invasive)
+  document.addEventListener('DOMContentLoaded', function(){
+    try{ window.remiModel.load(); }catch(_){}
+  }, {once:true});
+
+  // Best-effort: auto-save on beforeunload (non-blocking)
+  window.addEventListener('beforeunload', function(){
+    // fire and forget
+    try{ window.remiModel.save(); }catch(_){}
+  });
+})();
 </script>
 </body>
 </html>
