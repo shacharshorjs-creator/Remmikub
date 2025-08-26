@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.14.2-ml</small>
+<small class="tag" id="verBadge">v5.14.3-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.14.2-ml</div>
+<div class="muted">© v5.14.3-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.14.2-ml';
+const VERSION = 'v5.14.3-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -512,7 +512,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.14.2-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.14.3-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -602,40 +602,65 @@ else {
 </script>
 
 
-<!-- v5.14.2 — patch: show thumbnail for player snap without changing UI/flow -->
+<!-- v5.14.3 — player snap thumbnails (separate floating dock; no UI changes elsewhere) -->
+<style>
+#snapThumbDock{position:fixed;right:12px;bottom:12px;z-index:9999;
+  display:flex;gap:6px;flex-wrap:wrap;max-width:48vw;
+  background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);
+  border-radius:12px;padding:8px;backdrop-filter:blur(6px);box-shadow:0 8px 22px rgba(0,0,0,.35)}
+#snapThumbDock img{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,.25)}
+@media (prefers-color-scheme:light){
+  #snapThumbDock{background:rgba(255,255,255,.82);border-color:rgba(0,0,0,.12)}
+}
+</style>
 <script>
 (function(){
-  if (window.__rkThumbSnapPatched) return;
-  window.__rkThumbSnapPatched = true;
-  if (typeof window.showLastDetect !== 'function') return;
+  if (window.__snapDockPatched) return; window.__snapDockPatched = true;
 
-  const _orig = window.showLastDetect;
-  window.showLastDetect = function(playerIndex, file){
-    // call original logic first (keeps flow/logic/UI intact)
-    const ret = _orig.apply(this, arguments);
-    try{
-      // find existing "last detect" host (no UI changes, just reuse):
-      var host = document.getElementById('lastDetectLabel') ||
-                 document.getElementById('lastDetect') ||
-                 document.querySelector('[data-last-detect]');
-      if (host && file){
-        // replace text with a small image preview
-        while (host.firstChild) host.removeChild(host.firstChild);
-        var url = (window.URL || window.webkitURL).createObjectURL(file);
-        var img = new Image();
-        img.onload = function(){ try{ (window.URL||window.webkitURL).revokeObjectURL(url); }catch(e){} };
-        img.src = url;
-        img.alt = 'זיהוי אחרון';
-        img.style.width = '64px';
-        img.style.height = '64px';
-        img.style.objectFit = 'cover';
-        img.style.borderRadius = '6px';
-        img.style.display = 'inline-block';
-        host.appendChild(img);
+  function ensureDock(){
+    var d = document.getElementById('snapThumbDock');
+    if (!d){
+      d = document.createElement('div');
+      d.id = 'snapThumbDock';
+      document.body.appendChild(d);
+    }
+    return d;
+  }
+  function pushThumbFromFile(file){
+    if(!file) return;
+    var d = ensureDock();
+    var url = (window.URL||window.webkitURL).createObjectURL(file);
+    var im = new Image();
+    im.onload = function(){ try{ (window.URL||window.webkitURL).revokeObjectURL(url);}catch(e){} };
+    im.src = url;
+    // latest first:
+    if (d.firstChild) d.insertBefore(im, d.firstChild); else d.appendChild(im);
+    // keep last 8
+    while (d.childNodes.length > 8) d.removeChild(d.lastChild);
+  }
+
+  // Wrap the existing showLastDetect(playerIndex, file) *without* changing its behavior
+  var g = window;
+  if (typeof g.showLastDetect === 'function'){
+    var _orig = g.showLastDetect;
+    g.showLastDetect = function(playerIndex, file){
+      var ret = _orig.apply(this, arguments); // keep original flow
+      try{ if (file && /^image\//i.test(file.type||'')) pushThumbFromFile(file); }catch(e){}
+      return ret;
+    };
+  } else {
+    // Fallback: listen to any file input that looks like a player snap (capture=camera)
+    document.addEventListener('change', function(ev){
+      var t = ev.target;
+      if (!t || t.tagName!=='INPUT' || (t.type||'').toLowerCase()!=='file') return;
+      // heuristics: camera capture or single image
+      var cap = (t.getAttribute('accept')||'').indexOf('capture')!==-1;
+      var f = t.files && t.files[0];
+      if (f && /^image\//i.test(f.type||'') && (cap || t.className.indexOf('snap')!==-1)){
+        pushThumbFromFile(f);
       }
-    }catch(e){ /* silent */ }
-    return ret;
-  };
+    }, true);
+  }
 })();
 </script>
 </body>
