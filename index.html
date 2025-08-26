@@ -45,17 +45,12 @@
   .scrollx{overflow:auto}
   .copybtn{margin-inline-start:.5rem}
 </style>
-
-<style>
-#detThumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-#detThumbs img{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #2a3e5c}
-</style>
 </head>
 <body>
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.13.7-ml</small>
+<small class="tag" id="verBadge">v5.13.8-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -95,7 +90,7 @@
 </div>
 <!-- אימון מודל – תמיד גלוי (על המכשיר) -->
 <div class="card" id="trainCard">
-<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#111;border:1px solid #333;padding:10px;border-radius:6px;display:none"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><strong>זיהוי אחרון:</strong> <span id="lastDetectLabel" class="chip">—</span></div><div id="lastDetectThumbs" style="display:flex;gap:6px;flex-wrap:wrap"></div></div><h2>אימון מודל זיהוי (CPU)</h2>
+<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/></div><h2>אימון מודל זיהוי (CPU)</h2>
 <div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
 <div class="sep"></div>
 <div class="row" style="align-items:center;gap:10px">
@@ -129,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.13.7-ml</div>
+<div class="muted">© v5.13.8-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -215,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.13.7-ml';
+const VERSION = 'v5.13.8-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -268,29 +263,6 @@ function renderBoard(){
       if(e.target.files?.length){
         log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
         
-
-
-// v5.13.7-ml: try CC multi-detect first
-try{
-  const handled = await __rk_detect_many_and_fill(e.target.files[0], idx, row);
-  if(handled) return; // stop here; user will press "הוסף"
-}catch(_){ /* soft */ }
-// v5.13 multi: try multi-cube detection first (grid-based). If >=2 tiles detected -> fill sum & show, then stop.
-try{
-  const multi = await __rk_gridMultiDetect(e.target.files[0], 3, 0.5);
-  if (multi && Array.isArray(multi.nums) && multi.nums.length >= 2){
-    const sum = multi.sum;
-    // update last detection label
-    const lbl = document.getElementById('lastDetectLabel');
-    if(lbl){
-      lbl.textContent = `זוהו: ${multi.nums.join(', ')} (סה״כ ${sum}) — שחקן ${idx+1} • ${players[idx]?.name||''}`;
-    }
-    // fill only this player's input box
-    try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = sum; }catch(_){}
-    // do NOT auto award; user clicks "הוסף"
-    return;
-  }
-}catch(e){ /* soft ignore and fall back to single-tile */ }
 // show textual indication only
 showLastDetect(idx, e.target.files[0]);
 try{
@@ -314,7 +286,8 @@ try{
     }
   }
   // מילוי תיבת 'ערך' בשורת השחקן הנכון
-  if(Number.isFinite(detected)) { try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = detected; }catch(_){ } }
+  if(Number.isFinite(detected))
+  if (typeof log === 'function') { log(`detected(single): ${detected} (${confPct}%)`); } { try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = detected; }catch(_){ } }
   // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
   if(typeof detected !== 'undefined' && detected){
     if(typeof awardPointsFromDetection === 'function'){
@@ -336,26 +309,26 @@ function bump(index, delta){
 
 // == זיהוי אחרון – תצוגה ==
 function showLastDetect(playerIndex, file){
-  try{ log(`showLastDetect: idx=${playerIndex}, file=${file ? (file.name||'blob') : 'none'}, size=${file?.size||0}`);}catch(e){}
-  const wrap = $('#lastDetectWrap');
-  if(wrap){ wrap.style.display='block'; }
-  const label = $('#lastDetectLabel');
-  if(label){ label.textContent = `שחקן ${playerIndex+1} • ${players[playerIndex]?.name||''}`; }
-  const thumbs = $('#lastDetectThumbs');
-  if(thumbs){
-    thumbs.innerHTML='';
-    if (file){
-      const url = URL.createObjectURL(file);
-      const im = new Image();
-      im.onload = ()=>{ try{ URL.revokeObjectURL(url);}catch(_e){}; try{ log(`thumb ready ${im.naturalWidth}x${im.naturalHeight}`);}catch(_e){}; };
-      im.width = 56; im.height = 56; im.style.objectFit='cover'; im.style.borderRadius='6px';
-      im.src = url;
-      thumbs.appendChild(im);
-      try{ log('thumb appended'); }catch(e){}
-    } else {
-      try{ log('no file for thumb'); }catch(e){}
+  try{
+    const url = URL.createObjectURL(file);
+    const imgEl = document.getElementById('lastDetectImg');
+    const label = document.getElementById('lastDetectLabel');
+    if (imgEl){
+      imgEl.src = url;
+      imgEl.style.display = 'block';
+      imgEl.onload = ()=>{ try{ URL.revokeObjectURL(url); }catch(_){} };
     }
-  } else { try{ console.warn('lastDetectThumbs missing'); log('WARN: lastDetectThumbs missing'); }catch(e){} }
+    if (label){
+      const name = (window.players && window.players[playerIndex]) ? window.players[playerIndex].name : ('שחקן ' + (playerIndex+1));
+      label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${name}`;
+    }
+    if (typeof log === 'function'){
+      const sz = (file && file.size) ? (file.size/1024).toFixed(1)+' KB' : '?';
+      log(`📸 thumb set • player ${playerIndex+1} • ${sz} • ${file && file.type || ''}`);
+    }
+  }catch(e){
+    try{ log('thumb error: ' + (e && e.message || e)); }catch(_){}
+  }
 } • ${players[playerIndex].name}`; }
 }
 
@@ -556,7 +529,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.13.7-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.13.8-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -643,195 +616,7 @@ else {
     dlog('patch v5.10: expose __afterDetected_fillValue_v510(idx,val)');
   }
 })();
-
-// === v5.13.7-ml: multi-tile grid detection (non-invasive) ===
-async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
-  await ensureModels?.();
-  const {img} = await imgToTensor(file);
-  // draw into offscreen for stable sampling
-  const off = document.createElement('canvas');
-  off.width = 720; off.height = 720 * (img.height/img.width);
-  const oc = off.getContext('2d');
-  oc.drawImage(img, 0, 0, off.width, off.height);
-  const W = off.width, H = off.height;
-  const results = [];
-  for(let r=0;r<grid;r++){
-    for(let c=0;c<grid;c++){
-      const sx = Math.floor(c*W/grid), sy = Math.floor(r*H/grid);
-      const sw = Math.floor(W/grid), sh = Math.floor(H/grid);
-      const tile = document.createElement('canvas');
-      tile.width = 128; tile.height = 128;
-      tile.getContext('2d').drawImage(off, sx, sy, sw, sh, 0,0,128,128);
-      try{
-        const emb = net.infer(tile, true);
-        const res = await classifier.predictClass(emb, 3);
-        if(res && res.label!=null){
-          const conf = Math.max(...Object.values(res.confidences||{0:0}));
-          const n = parseInt(res.label,10);
-          if(Number.isFinite(n) && conf>=minConf){
-            results.push({n, conf, r, c});
-          }
-        }
-      }catch(e){ /* ignore tile */ }
-    }
-  }
-  // merge duplicates from overlapping tiles: keep by (n,r,c) already unique enough
-  // Just sum numbers of all hits
-  const nums = results.map(x=>x.n);
-  const sum = nums.reduce((a,b)=>a+b,0);
-  return {nums, sum};
-}
-
-// === v5.13.7-ml: multi-tile via Connected Components (Otsu + CCL) ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0;
-  for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    const wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF);
-    if (between > varMax){ varMax = between; thr = t; }
-  }
-  return thr;
-}
-// returns {boxes:[{x,y,w,h}], ox, oy, nw, nh}
-function __rk_segment_image_to_boxes(img, opts){
-  const CW = 960, CH = 540;
-  const stage = document.getElementById('stage_cc') || (()=>{
-    const c = document.createElement('canvas'); c.id='stage_cc'; c.width=CW; c.height=CH; c.style.display='none'; document.body.appendChild(c); return c;
-  })();
-  const ctx = stage.getContext('2d');
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw = Math.round(img.width*scale), nh = Math.round(img.height*scale);
-  const ox = Math.round((CW - nw)/2), oy = Math.round((CH - nh)/2);
-  ctx.clearRect(0,0,CW,CH);
-  ctx.drawImage(img, ox, oy, nw, nh);
-
-  const id = ctx.getImageData(ox, oy, nw, nh);
-  const data = id.data;
-  const gray = new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){
-    for(let x=0;x<nw;x++){
-      const i=(y*nw+x)*4; const r=data[i], g=data[i+1], b=data[i+2];
-      gray[y*nw+x] = opts.ignoreColor ? __rk_toGray(r,g,b) : Math.max(r,g,b);
-    }
-  }
-  const thr = opts.thr>0 ? opts.thr : __rk_otsu(gray, nw, nh);
-  const bin = new Uint8Array(nw*nh);
-  // Tiles are generally brighter on white backgrounds; invert threshold as needed for your set
-  for(let i=0;i<gray.length;i++) bin[i] = gray[i] > thr ? 1 : 0;
-
-  // Connected components
-  const labels = new Int32Array(nw*nh).fill(-1);
-  const boxes=[]; let label=0;
-  const qx=[], qy=[];
-  for(let y=0;y<nh;y++){
-    for(let x=0;x<nw;x++){
-      const idx=y*nw+x;
-      if(bin[idx]===0 || labels[idx]!==-1) continue;
-      // BFS flood fill
-      let minx=x, miny=y, maxx=x, maxy=y, area=0;
-      qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-      while(qx.length){
-        const cx=qx.pop(), cy=qy.pop();
-        const cidx=cy*nw+cx; area++;
-        if(cx<minx)minx=cx; if(cy<miny)miny=cy; if(cx>maxx)maxx=cx; if(cy>maxy)maxy=cy;
-        const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-        for(const [dx,dy] of nbs){
-          const nx=cx+dx, ny=cy+dy;
-          if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-          const nidx = ny*nw+nx;
-          if(bin[nidx]===1 && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); }
-        }
-      }
-      const bw=maxx-minx+1, bh=maxy-miny+1;
-      const aspect = Math.min(bw,bh)/Math.max(bw,bh); // ~ מלבני
-      if(area >= (opts.minArea||1200) && aspect >= (opts.aspectMin||0.5) && aspect <= (opts.aspectMax||1.2)){
-        boxes.push({x:minx,y:miny,w:bw,h:bh,area,aspect});
-      }
-      label++;
-    }
-  }
-  // סדר: מלמעלה למטה ואז משמאל לימין
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(boxes.length>(opts.maxCount||20)) boxes.length = (opts.maxCount||20);
-  return {boxes, ox, oy, nw, nh, CW, CH};
-}
-async function __rk_classify_boxes(seg){
-  await ensureModels?.();
-  const resNums=[]; const urls=[];
-  const off = document.createElement('canvas'); off.width=128; off.height=128;
-  const oc = off.getContext('2d');
-  const stage = document.getElementById('stage_cc');
-  for(const b of seg.boxes){
-    const pad = Math.floor(Math.min(b.w,b.h)*0.10);
-    oc.clearRect(0,0,128,128);
-    oc.drawImage(stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
-    try{ urls.push(off.toDataURL('image/jpeg')); }catch(_){ }
-    try{
-      const emb = net.infer(off, true);
-      const pred = await classifier.predictClass(emb, 3);
-      if(pred && pred.label!=null){
-        const n = parseInt(pred.label,10);
-        const c = Math.max(...Object.values(pred.confidences||{0:0}));
-        if(Number.isFinite(n) && c>=0.5){ resNums.push(n); }
-      }
-    }catch(_){ /* ignore this crop */ }
-  }
-  return {nums: resNums, thumbs: urls};
-}
-async function __rk_detect_many_and_fill(file, idx, row){
-  try{
-    const {img} = await imgToTensor(file);
-    // segment → classify per box
-    const seg = __rk_segment_image_to_boxes(img, {ignoreColor:true, thr:0, minArea:1200, maxCount:20, aspectMin:0.5, aspectMax:1.2});
-    const out = await __rk_classify_boxes(seg);
-    const nums = out && out.nums || []; const thumbs = out && out.thumbs || [];
-    if(nums && nums.length>=1){
-      try{ __rk_renderThumbs(thumbs); }catch(_){ }
-      const sum = nums.reduce((a,b)=>a+b,0);
-      // label
-      const lbl = document.getElementById('lastDetectLabel');
-      if(lbl) lbl.textContent = `זוהו: ${nums.join(', ')} (סה״כ ${sum}) — שחקן ${idx+1} • ${players[idx]?.name||''}`;
-      // fill only this player's input
-      try{ (row.querySelector('input.manual')||row.querySelector('input[type=\"number\"]')).value = sum; }catch(_){ }
-      return true; // handled
-    }
-  }catch(err){
-    try{ log && log('multi-CC error: '+(err?.message||err)); }catch(_){}
-  }
-  return false; // not handled, fallback to single detection path
-}
-
-// v5.13.7-ml thumbnails helper
-function __rk_renderThumbs(urls){
-  let host = document.getElementById('detThumbs');
-  if(!host){
-    const lbl = document.getElementById('lastDetectLabel');
-    host = document.createElement('div');
-    host.id = 'detThumbs';
-    if(lbl && lbl.parentNode){
-      lbl.parentNode.insertBefore(host, lbl.nextSibling);
-    } else {
-      document.body.appendChild(host);
-    }
-  }
-  host.innerHTML = '';
-  (urls||[]).forEach(u=>{
-    const img = document.createElement('img');
-    img.src = u;
-    host.appendChild(img);
-  });
-}
 </script>
 
-<script defer src="./thumb_patch_v5_13_4.js"></script>
 </body>
 </html>
