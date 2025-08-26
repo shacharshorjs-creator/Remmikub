@@ -55,7 +55,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.16.1-ml</small>
+<small class="tag" id="verBadge">v5.16.2-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -129,7 +129,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.16.1-ml</div>
+<div class="muted">© v5.16.2-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -215,7 +215,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.16.1-ml';
+const VERSION = 'v5.16.2-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -270,7 +270,7 @@ function renderBoard(){
         
 
 
-// v5.16.1-ml: try CC multi-detect first
+// v5.16.2-ml: try CC multi-detect first
 try{
   const handled = await __rk_detect_many_and_fill(e.target.files[0], idx, row);
   if(handled) return; // stop here; user will press "הוסף"
@@ -540,7 +540,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.16.1-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.16.2-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -628,7 +628,7 @@ else {
   }
 })();
 
-// === v5.16.1-ml: multi-tile grid detection (non-invasive) ===
+// === v5.16.2-ml: multi-tile grid detection (non-invasive) ===
 async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
   await ensureModels?.();
   const {img} = await imgToTensor(file);
@@ -666,7 +666,7 @@ async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
   return {nums, sum};
 }
 
-// === v5.16.1-ml: multi-tile via Connected Components (Otsu + CCL) ===
+// === v5.16.2-ml: multi-tile via Connected Components (Otsu + CCL) ===
 function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
 function __rk_otsu(gray, w, h){
   const hist = new Array(256).fill(0);
@@ -794,7 +794,7 @@ async function __rk_detect_many_and_fill(file, idx, row){
   return false; // not handled, fallback to single detection path
 }
 
-// v5.16.1-ml thumbnails helper
+// v5.16.2-ml thumbnails helper
 function __rk_renderThumbs(urls){
   let host = document.getElementById('detThumbs');
   if(!host){
@@ -816,221 +816,5 @@ function __rk_renderThumbs(urls){
 }
 </script>
 
-
-<!-- v5.16.1-ml — Robust KNN save/restore: chunked localStorage + Float16 quantization + download/upload helpers -->
-<script>
-(function(){
-  if (window.__knnPersist_v3) return; window.__knnPersist_v3 = true;
-
-  const KEY_PREFIX = 'remi_knn_v3';
-  const CHUNK_SIZE = 900_000; // ~0.9MB per chunk (safe vs. 5MB quota)
-  const QUANT = 'f16';        // quantize Float32 embeddings to Float16 to reduce size ~2x
-  const META_KEY = KEY_PREFIX + '.meta';
-  const MAX_PARTS = 40;       // guard
-
-  function now(){ return new Date().toISOString(); }
-  function kb(n){ return (n/1024).toFixed(1)+' KB'; }
-  function safeLog(msg){ try{ (window.log||console.log)('[knn-store]', msg); }catch(e){} }
-  function b64FromU8(u8){ // base64 from Uint8Array
-    let bin=''; for(let i=0;i<u8.length;i++) bin += String.fromCharCode(u8[i]);
-    return btoa(bin);
-  }
-  function u8FromB64(b64){
-    const bin = atob(b64); const u8 = new Uint8Array(bin.length);
-    for (let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
-    return u8;
-  }
-
-  // Float32 <-> Float16 (IEEE 754)
-  function f32toF16Buf(f32){
-    const out = new Uint16Array(f32.length);
-    for (let i=0;i<f32.length;i++){
-      let x = f32[i];
-      if (isNaN(x)) { out[i]=0x7e00; continue; }
-      const sign = (x<0) ? 1 : 0; if (sign) x = -x;
-      if (x === Infinity) { out[i] = (sign<<15) | 0x7c00; continue; }
-      if (x === 0) { out[i] = sign<<15; continue; }
-      let exp = Math.floor(Math.log2(x));
-      let frac = x / Math.pow(2, exp) - 1;
-      exp += 15;
-      if (exp <= 0){ // subnormal
-        const val = Math.round(x / Math.pow(2, -24));
-        out[i] = (sign<<15) | val;
-        continue;
-      }
-      if (exp >= 31){ // overflow
-        out[i] = (sign<<15) | 0x7c00; continue;
-      }
-      const mant = Math.round(frac * 1024);
-      out[i] = (sign<<15) | (exp<<10) | (mant & 0x3ff);
-    }
-    return new Uint8Array(out.buffer);
-  }
-  function f16toF32Buf(u8){
-    const u16 = new Uint16Array(u8.buffer, u8.byteOffset, u8.byteLength/2);
-    const out = new Float32Array(u16.length);
-    for (let i=0;i<u16.length;i++){
-      const h = u16[i];
-      const s = (h>>15)&1, e=(h>>10)&0x1f, m=h&0x3ff;
-      let f;
-      if (e===0){
-        f = (m? (m/1024)*Math.pow(2, -14) : 0);
-      } else if (e===31){
-        f = m? NaN : Infinity;
-      } else {
-        f = (1 + m/1024) * Math.pow(2, e-15);
-      }
-      out[i] = s? -f : f;
-    }
-    return out;
-  }
-
-  function getClassifier(){
-    if (window.classifier && typeof window.classifier.getClassifierDataset === 'function') return window.classifier;
-    if (window.knnClassifier && typeof window.knnClassifier.create === 'function'){
-      if (!window.__fallbackKnn) window.__fallbackKnn = window.knnClassifier.create();
-      return window.__fallbackKnn;
-    }
-    return null;
-  }
-
-  async function serialize(){
-    const knn = getClassifier(); if (!knn) throw new Error('KNN not ready');
-    const ds = knn.getClassifierDataset();
-    const classes = {}; const shapes = {};
-    const ids = Object.keys(ds);
-    for (const id of ids){
-      const t = ds[id]; if (!t) continue;
-      const f32 = await t.data();
-      let payloadU8;
-      if (QUANT === 'f16'){
-        payloadU8 = f32toF16Buf(f32);
-      } else {
-        payloadU8 = new Uint8Array(new Float32Array(f32).buffer);
-      }
-      classes[id] = b64FromU8(payloadU8);
-      shapes[id]  = Array.from(t.shape||[]);
-    }
-    const meta = { ver:'v3', quant:QUANT, savedAt:now(), classes:Object.keys(classes).length };
-    const body = JSON.stringify({ meta, classes, shapes });
-    // chunk
-    const parts = Math.ceil(body.length / CHUNK_SIZE);
-    if (parts > MAX_PARTS) throw new Error('model too large (parts='+parts+')');
-    localStorage.setItem(META_KEY, JSON.stringify({parts, bytes: body.length, ...meta}));
-    for (let i=0;i<parts;i++){
-      const chunk = body.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE);
-      localStorage.setItem(`${KEY_PREFIX}.part.${i}`, chunk);
-    }
-    return { bytes: body.length, parts, meta };
-  }
-
-  function restore(){
-    const metaStr = localStorage.getItem(META_KEY);
-    if (!metaStr) return { ok:false, empty:true };
-    let meta; try{ meta = JSON.parse(metaStr); }catch(e){ return {ok:false, error:'bad meta'}; }
-    const { parts=0 } = meta;
-    if (!parts) return { ok:false, empty:true };
-    let body='';
-    for (let i=0;i<parts;i++){
-      const chunk = localStorage.getItem(`${KEY_PREFIX}.part.${i}`) || '';
-      body += chunk;
-    }
-    let parsed=null;
-    try{ parsed = JSON.parse(body); }catch(e){ return {ok:false, error:'bad body'}; }
-    const { classes={}, shapes={}, meta:inner={} } = parsed;
-    const knn = getClassifier(); if (!knn) return { ok:false, error:'KNN not ready' };
-    const ds = {}; let clsCount=0, vecCount=0;
-    for (const id of Object.keys(classes)){
-      const b64 = classes[id];
-      const shape = shapes[id] || [];
-      const u8 = u8FromB64(b64);
-      let f32;
-      if ((inner.quant||QUANT)==='f16'){
-        f32 = f16toF32Buf(u8);
-      } else {
-        f32 = new Float32Array(u8.buffer, u8.byteOffset, u8.byteLength/4);
-      }
-      const t = tf.tensor(f32, shape, 'float32');
-      ds[id]=t; clsCount++; if (shape && shape.length) vecCount += (shape[0]||0);
-    }
-    if (clsCount===0) return { ok:false, empty:true };
-    knn.setClassifierDataset(ds);
-    return { ok:true, bytes: body.length, parts, clsCount, vecCount, quant:(inner.quant||QUANT) };
-  }
-
-  // Public API
-  window.remiModel = window.remiModel || {};
-  window.remiModel.save = async function(){
-    try{
-      const info = await serialize();
-      safeLog(`saved ${kb(info.bytes)} in ${info.parts} part(s), classes=${info.meta.classes}`);
-      const el = document.getElementById('modelStatus') || document.getElementById('modelSize');
-      if (el) el.textContent = `saved • ${kb(info.bytes)} • ${info.meta.classes} classes`;
-      return {ok:true, ...info};
-    }catch(e){
-      safeLog('save error: '+(e && e.message || e));
-      // Fallback: offer download
-      try{
-        const knn = getClassifier(); if (!knn) throw new Error('KNN not ready');
-        const ds = knn.getClassifierDataset();
-        const classes = {}, shapes = {};
-        const ids = Object.keys(ds);
-        for (const id of ids){
-          const t = ds[id]; if (!t) continue;
-          const f32 = await t.data();
-          const blobU8 = (QUANT==='f16') ? f32toF16Buf(f32) : new Uint8Array(new Float32Array(f32).buffer);
-          classes[id] = b64FromU8(blobU8);
-          shapes[id]  = Array.from(t.shape||[]);
-        }
-        const meta = {ver:'v3', quant:QUANT, savedAt:now(), classes:Object.keys(classes).length};
-        const body = JSON.stringify({ meta, classes, shapes });
-        const a = document.createElement('a');
-        a.download = 'remi_knn_backup.json';
-        a.href = URL.createObjectURL(new Blob([body], {type:'application/json'}));
-        a.click();
-        setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
-        safeLog('downloaded backup');
-      }catch(_){}
-      return { ok:false, error:(e && e.message || String(e)) };
-    }
-  };
-  window.remiModel.load = function(){
-    try{
-      const info = restore();
-      if (info.ok){
-        safeLog(`restored ${kb(info.bytes)} • parts=${info.parts} • classes=${info.clsCount} • vecs~${info.vecCount} • ${info.quant}`);
-        const el = document.getElementById('modelStatus') || document.getElementById('modelSize');
-        if (el) el.textContent = `restored • ${kb(info.bytes)} • ${info.clsCount} classes`;
-      } else {
-        safeLog('no stored model or restore failed');
-      }
-      return info;
-    }catch(e){
-      safeLog('load error: '+(e && e.message || e));
-      return { ok:false, error:(e && e.message || String(e)) };
-    }
-  };
-  // optional: manual upload of backup file
-  window.remiModel.upload = async function(file){
-    try{
-      const txt = await file.text();
-      // store into chunks
-      const parts = Math.ceil(txt.length / CHUNK_SIZE);
-      localStorage.setItem(META_KEY, JSON.stringify({parts, bytes:txt.length, ver:'v3', quant:QUANT, uploaded:true}));
-      for (let i=0;i<parts;i++){
-        localStorage.setItem(`${KEY_PREFIX}.part.${i}`, txt.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE));
-      }
-      return window.remiModel.load();
-    }catch(e){
-      return { ok:false, error:(e && e.message || String(e)) };
-    }
-  };
-
-  // Auto-restore
-  document.addEventListener('DOMContentLoaded', function(){ try{ window.remiModel.load(); }catch(_){} }, {once:true});
-  // Best-effort auto-save
-  window.addEventListener('beforeunload', function(){ try{ window.remiModel.save(); }catch(_){} });
-})();
-</script>
 </body>
 </html>
