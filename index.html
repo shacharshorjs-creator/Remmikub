@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.14.7-ml</small>
+<small class="tag" id="verBadge">v5.15-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.14.7-ml</div>
+<div class="muted">© v5.15-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.14.7';
+const VERSION = 'v5.15-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -512,7 +512,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.14.7-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.15-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -601,5 +601,224 @@ else {
 })();
 </script>
 
+<script>
+
+/*! multi_dice_addon_v5_15.js - non-invasive multi-dice detection + thumbnails */
+(function () {
+  const VERSION = 'v5.15-ml';
+  const MAX_THUMBS = 6;
+  const THRESH = 170;       // luminance threshold for highlights
+  const MIN_AREA = 900;     // minimal region size (px) to consider as a tile
+  const PAD = 8;            // padding around crop
+  const grid = 16;          // downsample grid for fast pass
+
+  // Create a tiny tray for thumbnails (non-blocking, bottom-right)
+  function ensureTray() {
+    let tray = document.getElementById('multiDiceThumbs');
+    if (!tray) {
+      tray = document.createElement('div');
+      tray.id = 'multiDiceThumbs';
+      tray.setAttribute('aria-label', 'dice-thumbs');
+      tray.style.cssText = [
+        'position:fixed','right:12px','bottom:12px','z-index:9999',
+        'display:flex','flex-wrap:wrap','gap:8px',
+        'background:rgba(0,0,0,.35)','backdrop-filter:blur(6px)',
+        'padding:10px','border-radius:12px','max-width:48vw','max-height:40vh',
+        'overflow:auto'
+      ].join(';');
+      document.body.appendChild(tray);
+    }
+    return tray;
+  }
+  function clearTray() {
+    const tray = ensureTray();
+    while (tray.firstChild) tray.removeChild(tray.firstChild);
+  }
+  function addThumb(url, label, conf) {
+    const tray = ensureTray();
+    const box = document.createElement('div');
+    box.style.cssText = [
+      'position:relative','width:90px','height:90px','border-radius:10px',
+      'overflow:hidden','background:#111','box-shadow:0 2px 6px rgba(0,0,0,.35)'
+    ].join(';');
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = label || '';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+    const tag = document.createElement('div');
+    tag.textContent = (label||'?') + (conf!=null?` • ${Math.round(conf*100)}%`:'');
+    tag.style.cssText = [
+      'position:absolute','left:6px','bottom:6px',
+      'font:600 12px/1.2 system-ui,Segoe UI,Arial',
+      'padding:4px 6px','border-radius:6px',
+      'background:rgba(0,0,0,.6)','color:#fff','text-shadow:0 1px 1px #000'
+    ].join(';');
+    box.appendChild(img);
+    box.appendChild(tag);
+    tray.appendChild(box);
+  }
+
+  function getImageBitmapFromAny(src) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (src instanceof ImageBitmap) return resolve(src);
+        if (src instanceof HTMLImageElement || src instanceof HTMLVideoElement || src instanceof HTMLCanvasElement) {
+          resolve(await createImageBitmap(src));
+          return;
+        }
+        if (src instanceof Blob) {
+          resolve(await createImageBitmap(src));
+          return;
+        }
+        // try selector
+        if (typeof src === 'string') {
+          const el = document.querySelector(src);
+          if (el) return resolve(await createImageBitmap(el));
+        }
+        reject(new Error('Unsupported source for bitmap'));
+      } catch (e) { reject(e); }
+    });
+  }
+
+  function luminance(r,g,b){ return 0.2126*r + 0.7152*g + 0.0722*b; }
+
+  // Very fast highlight-based region proposal
+  function proposeBoxes(imgData, W, H) {
+    const gw = Math.max(4, Math.floor(W/grid)), gh = Math.max(4, Math.floor(H/grid));
+    const visited = new Set();
+    const boxes = [];
+    function key(x,y){ return (y<<16)|x; }
+    function flood(sx,sy){
+      const stack = [[sx,sy]];
+      let minX=sx, minY=sy, maxX=sx, maxY=sy, count=0;
+      while (stack.length){
+        const [x,y]=stack.pop();
+        const k=key(x,y); if (visited.has(k)) continue;
+        visited.add(k); count++;
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+        const neigh = [[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+        for (const [nx,ny] of neigh){
+          if (nx<0||ny<0||nx>=gw||ny>=gh) continue;
+          const kk=key(nx,ny); if (visited.has(kk)) continue;
+          const idx = ((ny*grid)*W + (nx*grid)) * 4;
+          const L = luminance(
+            imgData[idx], imgData[idx+1], imgData[idx+2]
+          );
+          if (L>=THRESH) stack.push([nx,ny]);
+        }
+      }
+      const scale = grid;
+      const x = Math.max(0, minX*scale - PAD);
+      const y = Math.max(0, minY*scale - PAD);
+      const w = Math.min(W - x, (maxX - minX + 1)*scale + PAD*2);
+      const h = Math.min(H - y, (maxY - minY + 1)*scale + PAD*2);
+      if (w*h >= MIN_AREA) boxes.push({x,y,w,h});
+    }
+
+    for (let gy=0; gy<gh; gy++){
+      for (let gx=0; gx<gw; gx++){
+        const k=key(gx,gy); if (visited.has(k)) continue;
+        const idx = ((gy*grid)*W + (gx*grid)) * 4;
+        const L = luminance(imgData[idx], imgData[idx+1], imgData[idx+2]);
+        if (L>=THRESH) flood(gx,gy);
+      }
+    }
+    return boxes;
+  }
+
+  async function cropsFromBitmap(bitmap) {
+    const W = bitmap.width, H = bitmap.height;
+    const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
+    const cx = cv.getContext('2d', { willReadFrequently:true });
+    cx.drawImage(bitmap,0,0);
+    const data = cx.getImageData(0,0,W,H).data;
+    let boxes = proposeBoxes(data, W, H);
+    // Merge boxes that overlap a lot
+    boxes = boxes.filter(b=>b.w*b.h>=MIN_AREA).slice(0, 12);
+    // Create crops + dataUrls
+    const outs = [];
+    for (const b of boxes){
+      const c = document.createElement('canvas');
+      c.width = b.w; c.height = b.h;
+      c.getContext('2d').drawImage(cv, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+      const url = c.toDataURL('image/jpeg', 0.85);
+      outs.push({ url, box:b });
+      if (outs.length>=MAX_THUMBS) break;
+    }
+    return outs;
+  }
+
+  // Optional classifier hook
+  async function classifyCropURL(url) {
+    try {
+      if (!window.mobilenet || !window.knnClassifier) return {label:'?', conf:null};
+      // Expect an existing classifyImage function in page (non-invasive). If exists—use it.
+      if (typeof window.classifyImage === 'function') {
+        const res = await window.classifyImage(url); // developer’s classifier should accept url/blob/canvas
+        if (res && res.label) return res;
+      }
+    } catch (e){}
+    return {label:'?', conf:null};
+  }
+
+  async function detectAndShow(src) {
+    try {
+      clearTray();
+      const bmp = await getImageBitmapFromAny(src);
+      const crops = await cropsFromBitmap(bmp);
+      if (crops.length===0){
+        // show original as fallback small
+        const cv = document.createElement('canvas');
+        cv.width = Math.min(300, bmp.width); cv.height = cv.width*(bmp.height/bmp.width)|0;
+        cv.getContext('2d').drawImage(bmp,0,0,cv.width,cv.height);
+        addThumb(cv.toDataURL('image/jpeg',0.8), '—', null);
+        return [];
+      }
+      const results = [];
+      for (const c of crops){
+        const r = await classifyCropURL(c.url);
+        addThumb(c.url, r.label, r.conf);
+        results.push({ ...c, ...r });
+      }
+      return results;
+    } catch (e){
+      console.warn('[multiDice] detect error', e);
+      return [];
+    }
+  }
+
+  // Export minimal API
+  window.multiDiceDetect = detectAndShow;
+  window.multiDiceAddonVersion = VERSION;
+
+  // Auto-wrap snapClassify (if exists)
+  const _wrap = () => {
+    const orig = window.snapClassify;
+    if (typeof orig !== 'function') return;
+    if (orig.__wrapped_by_multiDice) return;
+    async function wrappedSnapClassify(cameraBlob, playerIndex) {
+      // Show thumbnails & get the best crop if any
+      let best = null;
+      try {
+        const found = await detectAndShow(cameraBlob);
+        if (found && found.length){
+          best = found.reduce((a,b)=> (a.conf||0)>(b.conf||0)?a:b );
+        }
+      } catch(e){ /* ignore */ }
+      const toSend = best ? await (await fetch(best.url)).blob() : cameraBlob;
+      return orig.call(this, toSend, playerIndex);
+    }
+    wrappedSnapClassify.__wrapped_by_multiDice = true;
+    window.snapClassify = wrappedSnapClassify;
+    console.log('[multiDice]', VERSION, 'wrapper active');
+  };
+  const _obs = new MutationObserver(_wrap);
+  _wrap();
+  setTimeout(_wrap, 200);
+  _obs.observe(document.documentElement, {subtree:true, childList:true});
+})();
+
+</script>
 </body>
 </html>
