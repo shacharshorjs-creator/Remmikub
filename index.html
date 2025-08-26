@@ -154,83 +154,6 @@ function awardPointsFromDetection(playerIdx, points) {
   }
 }
 
-
-// === Multi‑tile helpers (non-destructive) ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) |0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0); for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, wF=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){ wB += hist[t]; if(wB===0) continue; wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t]; const mB = sumB / wB; const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF); if (between > varMax){ varMax = between; thr = t; } }
-  return thr;
-}
-// returns {boxes:[{x,y,w,h}], ox, oy, nw, nh}
-function __rk_segment(img, options){
-  const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d');
-  const CW = 960, CH = 540; cvs.width=CW; cvs.height=CH;
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw = Math.round(img.width*scale), nh = Math.round(img.height*scale);
-  const ox = Math.round((CW - nw)/2), oy = Math.round((CH - nh)/2);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-
-  const id = ctx.getImageData(ox, oy, nw, nh), data = id.data;
-  const gray = new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const i = (y*nw + x)*4; const r=data[i], g=data[i+1], b=data[i+2];
-    gray[y*nw+x] = options.ignoreColor ? __rk_toGray(r,g,b) : Math.max(r,g,b);
-  }};
-  const thr = options.thr>0? options.thr : __rk_otsu(gray, nw, nh);
-  const bin = new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++) bin[i] = gray[i] > thr ? 1 : 0;
-
-  const labels = new Int32Array(nw*nh).fill(-1);
-  const boxes = []; const qx=[], qy=[]; let label=0;
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const idx = y*nw + x; if(bin[idx]===0 || labels[idx]!==-1) continue;
-    let minx=x, miny=y, maxx=x, maxy=y, area=0; qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-    while(qx.length){ const cx=qx.pop(), cy=qy.pop(); const cidx=cy*nw+cx; area++;
-      if(cx<minx) minx=cx; if(cy<miny) miny=cy; if(cx>maxx) maxx=cx; if(cy>maxy) maxy=cy;
-      const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-      for(const [dx,dy] of nbs){ const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-        const nidx=ny*nw+nx; if(bin[nidx]===1 && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); } }
-    }
-    const bw=maxx-minx+1, bh=maxy-miny+1; const aspect = Math.min(bw,bh)/Math.max(bw,bh);
-    if(area>= (options.minArea||1600) && aspect>= (options.aspectMin||0.5) && aspect<= (options.aspectMax||1.0)){
-      boxes.push({x:minx,y:miny,w:bw,h:bh,area,aspect});
-    }
-    label++;
-  }}
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(boxes.length>(options.maxCount||12)) boxes.length = (options.maxCount||12);
-  return {boxes, ox, oy, nw, nh, CW, CH};
-}
-// classify crops and return {values:[...], sum, details:[{n,conf}]}
-async function __rk_classifyCropsFromSeg(seg){
-  await ensureModels?.();
-  const off = document.createElement('canvas'); off.width=112; off.height=112; const oc = off.getContext('2d');
-  let sum=0, values=[], details=[];
-  for(let i=0;i<seg.boxes.length;i++){
-    const b = seg.boxes[i]; const pad = Math.floor(Math.min(b.w,b.h)*0.08);
-    // draw original image (held in last image loaded in previous step): we don't have it here; we'll reconstruct from stage if exists
-    const stage = document.getElementById('stage');
-    if(!stage){ continue; }
-    oc.clearRect(0,0,112,112);
-    oc.drawImage(stage, seg.ox + b.x - pad, seg.oy + b.y - pad, b.w + pad*2, b.h + pad*2, 0,0,112,112);
-    try{
-      const feat = net.infer(off, 'conv_preds');
-      const res = await classifier.predictClass(feat, 3);
-      if(res && res.label!=null){
-        const v = parseInt(res.label,10);
-        const cfs = Object.values(res.confidences||{}); const conf = Math.round(Math.max(...cfs)*100);
-        if(Number.isFinite(v)){ values.push(v); sum += v; details.push({n:v, conf}); }
-      }
-    }catch(err){ try{ log && log('multi: classify error '+(err?.message||err)); }catch(_){ } }
-  }
-  return {values, sum, details};
-}
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0">
 // === הוספת נקודות מהזיהוי לשחקן ===
@@ -258,83 +181,6 @@ function awardPointsFromDetection(playerIdx, points) {
   }
 }
 
-
-// === Multi‑tile helpers (non-destructive) ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) |0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0); for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, wF=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){ wB += hist[t]; if(wB===0) continue; wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t]; const mB = sumB / wB; const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF); if (between > varMax){ varMax = between; thr = t; } }
-  return thr;
-}
-// returns {boxes:[{x,y,w,h}], ox, oy, nw, nh}
-function __rk_segment(img, options){
-  const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d');
-  const CW = 960, CH = 540; cvs.width=CW; cvs.height=CH;
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw = Math.round(img.width*scale), nh = Math.round(img.height*scale);
-  const ox = Math.round((CW - nw)/2), oy = Math.round((CH - nh)/2);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-
-  const id = ctx.getImageData(ox, oy, nw, nh), data = id.data;
-  const gray = new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const i = (y*nw + x)*4; const r=data[i], g=data[i+1], b=data[i+2];
-    gray[y*nw+x] = options.ignoreColor ? __rk_toGray(r,g,b) : Math.max(r,g,b);
-  }};
-  const thr = options.thr>0? options.thr : __rk_otsu(gray, nw, nh);
-  const bin = new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++) bin[i] = gray[i] > thr ? 1 : 0;
-
-  const labels = new Int32Array(nw*nh).fill(-1);
-  const boxes = []; const qx=[], qy=[]; let label=0;
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const idx = y*nw + x; if(bin[idx]===0 || labels[idx]!==-1) continue;
-    let minx=x, miny=y, maxx=x, maxy=y, area=0; qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-    while(qx.length){ const cx=qx.pop(), cy=qy.pop(); const cidx=cy*nw+cx; area++;
-      if(cx<minx) minx=cx; if(cy<miny) miny=cy; if(cx>maxx) maxx=cx; if(cy>maxy) maxy=cy;
-      const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-      for(const [dx,dy] of nbs){ const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-        const nidx=ny*nw+nx; if(bin[nidx]===1 && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); } }
-    }
-    const bw=maxx-minx+1, bh=maxy-miny+1; const aspect = Math.min(bw,bh)/Math.max(bw,bh);
-    if(area>= (options.minArea||1600) && aspect>= (options.aspectMin||0.5) && aspect<= (options.aspectMax||1.0)){
-      boxes.push({x:minx,y:miny,w:bw,h:bh,area,aspect});
-    }
-    label++;
-  }}
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(boxes.length>(options.maxCount||12)) boxes.length = (options.maxCount||12);
-  return {boxes, ox, oy, nw, nh, CW, CH};
-}
-// classify crops and return {values:[...], sum, details:[{n,conf}]}
-async function __rk_classifyCropsFromSeg(seg){
-  await ensureModels?.();
-  const off = document.createElement('canvas'); off.width=112; off.height=112; const oc = off.getContext('2d');
-  let sum=0, values=[], details=[];
-  for(let i=0;i<seg.boxes.length;i++){
-    const b = seg.boxes[i]; const pad = Math.floor(Math.min(b.w,b.h)*0.08);
-    // draw original image (held in last image loaded in previous step): we don't have it here; we'll reconstruct from stage if exists
-    const stage = document.getElementById('stage');
-    if(!stage){ continue; }
-    oc.clearRect(0,0,112,112);
-    oc.drawImage(stage, seg.ox + b.x - pad, seg.oy + b.y - pad, b.w + pad*2, b.h + pad*2, 0,0,112,112);
-    try{
-      const feat = net.infer(off, 'conv_preds');
-      const res = await classifier.predictClass(feat, 3);
-      if(res && res.label!=null){
-        const v = parseInt(res.label,10);
-        const cfs = Object.values(res.confidences||{}); const conf = Math.round(Math.max(...cfs)*100);
-        if(Number.isFinite(v)){ values.push(v); sum += v; details.push({n:v, conf}); }
-      }
-    }catch(err){ try{ log && log('multi: classify error '+(err?.message||err)); }catch(_){ } }
-  }
-  return {values, sum, details};
-}
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2">
 // === הוספת נקודות מהזיהוי לשחקן ===
@@ -360,83 +206,6 @@ function awardPointsFromDetection(playerIdx, points) {
   } catch(err) {
     console.error("awardPointsFromDetection error", err);
   }
-}
-
-
-// === Multi‑tile helpers (non-destructive) ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) |0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0); for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, wF=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){ wB += hist[t]; if(wB===0) continue; wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t]; const mB = sumB / wB; const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF); if (between > varMax){ varMax = between; thr = t; } }
-  return thr;
-}
-// returns {boxes:[{x,y,w,h}], ox, oy, nw, nh}
-function __rk_segment(img, options){
-  const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d');
-  const CW = 960, CH = 540; cvs.width=CW; cvs.height=CH;
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw = Math.round(img.width*scale), nh = Math.round(img.height*scale);
-  const ox = Math.round((CW - nw)/2), oy = Math.round((CH - nh)/2);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-
-  const id = ctx.getImageData(ox, oy, nw, nh), data = id.data;
-  const gray = new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const i = (y*nw + x)*4; const r=data[i], g=data[i+1], b=data[i+2];
-    gray[y*nw+x] = options.ignoreColor ? __rk_toGray(r,g,b) : Math.max(r,g,b);
-  }};
-  const thr = options.thr>0? options.thr : __rk_otsu(gray, nw, nh);
-  const bin = new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++) bin[i] = gray[i] > thr ? 1 : 0;
-
-  const labels = new Int32Array(nw*nh).fill(-1);
-  const boxes = []; const qx=[], qy=[]; let label=0;
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const idx = y*nw + x; if(bin[idx]===0 || labels[idx]!==-1) continue;
-    let minx=x, miny=y, maxx=x, maxy=y, area=0; qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-    while(qx.length){ const cx=qx.pop(), cy=qy.pop(); const cidx=cy*nw+cx; area++;
-      if(cx<minx) minx=cx; if(cy<miny) miny=cy; if(cx>maxx) maxx=cx; if(cy>maxy) maxy=cy;
-      const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-      for(const [dx,dy] of nbs){ const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-        const nidx=ny*nw+nx; if(bin[nidx]===1 && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); } }
-    }
-    const bw=maxx-minx+1, bh=maxy-miny+1; const aspect = Math.min(bw,bh)/Math.max(bw,bh);
-    if(area>= (options.minArea||1600) && aspect>= (options.aspectMin||0.5) && aspect<= (options.aspectMax||1.0)){
-      boxes.push({x:minx,y:miny,w:bw,h:bh,area,aspect});
-    }
-    label++;
-  }}
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(boxes.length>(options.maxCount||12)) boxes.length = (options.maxCount||12);
-  return {boxes, ox, oy, nw, nh, CW, CH};
-}
-// classify crops and return {values:[...], sum, details:[{n,conf}]}
-async function __rk_classifyCropsFromSeg(seg){
-  await ensureModels?.();
-  const off = document.createElement('canvas'); off.width=112; off.height=112; const oc = off.getContext('2d');
-  let sum=0, values=[], details=[];
-  for(let i=0;i<seg.boxes.length;i++){
-    const b = seg.boxes[i]; const pad = Math.floor(Math.min(b.w,b.h)*0.08);
-    // draw original image (held in last image loaded in previous step): we don't have it here; we'll reconstruct from stage if exists
-    const stage = document.getElementById('stage');
-    if(!stage){ continue; }
-    oc.clearRect(0,0,112,112);
-    oc.drawImage(stage, seg.ox + b.x - pad, seg.oy + b.y - pad, b.w + pad*2, b.h + pad*2, 0,0,112,112);
-    try{
-      const feat = net.infer(off, 'conv_preds');
-      const res = await classifier.predictClass(feat, 3);
-      if(res && res.label!=null){
-        const v = parseInt(res.label,10);
-        const cfs = Object.values(res.confidences||{}); const conf = Math.round(Math.max(...cfs)*100);
-        if(Number.isFinite(v)){ values.push(v); sum += v; details.push({n:v, conf}); }
-      }
-    }catch(err){ try{ log && log('multi: classify error '+(err?.message||err)); }catch(_){ } }
-  }
-  return {values, sum, details};
 }
 
 </script>
@@ -494,47 +263,48 @@ function renderBoard(){
       if(e.target.files?.length){
         log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
         
-// show textual indication only
 
+// v5.13 multi: try multi-cube detection first (grid-based). If >=2 tiles detected -> fill sum & show, then stop.
+try{
+  const multi = await __rk_gridMultiDetect(e.target.files[0], 3, 0.5);
+  if (multi && Array.isArray(multi.nums) && multi.nums.length >= 2){
+    const sum = multi.sum;
+    // update last detection label
+    const lbl = document.getElementById('lastDetectLabel');
+    if(lbl){
+      lbl.textContent = `זוהו: ${multi.nums.join(', ')} (סה״כ ${sum}) — שחקן ${idx+1} • ${players[idx]?.name||''}`;
+    }
+    // fill only this player's input box
+    try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = sum; }catch(_){}
+    // do NOT auto award; user clicks "הוסף"
+    return;
+  }
+}catch(e){ /* soft ignore and fall back to single-tile */ }
+// show textual indication only
 showLastDetect(idx, e.target.files[0]);
 try{
   await ensureModels?.();
   const {img} = await imgToTensor(e.target.files[0]);
-
-  // Draw to a known canvas 'stage' so the segmentation cropper can reuse pixels
-  (function(){
-    let stage = document.getElementById('stage');
-    if(!stage){ stage = document.createElement('canvas'); stage.id='stage'; stage.width=960; stage.height=540; stage.style.display='none'; document.body.appendChild(stage); }
-    const ctx = stage.getContext('2d');
-    const scale = Math.min(stage.width/img.width, stage.height/img.height);
-    const nw = Math.round(img.width*scale), nh = Math.round(img.height*scale);
-    const ox = Math.round((stage.width - nw)/2), oy = Math.round((stage.height - nh)/2);
-    ctx.clearRect(0,0,stage.width, stage.height);
-    ctx.drawImage(img, ox, oy, nw, nh);
-  })();
-
-  // Segment multiple tiles and classify
-  const seg = __rk_segment(img, {ignoreColor:true, thr:0, minArea:1200, maxCount:20, aspectMin:0.5, aspectMax:1.2});
-  const result = await __rk_classifyCropsFromSeg(seg);
-
-  if(result && result.values && result.values.length){
-    const sum = result.sum;
-    // fill ONLY the current row's 'manual' input
-    try{
-      const input = row.querySelector('input.manual') || row.querySelector('input[type="number"]');
-      if(input){ input.value = sum; }
-    }catch(_){}
-
-    // textual indication
-    const lbl = document.getElementById('lastDetectLabel');
-    if(lbl){
-      lbl.textContent = `זיהוי מרובה: שחקן ${idx+1} • ${players[idx]?.name||''} — [${result.values.join('+')}] = ${sum}`;
+  let detected = null, confPct = 0;
+  if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
+    const emb = net.infer(img, true);
+    const res = await classifier.predictClass(emb, 3);
+    if(res && res.label != null){
+      detected = parseInt(res.label,10);
+      confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
     }
-    // stop here: let the user click "הוסף" ידנית; do NOT auto‑award
-    // If you later want auto-sum award: call awardPointsFromDetection(idx, sum);
-  } else {
-    // fallback to single‑tile pipeline you already had below
- (אם ביקשת בעבר)
+  }
+  const lbl = document.getElementById('lastDetectLabel');
+  if(lbl){
+    if(detected || detected===0){
+      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — זוהתה קובייה: ${detected} (${confPct}%)`;
+    }else{
+      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
+    }
+  }
+  // מילוי תיבת 'ערך' בשורת השחקן הנכון
+  if(Number.isFinite(detected)) { try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = detected; }catch(_){ } }
+  // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
   if(typeof detected !== 'undefined' && detected){
     if(typeof awardPointsFromDetection === 'function'){
       awardPointsFromDetection(idx, detected);
@@ -757,83 +527,6 @@ function awardPointsFromDetection(playerIdx, points) {
   }
 }
 
-
-// === Multi‑tile helpers (non-destructive) ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) |0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0); for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, wF=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){ wB += hist[t]; if(wB===0) continue; wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t]; const mB = sumB / wB; const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF); if (between > varMax){ varMax = between; thr = t; } }
-  return thr;
-}
-// returns {boxes:[{x,y,w,h}], ox, oy, nw, nh}
-function __rk_segment(img, options){
-  const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d');
-  const CW = 960, CH = 540; cvs.width=CW; cvs.height=CH;
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw = Math.round(img.width*scale), nh = Math.round(img.height*scale);
-  const ox = Math.round((CW - nw)/2), oy = Math.round((CH - nh)/2);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-
-  const id = ctx.getImageData(ox, oy, nw, nh), data = id.data;
-  const gray = new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const i = (y*nw + x)*4; const r=data[i], g=data[i+1], b=data[i+2];
-    gray[y*nw+x] = options.ignoreColor ? __rk_toGray(r,g,b) : Math.max(r,g,b);
-  }};
-  const thr = options.thr>0? options.thr : __rk_otsu(gray, nw, nh);
-  const bin = new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++) bin[i] = gray[i] > thr ? 1 : 0;
-
-  const labels = new Int32Array(nw*nh).fill(-1);
-  const boxes = []; const qx=[], qy=[]; let label=0;
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const idx = y*nw + x; if(bin[idx]===0 || labels[idx]!==-1) continue;
-    let minx=x, miny=y, maxx=x, maxy=y, area=0; qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-    while(qx.length){ const cx=qx.pop(), cy=qy.pop(); const cidx=cy*nw+cx; area++;
-      if(cx<minx) minx=cx; if(cy<miny) miny=cy; if(cx>maxx) maxx=cx; if(cy>maxy) maxy=cy;
-      const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-      for(const [dx,dy] of nbs){ const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-        const nidx=ny*nw+nx; if(bin[nidx]===1 && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); } }
-    }
-    const bw=maxx-minx+1, bh=maxy-miny+1; const aspect = Math.min(bw,bh)/Math.max(bw,bh);
-    if(area>= (options.minArea||1600) && aspect>= (options.aspectMin||0.5) && aspect<= (options.aspectMax||1.0)){
-      boxes.push({x:minx,y:miny,w:bw,h:bh,area,aspect});
-    }
-    label++;
-  }}
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(boxes.length>(options.maxCount||12)) boxes.length = (options.maxCount||12);
-  return {boxes, ox, oy, nw, nh, CW, CH};
-}
-// classify crops and return {values:[...], sum, details:[{n,conf}]}
-async function __rk_classifyCropsFromSeg(seg){
-  await ensureModels?.();
-  const off = document.createElement('canvas'); off.width=112; off.height=112; const oc = off.getContext('2d');
-  let sum=0, values=[], details=[];
-  for(let i=0;i<seg.boxes.length;i++){
-    const b = seg.boxes[i]; const pad = Math.floor(Math.min(b.w,b.h)*0.08);
-    // draw original image (held in last image loaded in previous step): we don't have it here; we'll reconstruct from stage if exists
-    const stage = document.getElementById('stage');
-    if(!stage){ continue; }
-    oc.clearRect(0,0,112,112);
-    oc.drawImage(stage, seg.ox + b.x - pad, seg.oy + b.y - pad, b.w + pad*2, b.h + pad*2, 0,0,112,112);
-    try{
-      const feat = net.infer(off, 'conv_preds');
-      const res = await classifier.predictClass(feat, 3);
-      if(res && res.label!=null){
-        const v = parseInt(res.label,10);
-        const cfs = Object.values(res.confidences||{}); const conf = Math.round(Math.max(...cfs)*100);
-        if(Number.isFinite(v)){ values.push(v); sum += v; details.push({n:v, conf}); }
-      }
-    }catch(err){ try{ log && log('multi: classify error '+(err?.message||err)); }catch(_){ } }
-  }
-  return {values, sum, details};
-}
-
 </script>
 
 <!-- v5.13-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
@@ -924,82 +617,43 @@ else {
   }
 })();
 
-// === Multi‑tile helpers (non-destructive) ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) |0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0); for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, wF=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){ wB += hist[t]; if(wB===0) continue; wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t]; const mB = sumB / wB; const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF); if (between > varMax){ varMax = between; thr = t; } }
-  return thr;
-}
-// returns {boxes:[{x,y,w,h}], ox, oy, nw, nh}
-function __rk_segment(img, options){
-  const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d');
-  const CW = 960, CH = 540; cvs.width=CW; cvs.height=CH;
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw = Math.round(img.width*scale), nh = Math.round(img.height*scale);
-  const ox = Math.round((CW - nw)/2), oy = Math.round((CH - nh)/2);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-
-  const id = ctx.getImageData(ox, oy, nw, nh), data = id.data;
-  const gray = new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const i = (y*nw + x)*4; const r=data[i], g=data[i+1], b=data[i+2];
-    gray[y*nw+x] = options.ignoreColor ? __rk_toGray(r,g,b) : Math.max(r,g,b);
-  }};
-  const thr = options.thr>0? options.thr : __rk_otsu(gray, nw, nh);
-  const bin = new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++) bin[i] = gray[i] > thr ? 1 : 0;
-
-  const labels = new Int32Array(nw*nh).fill(-1);
-  const boxes = []; const qx=[], qy=[]; let label=0;
-  for(let y=0;y<nh;y++){ for(let x=0;x<nw;x++){
-    const idx = y*nw + x; if(bin[idx]===0 || labels[idx]!==-1) continue;
-    let minx=x, miny=y, maxx=x, maxy=y, area=0; qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-    while(qx.length){ const cx=qx.pop(), cy=qy.pop(); const cidx=cy*nw+cx; area++;
-      if(cx<minx) minx=cx; if(cy<miny) miny=cy; if(cx>maxx) maxx=cx; if(cy>maxy) maxy=cy;
-      const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-      for(const [dx,dy] of nbs){ const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-        const nidx=ny*nw+nx; if(bin[nidx]===1 && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); } }
-    }
-    const bw=maxx-minx+1, bh=maxy-miny+1; const aspect = Math.min(bw,bh)/Math.max(bw,bh);
-    if(area>= (options.minArea||1600) && aspect>= (options.aspectMin||0.5) && aspect<= (options.aspectMax||1.0)){
-      boxes.push({x:minx,y:miny,w:bw,h:bh,area,aspect});
-    }
-    label++;
-  }}
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(boxes.length>(options.maxCount||12)) boxes.length = (options.maxCount||12);
-  return {boxes, ox, oy, nw, nh, CW, CH};
-}
-// classify crops and return {values:[...], sum, details:[{n,conf}]}
-async function __rk_classifyCropsFromSeg(seg){
+// === v5.13-ml: multi-tile grid detection (non-invasive) ===
+async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
   await ensureModels?.();
-  const off = document.createElement('canvas'); off.width=112; off.height=112; const oc = off.getContext('2d');
-  let sum=0, values=[], details=[];
-  for(let i=0;i<seg.boxes.length;i++){
-    const b = seg.boxes[i]; const pad = Math.floor(Math.min(b.w,b.h)*0.08);
-    // draw original image (held in last image loaded in previous step): we don't have it here; we'll reconstruct from stage if exists
-    const stage = document.getElementById('stage');
-    if(!stage){ continue; }
-    oc.clearRect(0,0,112,112);
-    oc.drawImage(stage, seg.ox + b.x - pad, seg.oy + b.y - pad, b.w + pad*2, b.h + pad*2, 0,0,112,112);
-    try{
-      const feat = net.infer(off, 'conv_preds');
-      const res = await classifier.predictClass(feat, 3);
-      if(res && res.label!=null){
-        const v = parseInt(res.label,10);
-        const cfs = Object.values(res.confidences||{}); const conf = Math.round(Math.max(...cfs)*100);
-        if(Number.isFinite(v)){ values.push(v); sum += v; details.push({n:v, conf}); }
-      }
-    }catch(err){ try{ log && log('multi: classify error '+(err?.message||err)); }catch(_){ } }
+  const {img} = await imgToTensor(file);
+  // draw into offscreen for stable sampling
+  const off = document.createElement('canvas');
+  off.width = 720; off.height = 720 * (img.height/img.width);
+  const oc = off.getContext('2d');
+  oc.drawImage(img, 0, 0, off.width, off.height);
+  const W = off.width, H = off.height;
+  const results = [];
+  for(let r=0;r<grid;r++){
+    for(let c=0;c<grid;c++){
+      const sx = Math.floor(c*W/grid), sy = Math.floor(r*H/grid);
+      const sw = Math.floor(W/grid), sh = Math.floor(H/grid);
+      const tile = document.createElement('canvas');
+      tile.width = 128; tile.height = 128;
+      tile.getContext('2d').drawImage(off, sx, sy, sw, sh, 0,0,128,128);
+      try{
+        const emb = net.infer(tile, true);
+        const res = await classifier.predictClass(emb, 3);
+        if(res && res.label!=null){
+          const conf = Math.max(...Object.values(res.confidences||{0:0}));
+          const n = parseInt(res.label,10);
+          if(Number.isFinite(n) && conf>=minConf){
+            results.push({n, conf, r, c});
+          }
+        }
+      }catch(e){ /* ignore tile */ }
+    }
   }
-  return {values, sum, details};
+  // merge duplicates from overlapping tiles: keep by (n,r,c) already unique enough
+  // Just sum numbers of all hits
+  const nums = results.map(x=>x.n);
+  const sum = nums.reduce((a,b)=>a+b,0);
+  return {nums, sum};
 }
-
 </script>
 
 </body>
