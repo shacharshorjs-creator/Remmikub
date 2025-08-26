@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.14.4-ml</small>
+<small class="tag" id="verBadge">v5.14.6-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.14.4-ml</div>
+<div class="muted">© v5.14.6-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -154,169 +154,6 @@ function awardPointsFromDetection(playerIdx, points) {
   }
 }
 
-
-// === v5.14.4 detection helpers: dual polarity + opening + NMS ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0;
-  for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    const wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF);
-    if (between > varMax){ varMax = between; thr = t; }
-  }
-  return thr|0;
-}
-function __rk_opening(bin, w, h, r){ // r=1 => 1px erosion then dilation (4-neigh)
-  if(!r) return bin;
-  const er = new Uint8Array(bin.length);
-  // erosion
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      if(!bin[i]){ er[i]=0; continue; }
-      let ok=1;
-      if(x>0 && !bin[i-1]) ok=0;
-      if(x<w-1 && !bin[i+1]) ok=0;
-      if(y>0 && !bin[i-w]) ok=0;
-      if(y<h-1 && !bin[i+w]) ok=0;
-      er[i]=ok?1:0;
-    }
-  }
-  // dilation
-  const out = new Uint8Array(bin.length);
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      let v=er[i];
-      if(!v){
-        if(x>0 && er[i-1]) v=1;
-        else if(x<w-1 && er[i+1]) v=1;
-        else if(y>0 && er[i-w]) v=1;
-        else if(y<h-1 && er[i+w]) v=1;
-      }
-      out[i]=v;
-    }
-  }
-  return out;
-}
-function __rk_iou(a,b){
-  const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
-  const x2=Math.min(a.x+a.w, b.x+b.w), y2=Math.min(a.y+a.h, b.y+b.h);
-  const iw=Math.max(0,x2-x1), ih=Math.max(0,y2-y1);
-  const inter=iw*ih, ua=a.w*a.h + b.w*b.h - inter;
-  return ua? inter/ua : 0;
-}
-function __rk_nms(boxes, thr){
-  const out=[]; boxes=[...boxes].sort((a,b)=>b.area-a.area);
-  while(boxes.length){
-    const cur=boxes.shift();
-    out.push(cur);
-    boxes=boxes.filter(b=>__rk_iou(cur,b)<thr);
-  }
-  return out;
-}
-// returns {boxes:[{x,y,w,h,area}], ox,oy,nw,nh}
-function __rk_segment_image_to_boxes(img, opts){
-  const CW=960, CH=540;
-  const stage = document.getElementById('seg_stage') || (()=>{
-    const c=document.createElement('canvas'); c.id='seg_stage'; c.width=CW; c.height=CH; c.style.display='none'; document.body.appendChild(c); return c;
-  })();
-  const ctx=stage.getContext('2d');
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw=(img.width*scale+0.5|0), nh=(img.height*scale+0.5|0);
-  const ox=((CW-nw)/2+0.5|0), oy=((CH-nh)/2+0.5|0);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-  const id=ctx.getImageData(ox, oy, nw, nh);
-  const data=id.data, gray=new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){
-    for(let x=0;x<nw;x++){
-      const i=(y*nw+x)*4; const r=data[i],g=data[i+1],b=data[i+2];
-      gray[y*nw+x] = __rk_toGray(r,g,b);
-    }
-  }
-  const thr = opts?.thr>0 ? opts.thr : __rk_otsu(gray,nw,nh);
-  // dual polarity
-  const binA=new Uint8Array(nw*nh), binB=new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++){ const g=gray[i]; binA[i]=(g>thr)?1:0; binB[i]=(g<thr)?1:0; }
-  // opening
-  const r = (opts?.morph && opts.morph.erode)?1:0;
-  const A = __rk_opening(binA, nw, nh, r);
-  const B = __rk_opening(binB, nw, nh, r);
-  // run CCL on both and merge
-  function ccl(bin){
-    const labels=new Int32Array(nw*nh).fill(-1), boxes=[]; let label=0;
-    const qx=[],qy=[];
-    for(let y=0;y<nh;y++){
-      for(let x=0;x<nw;x++){
-        const idx=y*nw+x; if(!bin[idx] || labels[idx]!==-1) continue;
-        let minx=x,miny=y,maxx=x,maxy=y, area=0;
-        qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-        while(qx.length){
-          const cx=qx.pop(), cy=qy.pop();
-          const cidx=cy*nw+cx; area++;
-          if(cx<minx)minx=cx; if(cy<miny)miny=cy; if(cx>maxx)maxx=cx; if(cy>maxy)maxy=cy;
-          const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-          for(const [dx,dy] of nbs){
-            const nx=cx+dx, ny=cy+dy;
-            if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-            const nidx=ny*nw+nx;
-            if(bin[nidx] && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); }
-          }
-        }
-        const bw=maxx-minx+1, bh=maxy-miny+1;
-        boxes.push({x:minx,y:miny,w:bw,h:bh,area,src:'ccl'});
-        label++;
-      }
-    }
-    return boxes;
-  }
-  let boxes = ccl(A).concat(ccl(B));
-  // filter by size/aspect
-  const minArea = opts?.minArea ?? 800;
-  const aspectMin = opts?.aspectMin ?? 0.35;
-  const aspectMax = opts?.aspectMax ?? 1.35;
-  boxes = boxes.filter(b=> b.area>=minArea && (Math.min(b.w,b.h)/Math.max(b.w,b.h))>=aspectMin && (Math.min(b.w,b.h)/Math.max(b.w,b.h))<=aspectMax );
-  // NMS
-  boxes = __rk_nms(boxes, 0.6);
-  // sort top-left to bottom-right
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(opts?.maxCount && boxes.length>opts.maxCount) boxes.length=opts.maxCount;
-  return {boxes, ox, oy, nw, nh, CW, CH, stage};
-}
-async function __rk_classify_boxes(seg, padPct){
-  await ensureModels?.();
-  const resNums=[];
-  const thumbs=[];
-  const off=document.createElement('canvas'); off.width=128; off.height=128;
-  const oc=off.getContext('2d');
-  for(const b of seg.boxes){
-    const pad = Math.floor(Math.min(b.w,b.h)*padPct);
-    oc.clearRect(0,0,128,128);
-    oc.drawImage(seg.stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
-    try{
-      thumbs.push(off.toDataURL('image/jpeg'));
-    }catch(_){}
-    try{
-      const emb = net.infer(off, true);
-      const pred = await classifier.predictClass(emb, 3);
-      if(pred && pred.label!=null){
-        const n = parseInt(pred.label,10);
-        const c = Math.max(...Object.values(pred.confidences||{0:0}));
-        if(Number.isFinite(n) && c>=0.5){ resNums.push(n); }
-      }
-    }catch(_){}
-  }
-  return {nums:resNums, thumbs};
-}
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0">
 // === הוספת נקודות מהזיהוי לשחקן ===
@@ -342,169 +179,6 @@ function awardPointsFromDetection(playerIdx, points) {
   } catch(err) {
     console.error("awardPointsFromDetection error", err);
   }
-}
-
-
-// === v5.14.4 detection helpers: dual polarity + opening + NMS ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0;
-  for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    const wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF);
-    if (between > varMax){ varMax = between; thr = t; }
-  }
-  return thr|0;
-}
-function __rk_opening(bin, w, h, r){ // r=1 => 1px erosion then dilation (4-neigh)
-  if(!r) return bin;
-  const er = new Uint8Array(bin.length);
-  // erosion
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      if(!bin[i]){ er[i]=0; continue; }
-      let ok=1;
-      if(x>0 && !bin[i-1]) ok=0;
-      if(x<w-1 && !bin[i+1]) ok=0;
-      if(y>0 && !bin[i-w]) ok=0;
-      if(y<h-1 && !bin[i+w]) ok=0;
-      er[i]=ok?1:0;
-    }
-  }
-  // dilation
-  const out = new Uint8Array(bin.length);
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      let v=er[i];
-      if(!v){
-        if(x>0 && er[i-1]) v=1;
-        else if(x<w-1 && er[i+1]) v=1;
-        else if(y>0 && er[i-w]) v=1;
-        else if(y<h-1 && er[i+w]) v=1;
-      }
-      out[i]=v;
-    }
-  }
-  return out;
-}
-function __rk_iou(a,b){
-  const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
-  const x2=Math.min(a.x+a.w, b.x+b.w), y2=Math.min(a.y+a.h, b.y+b.h);
-  const iw=Math.max(0,x2-x1), ih=Math.max(0,y2-y1);
-  const inter=iw*ih, ua=a.w*a.h + b.w*b.h - inter;
-  return ua? inter/ua : 0;
-}
-function __rk_nms(boxes, thr){
-  const out=[]; boxes=[...boxes].sort((a,b)=>b.area-a.area);
-  while(boxes.length){
-    const cur=boxes.shift();
-    out.push(cur);
-    boxes=boxes.filter(b=>__rk_iou(cur,b)<thr);
-  }
-  return out;
-}
-// returns {boxes:[{x,y,w,h,area}], ox,oy,nw,nh}
-function __rk_segment_image_to_boxes(img, opts){
-  const CW=960, CH=540;
-  const stage = document.getElementById('seg_stage') || (()=>{
-    const c=document.createElement('canvas'); c.id='seg_stage'; c.width=CW; c.height=CH; c.style.display='none'; document.body.appendChild(c); return c;
-  })();
-  const ctx=stage.getContext('2d');
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw=(img.width*scale+0.5|0), nh=(img.height*scale+0.5|0);
-  const ox=((CW-nw)/2+0.5|0), oy=((CH-nh)/2+0.5|0);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-  const id=ctx.getImageData(ox, oy, nw, nh);
-  const data=id.data, gray=new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){
-    for(let x=0;x<nw;x++){
-      const i=(y*nw+x)*4; const r=data[i],g=data[i+1],b=data[i+2];
-      gray[y*nw+x] = __rk_toGray(r,g,b);
-    }
-  }
-  const thr = opts?.thr>0 ? opts.thr : __rk_otsu(gray,nw,nh);
-  // dual polarity
-  const binA=new Uint8Array(nw*nh), binB=new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++){ const g=gray[i]; binA[i]=(g>thr)?1:0; binB[i]=(g<thr)?1:0; }
-  // opening
-  const r = (opts?.morph && opts.morph.erode)?1:0;
-  const A = __rk_opening(binA, nw, nh, r);
-  const B = __rk_opening(binB, nw, nh, r);
-  // run CCL on both and merge
-  function ccl(bin){
-    const labels=new Int32Array(nw*nh).fill(-1), boxes=[]; let label=0;
-    const qx=[],qy=[];
-    for(let y=0;y<nh;y++){
-      for(let x=0;x<nw;x++){
-        const idx=y*nw+x; if(!bin[idx] || labels[idx]!==-1) continue;
-        let minx=x,miny=y,maxx=x,maxy=y, area=0;
-        qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-        while(qx.length){
-          const cx=qx.pop(), cy=qy.pop();
-          const cidx=cy*nw+cx; area++;
-          if(cx<minx)minx=cx; if(cy<miny)miny=cy; if(cx>maxx)maxx=cx; if(cy>maxy)maxy=cy;
-          const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-          for(const [dx,dy] of nbs){
-            const nx=cx+dx, ny=cy+dy;
-            if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-            const nidx=ny*nw+nx;
-            if(bin[nidx] && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); }
-          }
-        }
-        const bw=maxx-minx+1, bh=maxy-miny+1;
-        boxes.push({x:minx,y:miny,w:bw,h:bh,area,src:'ccl'});
-        label++;
-      }
-    }
-    return boxes;
-  }
-  let boxes = ccl(A).concat(ccl(B));
-  // filter by size/aspect
-  const minArea = opts?.minArea ?? 800;
-  const aspectMin = opts?.aspectMin ?? 0.35;
-  const aspectMax = opts?.aspectMax ?? 1.35;
-  boxes = boxes.filter(b=> b.area>=minArea && (Math.min(b.w,b.h)/Math.max(b.w,b.h))>=aspectMin && (Math.min(b.w,b.h)/Math.max(b.w,b.h))<=aspectMax );
-  // NMS
-  boxes = __rk_nms(boxes, 0.6);
-  // sort top-left to bottom-right
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(opts?.maxCount && boxes.length>opts.maxCount) boxes.length=opts.maxCount;
-  return {boxes, ox, oy, nw, nh, CW, CH, stage};
-}
-async function __rk_classify_boxes(seg, padPct){
-  await ensureModels?.();
-  const resNums=[];
-  const thumbs=[];
-  const off=document.createElement('canvas'); off.width=128; off.height=128;
-  const oc=off.getContext('2d');
-  for(const b of seg.boxes){
-    const pad = Math.floor(Math.min(b.w,b.h)*padPct);
-    oc.clearRect(0,0,128,128);
-    oc.drawImage(seg.stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
-    try{
-      thumbs.push(off.toDataURL('image/jpeg'));
-    }catch(_){}
-    try{
-      const emb = net.infer(off, true);
-      const pred = await classifier.predictClass(emb, 3);
-      if(pred && pred.label!=null){
-        const n = parseInt(pred.label,10);
-        const c = Math.max(...Object.values(pred.confidences||{0:0}));
-        if(Number.isFinite(n) && c>=0.5){ resNums.push(n); }
-      }
-    }catch(_){}
-  }
-  return {nums:resNums, thumbs};
 }
 
 </script>
@@ -534,172 +208,9 @@ function awardPointsFromDetection(playerIdx, points) {
   }
 }
 
-
-// === v5.14.4 detection helpers: dual polarity + opening + NMS ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0;
-  for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    const wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF);
-    if (between > varMax){ varMax = between; thr = t; }
-  }
-  return thr|0;
-}
-function __rk_opening(bin, w, h, r){ // r=1 => 1px erosion then dilation (4-neigh)
-  if(!r) return bin;
-  const er = new Uint8Array(bin.length);
-  // erosion
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      if(!bin[i]){ er[i]=0; continue; }
-      let ok=1;
-      if(x>0 && !bin[i-1]) ok=0;
-      if(x<w-1 && !bin[i+1]) ok=0;
-      if(y>0 && !bin[i-w]) ok=0;
-      if(y<h-1 && !bin[i+w]) ok=0;
-      er[i]=ok?1:0;
-    }
-  }
-  // dilation
-  const out = new Uint8Array(bin.length);
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      let v=er[i];
-      if(!v){
-        if(x>0 && er[i-1]) v=1;
-        else if(x<w-1 && er[i+1]) v=1;
-        else if(y>0 && er[i-w]) v=1;
-        else if(y<h-1 && er[i+w]) v=1;
-      }
-      out[i]=v;
-    }
-  }
-  return out;
-}
-function __rk_iou(a,b){
-  const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
-  const x2=Math.min(a.x+a.w, b.x+b.w), y2=Math.min(a.y+a.h, b.y+b.h);
-  const iw=Math.max(0,x2-x1), ih=Math.max(0,y2-y1);
-  const inter=iw*ih, ua=a.w*a.h + b.w*b.h - inter;
-  return ua? inter/ua : 0;
-}
-function __rk_nms(boxes, thr){
-  const out=[]; boxes=[...boxes].sort((a,b)=>b.area-a.area);
-  while(boxes.length){
-    const cur=boxes.shift();
-    out.push(cur);
-    boxes=boxes.filter(b=>__rk_iou(cur,b)<thr);
-  }
-  return out;
-}
-// returns {boxes:[{x,y,w,h,area}], ox,oy,nw,nh}
-function __rk_segment_image_to_boxes(img, opts){
-  const CW=960, CH=540;
-  const stage = document.getElementById('seg_stage') || (()=>{
-    const c=document.createElement('canvas'); c.id='seg_stage'; c.width=CW; c.height=CH; c.style.display='none'; document.body.appendChild(c); return c;
-  })();
-  const ctx=stage.getContext('2d');
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw=(img.width*scale+0.5|0), nh=(img.height*scale+0.5|0);
-  const ox=((CW-nw)/2+0.5|0), oy=((CH-nh)/2+0.5|0);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-  const id=ctx.getImageData(ox, oy, nw, nh);
-  const data=id.data, gray=new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){
-    for(let x=0;x<nw;x++){
-      const i=(y*nw+x)*4; const r=data[i],g=data[i+1],b=data[i+2];
-      gray[y*nw+x] = __rk_toGray(r,g,b);
-    }
-  }
-  const thr = opts?.thr>0 ? opts.thr : __rk_otsu(gray,nw,nh);
-  // dual polarity
-  const binA=new Uint8Array(nw*nh), binB=new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++){ const g=gray[i]; binA[i]=(g>thr)?1:0; binB[i]=(g<thr)?1:0; }
-  // opening
-  const r = (opts?.morph && opts.morph.erode)?1:0;
-  const A = __rk_opening(binA, nw, nh, r);
-  const B = __rk_opening(binB, nw, nh, r);
-  // run CCL on both and merge
-  function ccl(bin){
-    const labels=new Int32Array(nw*nh).fill(-1), boxes=[]; let label=0;
-    const qx=[],qy=[];
-    for(let y=0;y<nh;y++){
-      for(let x=0;x<nw;x++){
-        const idx=y*nw+x; if(!bin[idx] || labels[idx]!==-1) continue;
-        let minx=x,miny=y,maxx=x,maxy=y, area=0;
-        qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-        while(qx.length){
-          const cx=qx.pop(), cy=qy.pop();
-          const cidx=cy*nw+cx; area++;
-          if(cx<minx)minx=cx; if(cy<miny)miny=cy; if(cx>maxx)maxx=cx; if(cy>maxy)maxy=cy;
-          const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-          for(const [dx,dy] of nbs){
-            const nx=cx+dx, ny=cy+dy;
-            if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-            const nidx=ny*nw+nx;
-            if(bin[nidx] && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); }
-          }
-        }
-        const bw=maxx-minx+1, bh=maxy-miny+1;
-        boxes.push({x:minx,y:miny,w:bw,h:bh,area,src:'ccl'});
-        label++;
-      }
-    }
-    return boxes;
-  }
-  let boxes = ccl(A).concat(ccl(B));
-  // filter by size/aspect
-  const minArea = opts?.minArea ?? 800;
-  const aspectMin = opts?.aspectMin ?? 0.35;
-  const aspectMax = opts?.aspectMax ?? 1.35;
-  boxes = boxes.filter(b=> b.area>=minArea && (Math.min(b.w,b.h)/Math.max(b.w,b.h))>=aspectMin && (Math.min(b.w,b.h)/Math.max(b.w,b.h))<=aspectMax );
-  // NMS
-  boxes = __rk_nms(boxes, 0.6);
-  // sort top-left to bottom-right
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(opts?.maxCount && boxes.length>opts.maxCount) boxes.length=opts.maxCount;
-  return {boxes, ox, oy, nw, nh, CW, CH, stage};
-}
-async function __rk_classify_boxes(seg, padPct){
-  await ensureModels?.();
-  const resNums=[];
-  const thumbs=[];
-  const off=document.createElement('canvas'); off.width=128; off.height=128;
-  const oc=off.getContext('2d');
-  for(const b of seg.boxes){
-    const pad = Math.floor(Math.min(b.w,b.h)*padPct);
-    oc.clearRect(0,0,128,128);
-    oc.drawImage(seg.stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
-    try{
-      thumbs.push(off.toDataURL('image/jpeg'));
-    }catch(_){}
-    try{
-      const emb = net.infer(off, true);
-      const pred = await classifier.predictClass(emb, 3);
-      if(pred && pred.label!=null){
-        const n = parseInt(pred.label,10);
-        const c = Math.max(...Object.values(pred.confidences||{0:0}));
-        if(Number.isFinite(n) && c>=0.5){ resNums.push(n); }
-      }
-    }catch(_){}
-  }
-  return {nums:resNums, thumbs};
-}
-
 </script>
 <script>
-const VERSION = 'v5.14.4-ml';
+\1'v5.14.6-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -999,172 +510,9 @@ function awardPointsFromDetection(playerIdx, points) {
   }
 }
 
-
-// === v5.14.4 detection helpers: dual polarity + opening + NMS ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0;
-  for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    const wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF);
-    if (between > varMax){ varMax = between; thr = t; }
-  }
-  return thr|0;
-}
-function __rk_opening(bin, w, h, r){ // r=1 => 1px erosion then dilation (4-neigh)
-  if(!r) return bin;
-  const er = new Uint8Array(bin.length);
-  // erosion
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      if(!bin[i]){ er[i]=0; continue; }
-      let ok=1;
-      if(x>0 && !bin[i-1]) ok=0;
-      if(x<w-1 && !bin[i+1]) ok=0;
-      if(y>0 && !bin[i-w]) ok=0;
-      if(y<h-1 && !bin[i+w]) ok=0;
-      er[i]=ok?1:0;
-    }
-  }
-  // dilation
-  const out = new Uint8Array(bin.length);
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      let v=er[i];
-      if(!v){
-        if(x>0 && er[i-1]) v=1;
-        else if(x<w-1 && er[i+1]) v=1;
-        else if(y>0 && er[i-w]) v=1;
-        else if(y<h-1 && er[i+w]) v=1;
-      }
-      out[i]=v;
-    }
-  }
-  return out;
-}
-function __rk_iou(a,b){
-  const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
-  const x2=Math.min(a.x+a.w, b.x+b.w), y2=Math.min(a.y+a.h, b.y+b.h);
-  const iw=Math.max(0,x2-x1), ih=Math.max(0,y2-y1);
-  const inter=iw*ih, ua=a.w*a.h + b.w*b.h - inter;
-  return ua? inter/ua : 0;
-}
-function __rk_nms(boxes, thr){
-  const out=[]; boxes=[...boxes].sort((a,b)=>b.area-a.area);
-  while(boxes.length){
-    const cur=boxes.shift();
-    out.push(cur);
-    boxes=boxes.filter(b=>__rk_iou(cur,b)<thr);
-  }
-  return out;
-}
-// returns {boxes:[{x,y,w,h,area}], ox,oy,nw,nh}
-function __rk_segment_image_to_boxes(img, opts){
-  const CW=960, CH=540;
-  const stage = document.getElementById('seg_stage') || (()=>{
-    const c=document.createElement('canvas'); c.id='seg_stage'; c.width=CW; c.height=CH; c.style.display='none'; document.body.appendChild(c); return c;
-  })();
-  const ctx=stage.getContext('2d');
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw=(img.width*scale+0.5|0), nh=(img.height*scale+0.5|0);
-  const ox=((CW-nw)/2+0.5|0), oy=((CH-nh)/2+0.5|0);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-  const id=ctx.getImageData(ox, oy, nw, nh);
-  const data=id.data, gray=new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){
-    for(let x=0;x<nw;x++){
-      const i=(y*nw+x)*4; const r=data[i],g=data[i+1],b=data[i+2];
-      gray[y*nw+x] = __rk_toGray(r,g,b);
-    }
-  }
-  const thr = opts?.thr>0 ? opts.thr : __rk_otsu(gray,nw,nh);
-  // dual polarity
-  const binA=new Uint8Array(nw*nh), binB=new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++){ const g=gray[i]; binA[i]=(g>thr)?1:0; binB[i]=(g<thr)?1:0; }
-  // opening
-  const r = (opts?.morph && opts.morph.erode)?1:0;
-  const A = __rk_opening(binA, nw, nh, r);
-  const B = __rk_opening(binB, nw, nh, r);
-  // run CCL on both and merge
-  function ccl(bin){
-    const labels=new Int32Array(nw*nh).fill(-1), boxes=[]; let label=0;
-    const qx=[],qy=[];
-    for(let y=0;y<nh;y++){
-      for(let x=0;x<nw;x++){
-        const idx=y*nw+x; if(!bin[idx] || labels[idx]!==-1) continue;
-        let minx=x,miny=y,maxx=x,maxy=y, area=0;
-        qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-        while(qx.length){
-          const cx=qx.pop(), cy=qy.pop();
-          const cidx=cy*nw+cx; area++;
-          if(cx<minx)minx=cx; if(cy<miny)miny=cy; if(cx>maxx)maxx=cx; if(cy>maxy)maxy=cy;
-          const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-          for(const [dx,dy] of nbs){
-            const nx=cx+dx, ny=cy+dy;
-            if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-            const nidx=ny*nw+nx;
-            if(bin[nidx] && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); }
-          }
-        }
-        const bw=maxx-minx+1, bh=maxy-miny+1;
-        boxes.push({x:minx,y:miny,w:bw,h:bh,area,src:'ccl'});
-        label++;
-      }
-    }
-    return boxes;
-  }
-  let boxes = ccl(A).concat(ccl(B));
-  // filter by size/aspect
-  const minArea = opts?.minArea ?? 800;
-  const aspectMin = opts?.aspectMin ?? 0.35;
-  const aspectMax = opts?.aspectMax ?? 1.35;
-  boxes = boxes.filter(b=> b.area>=minArea && (Math.min(b.w,b.h)/Math.max(b.w,b.h))>=aspectMin && (Math.min(b.w,b.h)/Math.max(b.w,b.h))<=aspectMax );
-  // NMS
-  boxes = __rk_nms(boxes, 0.6);
-  // sort top-left to bottom-right
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(opts?.maxCount && boxes.length>opts.maxCount) boxes.length=opts.maxCount;
-  return {boxes, ox, oy, nw, nh, CW, CH, stage};
-}
-async function __rk_classify_boxes(seg, padPct){
-  await ensureModels?.();
-  const resNums=[];
-  const thumbs=[];
-  const off=document.createElement('canvas'); off.width=128; off.height=128;
-  const oc=off.getContext('2d');
-  for(const b of seg.boxes){
-    const pad = Math.floor(Math.min(b.w,b.h)*padPct);
-    oc.clearRect(0,0,128,128);
-    oc.drawImage(seg.stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
-    try{
-      thumbs.push(off.toDataURL('image/jpeg'));
-    }catch(_){}
-    try{
-      const emb = net.infer(off, true);
-      const pred = await classifier.predictClass(emb, 3);
-      if(pred && pred.label!=null){
-        const n = parseInt(pred.label,10);
-        const c = Math.max(...Object.values(pred.confidences||{0:0}));
-        if(Number.isFinite(n) && c>=0.5){ resNums.push(n); }
-      }
-    }catch(_){}
-  }
-  return {nums:resNums, thumbs};
-}
-
 </script>
 
-<!-- v5.14.4-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.14.6-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -1251,173 +599,10 @@ else {
     dlog('patch v5.10: expose __afterDetected_fillValue_v510(idx,val)');
   }
 })();
-
-// === v5.14.4 detection helpers: dual polarity + opening + NMS ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0;
-  for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    const wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF);
-    if (between > varMax){ varMax = between; thr = t; }
-  }
-  return thr|0;
-}
-function __rk_opening(bin, w, h, r){ // r=1 => 1px erosion then dilation (4-neigh)
-  if(!r) return bin;
-  const er = new Uint8Array(bin.length);
-  // erosion
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      if(!bin[i]){ er[i]=0; continue; }
-      let ok=1;
-      if(x>0 && !bin[i-1]) ok=0;
-      if(x<w-1 && !bin[i+1]) ok=0;
-      if(y>0 && !bin[i-w]) ok=0;
-      if(y<h-1 && !bin[i+w]) ok=0;
-      er[i]=ok?1:0;
-    }
-  }
-  // dilation
-  const out = new Uint8Array(bin.length);
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      let v=er[i];
-      if(!v){
-        if(x>0 && er[i-1]) v=1;
-        else if(x<w-1 && er[i+1]) v=1;
-        else if(y>0 && er[i-w]) v=1;
-        else if(y<h-1 && er[i+w]) v=1;
-      }
-      out[i]=v;
-    }
-  }
-  return out;
-}
-function __rk_iou(a,b){
-  const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
-  const x2=Math.min(a.x+a.w, b.x+b.w), y2=Math.min(a.y+a.h, b.y+b.h);
-  const iw=Math.max(0,x2-x1), ih=Math.max(0,y2-y1);
-  const inter=iw*ih, ua=a.w*a.h + b.w*b.h - inter;
-  return ua? inter/ua : 0;
-}
-function __rk_nms(boxes, thr){
-  const out=[]; boxes=[...boxes].sort((a,b)=>b.area-a.area);
-  while(boxes.length){
-    const cur=boxes.shift();
-    out.push(cur);
-    boxes=boxes.filter(b=>__rk_iou(cur,b)<thr);
-  }
-  return out;
-}
-// returns {boxes:[{x,y,w,h,area}], ox,oy,nw,nh}
-function __rk_segment_image_to_boxes(img, opts){
-  const CW=960, CH=540;
-  const stage = document.getElementById('seg_stage') || (()=>{
-    const c=document.createElement('canvas'); c.id='seg_stage'; c.width=CW; c.height=CH; c.style.display='none'; document.body.appendChild(c); return c;
-  })();
-  const ctx=stage.getContext('2d');
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw=(img.width*scale+0.5|0), nh=(img.height*scale+0.5|0);
-  const ox=((CW-nw)/2+0.5|0), oy=((CH-nh)/2+0.5|0);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-  const id=ctx.getImageData(ox, oy, nw, nh);
-  const data=id.data, gray=new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){
-    for(let x=0;x<nw;x++){
-      const i=(y*nw+x)*4; const r=data[i],g=data[i+1],b=data[i+2];
-      gray[y*nw+x] = __rk_toGray(r,g,b);
-    }
-  }
-  const thr = opts?.thr>0 ? opts.thr : __rk_otsu(gray,nw,nh);
-  // dual polarity
-  const binA=new Uint8Array(nw*nh), binB=new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++){ const g=gray[i]; binA[i]=(g>thr)?1:0; binB[i]=(g<thr)?1:0; }
-  // opening
-  const r = (opts?.morph && opts.morph.erode)?1:0;
-  const A = __rk_opening(binA, nw, nh, r);
-  const B = __rk_opening(binB, nw, nh, r);
-  // run CCL on both and merge
-  function ccl(bin){
-    const labels=new Int32Array(nw*nh).fill(-1), boxes=[]; let label=0;
-    const qx=[],qy=[];
-    for(let y=0;y<nh;y++){
-      for(let x=0;x<nw;x++){
-        const idx=y*nw+x; if(!bin[idx] || labels[idx]!==-1) continue;
-        let minx=x,miny=y,maxx=x,maxy=y, area=0;
-        qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-        while(qx.length){
-          const cx=qx.pop(), cy=qy.pop();
-          const cidx=cy*nw+cx; area++;
-          if(cx<minx)minx=cx; if(cy<miny)miny=cy; if(cx>maxx)maxx=cx; if(cy>maxy)maxy=cy;
-          const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-          for(const [dx,dy] of nbs){
-            const nx=cx+dx, ny=cy+dy;
-            if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-            const nidx=ny*nw+nx;
-            if(bin[nidx] && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); }
-          }
-        }
-        const bw=maxx-minx+1, bh=maxy-miny+1;
-        boxes.push({x:minx,y:miny,w:bw,h:bh,area,src:'ccl'});
-        label++;
-      }
-    }
-    return boxes;
-  }
-  let boxes = ccl(A).concat(ccl(B));
-  // filter by size/aspect
-  const minArea = opts?.minArea ?? 800;
-  const aspectMin = opts?.aspectMin ?? 0.35;
-  const aspectMax = opts?.aspectMax ?? 1.35;
-  boxes = boxes.filter(b=> b.area>=minArea && (Math.min(b.w,b.h)/Math.max(b.w,b.h))>=aspectMin && (Math.min(b.w,b.h)/Math.max(b.w,b.h))<=aspectMax );
-  // NMS
-  boxes = __rk_nms(boxes, 0.6);
-  // sort top-left to bottom-right
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(opts?.maxCount && boxes.length>opts.maxCount) boxes.length=opts.maxCount;
-  return {boxes, ox, oy, nw, nh, CW, CH, stage};
-}
-async function __rk_classify_boxes(seg, padPct){
-  await ensureModels?.();
-  const resNums=[];
-  const thumbs=[];
-  const off=document.createElement('canvas'); off.width=128; off.height=128;
-  const oc=off.getContext('2d');
-  for(const b of seg.boxes){
-    const pad = Math.floor(Math.min(b.w,b.h)*padPct);
-    oc.clearRect(0,0,128,128);
-    oc.drawImage(seg.stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
-    try{
-      thumbs.push(off.toDataURL('image/jpeg'));
-    }catch(_){}
-    try{
-      const emb = net.infer(off, true);
-      const pred = await classifier.predictClass(emb, 3);
-      if(pred && pred.label!=null){
-        const n = parseInt(pred.label,10);
-        const c = Math.max(...Object.values(pred.confidences||{0:0}));
-        if(Number.isFinite(n) && c>=0.5){ resNums.push(n); }
-      }
-    }catch(_){}
-  }
-  return {nums:resNums, thumbs};
-}
-
 </script>
 
 
-<!-- v5.14.4 — player snap thumbnails (separate floating dock; no UI changes elsewhere) -->
+<!-- v5.14.6 — player snap thumbnails (separate floating dock; no UI changes elsewhere) -->
 <style>
 #snapThumbDock{position:fixed;right:12px;bottom:12px;z-index:9999;
   display:flex;gap:6px;flex-wrap:wrap;max-width:48vw;
@@ -1477,169 +662,235 @@ async function __rk_classify_boxes(seg, padPct){
     }, true);
   }
 })();
+</script>
 
-// === v5.14.4 detection helpers: dual polarity + opening + NMS ===
-function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
-function __rk_otsu(gray, w, h){
-  const hist = new Array(256).fill(0);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = w*h; let sum=0;
-  for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, varMax=0, thr=0;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    const wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB*wF*(mB-mF)*(mB-mF);
-    if (between > varMax){ varMax = between; thr = t; }
+<!-- v5.14.6-ml — EASY multi-tile detect (adaptive threshold + CCL) w/ KNN classify; no UI changes -->
+<script>
+(function(){
+  if (window.__easyMultiDetectPatched) return; window.__easyMultiDetectPatched = true;
+
+  // Parameters
+  const TILE_MIN_FRAC = 0.01, TILE_MAX_FRAC = 0.30;
+  const ASPECT_MIN = 0.6, ASPECT_MAX = 1.6;
+  const PAD = 0.18;
+  const IOU_NMS = 0.5;
+  const CONF = 0.45; // accept predictions >= 0.45
+
+  function logPatch(msg){
+    try{ (window.log||console.log)('[easy-multi]', msg); }catch(e){}
   }
-  return thr|0;
-}
-function __rk_opening(bin, w, h, r){ // r=1 => 1px erosion then dilation (4-neigh)
-  if(!r) return bin;
-  const er = new Uint8Array(bin.length);
-  // erosion
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      if(!bin[i]){ er[i]=0; continue; }
-      let ok=1;
-      if(x>0 && !bin[i-1]) ok=0;
-      if(x<w-1 && !bin[i+1]) ok=0;
-      if(y>0 && !bin[i-w]) ok=0;
-      if(y<h-1 && !bin[i+w]) ok=0;
-      er[i]=ok?1:0;
+
+  function toGray(data,w,h){
+    const g = new Uint8ClampedArray(w*h);
+    for(let i=0,j=0;i<data.length;i+=4,++j){
+      const r=data[i], gn=data[i+1], b=data[i+2];
+      g[j] = (r*0.299 + gn*0.587 + b*0.114)|0;
     }
+    return g;
   }
-  // dilation
-  const out = new Uint8Array(bin.length);
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      let v=er[i];
-      if(!v){
-        if(x>0 && er[i-1]) v=1;
-        else if(x<w-1 && er[i+1]) v=1;
-        else if(y>0 && er[i-w]) v=1;
-        else if(y<h-1 && er[i+w]) v=1;
+
+  function integralImage(gray,w,h){
+    const S = new Uint32Array((w+1)*(h+1));
+    for(let y=1;y<=h;y++){
+      let rowsum=0;
+      for(let x=1;x<=w;x++){
+        const v = gray[(y-1)*w + (x-1)];
+        rowsum += v;
+        S[y*(w+1)+x] = S[(y-1)*(w+1)+x] + rowsum;
       }
-      out[i]=v;
     }
+    return S;
   }
-  return out;
-}
-function __rk_iou(a,b){
-  const x1=Math.max(a.x,b.x), y1=Math.max(a.y,b.y);
-  const x2=Math.min(a.x+a.w, b.x+b.w), y2=Math.min(a.y+a.h, b.y+b.h);
-  const iw=Math.max(0,x2-x1), ih=Math.max(0,y2-y1);
-  const inter=iw*ih, ua=a.w*a.h + b.w*b.h - inter;
-  return ua? inter/ua : 0;
-}
-function __rk_nms(boxes, thr){
-  const out=[]; boxes=[...boxes].sort((a,b)=>b.area-a.area);
-  while(boxes.length){
-    const cur=boxes.shift();
-    out.push(cur);
-    boxes=boxes.filter(b=>__rk_iou(cur,b)<thr);
+  function meanRect(S,w,x0,y0,x1,y1){
+    return (S[y1*(w+1)+x1] - S[y0*(w+1)+x1] - S[y1*(w+1)+x0] + S[y0*(w+1)+x0]) / ((x1-x0)*(y1-y0));
   }
-  return out;
-}
-// returns {boxes:[{x,y,w,h,area}], ox,oy,nw,nh}
-function __rk_segment_image_to_boxes(img, opts){
-  const CW=960, CH=540;
-  const stage = document.getElementById('seg_stage') || (()=>{
-    const c=document.createElement('canvas'); c.id='seg_stage'; c.width=CW; c.height=CH; c.style.display='none'; document.body.appendChild(c); return c;
-  })();
-  const ctx=stage.getContext('2d');
-  const scale = Math.min(CW/img.width, CH/img.height);
-  const nw=(img.width*scale+0.5|0), nh=(img.height*scale+0.5|0);
-  const ox=((CW-nw)/2+0.5|0), oy=((CH-nh)/2+0.5|0);
-  ctx.clearRect(0,0,CW,CH); ctx.drawImage(img, ox, oy, nw, nh);
-  const id=ctx.getImageData(ox, oy, nw, nh);
-  const data=id.data, gray=new Uint8ClampedArray(nw*nh);
-  for(let y=0;y<nh;y++){
-    for(let x=0;x<nw;x++){
-      const i=(y*nw+x)*4; const r=data[i],g=data[i+1],b=data[i+2];
-      gray[y*nw+x] = __rk_toGray(r,g,b);
+  function adaptiveThreshold(gray,w,h,win=15,C=7){
+    const S = integralImage(gray,w,h);
+    const out = new Uint8ClampedArray(w*h);
+    const r = (win|0);
+    for(let y=0;y<h;y++){
+      const y0 = Math.max(0,y-r), y1 = Math.min(h,y+r+1);
+      for(let x=0;x<w;x++){
+        const x0 = Math.max(0,x-r), x1 = Math.min(w,x+r+1);
+        const m = meanRect(S,w,x0,y0,x1,y1);
+        const v = gray[y*w+x];
+        out[y*w+x] = v < (m - C) ? 255 : 0;
+      }
     }
+    for(let i=0;i<out.length;i++) out[i]=255-out[i];
+    return out;
   }
-  const thr = opts?.thr>0 ? opts.thr : __rk_otsu(gray,nw,nh);
-  // dual polarity
-  const binA=new Uint8Array(nw*nh), binB=new Uint8Array(nw*nh);
-  for(let i=0;i<gray.length;i++){ const g=gray[i]; binA[i]=(g>thr)?1:0; binB[i]=(g<thr)?1:0; }
-  // opening
-  const r = (opts?.morph && opts.morph.erode)?1:0;
-  const A = __rk_opening(binA, nw, nh, r);
-  const B = __rk_opening(binB, nw, nh, r);
-  // run CCL on both and merge
-  function ccl(bin){
-    const labels=new Int32Array(nw*nh).fill(-1), boxes=[]; let label=0;
-    const qx=[],qy=[];
-    for(let y=0;y<nh;y++){
-      for(let x=0;x<nw;x++){
-        const idx=y*nw+x; if(!bin[idx] || labels[idx]!==-1) continue;
-        let minx=x,miny=y,maxx=x,maxy=y, area=0;
-        qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
-        while(qx.length){
-          const cx=qx.pop(), cy=qy.pop();
-          const cidx=cy*nw+cx; area++;
-          if(cx<minx)minx=cx; if(cy<miny)miny=cy; if(cx>maxx)maxx=cx; if(cy>maxy)maxy=cy;
-          const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
-          for(const [dx,dy] of nbs){
-            const nx=cx+dx, ny=cy+dy;
-            if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
-            const nidx=ny*nw+nx;
-            if(bin[nidx] && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); }
+  function ccl(bin,w,h){
+    const lbl = new Int32Array(w*h).fill(-1);
+    const boxes=[]; let id=0;
+    const qx=new Int32Array(w*h), qy=new Int32Array(w*h);
+    const inside=(x,y)=> x>=0&&y>=0&&x<w&&y<h;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=y*w+x;
+        if(bin[idx]===255 && lbl[idx]===-1){
+          let head=0, tail=0; qx[tail]=x; qy[tail]=y; tail++;
+          lbl[idx]=id;
+          let minx=x,maxx=x,miny=y,maxy=y, area=0;
+          while(head<tail){
+            const cx=qx[head], cy=qy[head]; head++; area++;
+            minx=Math.min(minx,cx); maxx=Math.max(maxx,cx);
+            miny=Math.min(miny,cy); maxy=Math.max(maxy,cy);
+            const nb = [[1,0],[-1,0],[0,1],[0,-1]];
+            for(const [dx,dy] of nb){
+              const nx=cx+dx, ny=cy+dy, nidx=ny*w+nx;
+              if(inside(nx,ny) && bin[nidx]===255 && lbl[nidx]===-1){
+                lbl[nidx]=id; qx[tail]=nx; qy[tail]=ny; tail++;
+              }
+            }
           }
+          boxes.push({minx,miny,maxx,maxy, area});
+          id++;
         }
-        const bw=maxx-minx+1, bh=maxy-miny+1;
-        boxes.push({x:minx,y:miny,w:bw,h:bh,area,src:'ccl'});
-        label++;
       }
     }
     return boxes;
   }
-  let boxes = ccl(A).concat(ccl(B));
-  // filter by size/aspect
-  const minArea = opts?.minArea ?? 800;
-  const aspectMin = opts?.aspectMin ?? 0.35;
-  const aspectMax = opts?.aspectMax ?? 1.35;
-  boxes = boxes.filter(b=> b.area>=minArea && (Math.min(b.w,b.h)/Math.max(b.w,b.h))>=aspectMin && (Math.min(b.w,b.h)/Math.max(b.w,b.h))<=aspectMax );
-  // NMS
-  boxes = __rk_nms(boxes, 0.6);
-  // sort top-left to bottom-right
-  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
-  if(opts?.maxCount && boxes.length>opts.maxCount) boxes.length=opts.maxCount;
-  return {boxes, ox, oy, nw, nh, CW, CH, stage};
-}
-async function __rk_classify_boxes(seg, padPct){
-  await ensureModels?.();
-  const resNums=[];
-  const thumbs=[];
-  const off=document.createElement('canvas'); off.width=128; off.height=128;
-  const oc=off.getContext('2d');
-  for(const b of seg.boxes){
-    const pad = Math.floor(Math.min(b.w,b.h)*padPct);
-    oc.clearRect(0,0,128,128);
-    oc.drawImage(seg.stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
+  function iou(a,b){
+    const x0=Math.max(a.x,b.x), y0=Math.max(a.y,b.y);
+    const x1=Math.min(a.x+a.w, b.x+b.w), y1=Math.min(a.y+a.h, b.y+b.h);
+    const iw=Math.max(0,x1-x0), ih=Math.max(0,y1-y0);
+    const inter=iw*ih, uni=a.w*a.h + b.w*b.h - inter;
+    return uni>0 ? inter/uni : 0;
+  }
+  function nms(rects, thr=0.5){
+    const keep=[];
+    rects.sort((a,b)=>(b.score||1)-(a.score||1));
+    for(const r of rects){
+      if(keep.every(k=> iou(k,r) < thr)) keep.push(r);
+    }
+    return keep;
+  }
+
+  // Produce crops from a File (image) and original-sized canvas for later overlays
+  function cropsFromFile(file){
+    return new Promise((resolve,reject)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const src = document.createElement('canvas');
+        src.width=img.naturalWidth; src.height=img.naturalHeight;
+        const sc = src.getContext('2d');
+        sc.drawImage(img,0,0);
+        try{ URL.revokeObjectURL(img.src); }catch(e){}
+        const srcW=src.width, srcH=src.height;
+        const scale = 512 / Math.max(srcW, srcH);
+        const dw=Math.max(1, Math.round(srcW*scale)), dh=Math.max(1, Math.round(srcH*scale));
+        const tmp=document.createElement('canvas'); tmp.width=dw; tmp.height=dh;
+        const tctx=tmp.getContext('2d'); tctx.drawImage(src,0,0,dw,dh);
+        const {data}=tctx.getImageData(0,0,dw,dh);
+        const gray = toGray(data,dw,dh);
+        const bin  = adaptiveThreshold(gray,dw,dh,15,7);
+        const comps = ccl(bin,dw,dh);
+        const areaMin=TILE_MIN_FRAC*dw*dh, areaMax=TILE_MAX_FRAC*dw*dh;
+
+        let rects = comps.map(c=>{
+          const w=c.maxx-c.minx+1, h=c.maxy-c.miny+1;
+          const area=w*h, ar=w/h;
+          if(area<areaMin || area>areaMax) return null;
+          if(ar<ASPECT_MIN || ar>ASPECT_MAX) return null;
+          let x=Math.max(0, Math.round(c.minx/scale));
+          let y=Math.max(0, Math.round(c.miny/scale));
+          let W=Math.round(w/scale), H=Math.round(h/scale);
+          const px=Math.round(W*PAD), py=Math.round(H*PAD);
+          x=Math.max(0, x-px); y=Math.max(0, y-py);
+          W=Math.min(srcW-x, W+2*px); H=Math.min(srcH-y, H+2*py);
+          return {x,y,w:W,h:H, score:W*H};
+        }).filter(Boolean);
+
+        rects = nms(rects, IOU_NMS).slice(0,8).sort((a,b)=> a.x-b.x);
+
+        // build crops (canvases)
+        const crops = rects.map(r=>{
+          const c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
+          c.getContext('2d').drawImage(src, r.x,r.y,r.w,r.h, 0,0,r.w,r.h);
+          return {canvas:c, rect:r};
+        });
+        resolve({crops, srcCanvas:src});
+      };
+      img.onerror = reject;
+      img.src = (window.URL||window.webkitURL).createObjectURL(file);
+    });
+  }
+
+  async function classifyCanvasKNN(cv){
+    if (!window.net || !window.classifier) return null;
     try{
-      thumbs.push(off.toDataURL('image/jpeg'));
-    }catch(_){}
-    try{
+      const off = document.createElement('canvas'); off.width=128; off.height=128;
+      const ctx = off.getContext('2d');
+      // fit crop into 128x128
+      const scale = Math.min(128/cv.width, 128/cv.height);
+      const w = Math.round(cv.width*scale), h=Math.round(cv.height*scale);
+      const ox = Math.round((128 - w)/2), oy=Math.round((128 - h)/2);
+      ctx.fillStyle = '#000'; ctx.fillRect(0,0,128,128);
+      ctx.drawImage(cv, 0,0,cv.width,cv.height, ox,oy,w,h);
       const emb = net.infer(off, true);
       const pred = await classifier.predictClass(emb, 3);
-      if(pred && pred.label!=null){
-        const n = parseInt(pred.label,10);
-        const c = Math.max(...Object.values(pred.confidences||{0:0}));
-        if(Number.isFinite(n) && c>=0.5){ resNums.push(n); }
-      }
-    }catch(_){}
+      if (!pred || pred.label==null) return null;
+      const n = parseInt(pred.label,10);
+      const conf = Math.max(...Object.values(pred.confidences||{0:0}));
+      if (!Number.isFinite(n) || conf < CONF) return null;
+      return {n, conf};
+    }catch(e){
+      logPatch('classify error: '+(e && e.message || e));
+      return null;
+    }
   }
-  return {nums:resNums, thumbs};
-}
 
+  // Wrap showLastDetect so that when a player snaps a photo (file), we also do multi-detect+classify.
+  if (typeof window.showLastDetect === 'function' && !window.__wrapShowLastDetectMulti){
+    const _orig = window.showLastDetect;
+    window.showLastDetect = async function(playerIndex, file){
+      const ret = _orig.apply(this, arguments); // keep original behavior
+      try{
+        if (!file || !(file.type||'').startsWith('image/')) return ret;
+        const {crops} = await cropsFromFile(file);
+        logPatch('crops found: '+crops.length);
+        // show thumbnails via the existing dock, if available
+        try{
+          const dock = document.getElementById('snapThumbDock');
+          if (dock){
+            // prepend newest first
+            for (let k=crops.length-1; k>=0; --k){
+              const u = crops[k].canvas.toDataURL('image/jpeg', 0.9);
+              const im = new Image(); im.src=u;
+              if (dock.firstChild) dock.insertBefore(im, dock.firstChild); else dock.appendChild(im);
+              while (dock.childNodes.length > 8) dock.removeChild(dock.lastChild);
+            }
+          }
+        }catch(_){}
+        // classify each crop with existing KNN (if available)
+        if (window.net && window.classifier){
+          const nums=[];
+          for (const c of crops){
+            const r = await classifyCanvasKNN(c.canvas);
+            if (r) nums.push(r.n);
+          }
+          logPatch('preds: '+(nums.join(', ')||'(none)'));
+          // Optionally, fill the player's value input with sum (no auto-add)
+          if (nums.length){
+            const sum = nums.reduce((a,b)=>a+b,0);
+            // best-effort: find the correct player's input field without changing UI
+            try{
+              const rows = document.querySelectorAll('.player-row, .player, .row, [data-player-row]');
+              const row = rows && rows[playerIndex];
+              const input = row && (row.querySelector('input[type="number"], input.manual'));
+              if (input){ input.value = sum; }
+            }catch(_){}
+          }
+        }
+      }catch(e){
+        logPatch('multi flow error: '+(e && e.message || e));
+      }
+      return ret;
+    };
+    window.__wrapShowLastDetectMulti = true;
+  }
+})();
 </script>
 </body>
 </html>
