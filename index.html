@@ -45,12 +45,17 @@
   .scrollx{overflow:auto}
   .copybtn{margin-inline-start:.5rem}
 </style>
+
+<style>
+#detThumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+#detThumbs img{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #2a3e5c}
+</style>
 </head>
 <body>
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.16-ml</small>
+<small class="tag" id="verBadge">v5.16.1-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +129,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.16-ml</div>
+<div class="muted">© v5.16.1-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +215,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.16-ml';
+const VERSION = 'v5.16.1-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -263,6 +268,29 @@ function renderBoard(){
       if(e.target.files?.length){
         log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
         
+
+
+// v5.16.1-ml: try CC multi-detect first
+try{
+  const handled = await __rk_detect_many_and_fill(e.target.files[0], idx, row);
+  if(handled) return; // stop here; user will press "הוסף"
+}catch(_){ /* soft */ }
+// v5.13 multi: try multi-cube detection first (grid-based). If >=2 tiles detected -> fill sum & show, then stop.
+try{
+  const multi = await __rk_gridMultiDetect(e.target.files[0], 3, 0.5);
+  if (multi && Array.isArray(multi.nums) && multi.nums.length >= 2){
+    const sum = multi.sum;
+    // update last detection label
+    const lbl = document.getElementById('lastDetectLabel');
+    if(lbl){
+      lbl.textContent = `זוהו: ${multi.nums.join(', ')} (סה״כ ${sum}) — שחקן ${idx+1} • ${players[idx]?.name||''}`;
+    }
+    // fill only this player's input box
+    try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = sum; }catch(_){}
+    // do NOT auto award; user clicks "הוסף"
+    return;
+  }
+}catch(e){ /* soft ignore and fall back to single-tile */ }
 // show textual indication only
 showLastDetect(idx, e.target.files[0]);
 try{
@@ -512,7 +540,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.16-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.16.1-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -599,243 +627,265 @@ else {
     dlog('patch v5.10: expose __afterDetected_fillValue_v510(idx,val)');
   }
 })();
-</script>
 
-<script>
-
-/*! multi_dice_addon_v5_15.js - non-invasive multi-dice detection + thumbnails */
-(function () {
-  const VERSION = 'v5.16-ml';
-  const MAX_THUMBS = 6;
-  const THRESH = 170;       // luminance threshold for highlights
-  const MIN_AREA = 900;     // minimal region size (px) to consider as a tile
-  const PAD = 8;            // padding around crop
-  const grid = 16;          // downsample grid for fast pass
-
-  // Create a tiny tray for thumbnails (non-blocking, bottom-right)
-  function ensureTray() {
-    let tray = document.getElementById('multiDiceThumbs');
-    if (!tray) {
-      tray = document.createElement('div');
-      tray.id = 'multiDiceThumbs';
-      tray.setAttribute('aria-label', 'dice-thumbs');
-      tray.style.cssText = [
-        'position:fixed','right:12px','bottom:12px','z-index:9999',
-        'display:flex','flex-wrap:wrap','gap:8px',
-        'background:rgba(0,0,0,.35)','backdrop-filter:blur(6px)',
-        'padding:10px','border-radius:12px','max-width:48vw','max-height:40vh',
-        'overflow:auto'
-      ].join(';');
-      document.body.appendChild(tray);
+// === v5.16.1-ml: multi-tile grid detection (non-invasive) ===
+async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
+  await ensureModels?.();
+  const {img} = await imgToTensor(file);
+  // draw into offscreen for stable sampling
+  const off = document.createElement('canvas');
+  off.width = 720; off.height = 720 * (img.height/img.width);
+  const oc = off.getContext('2d');
+  oc.drawImage(img, 0, 0, off.width, off.height);
+  const W = off.width, H = off.height;
+  const results = [];
+  for(let r=0;r<grid;r++){
+    for(let c=0;c<grid;c++){
+      const sx = Math.floor(c*W/grid), sy = Math.floor(r*H/grid);
+      const sw = Math.floor(W/grid), sh = Math.floor(H/grid);
+      const tile = document.createElement('canvas');
+      tile.width = 128; tile.height = 128;
+      tile.getContext('2d').drawImage(off, sx, sy, sw, sh, 0,0,128,128);
+      try{
+        const emb = net.infer(tile, true);
+        const res = await classifier.predictClass(emb, 3);
+        if(res && res.label!=null){
+          const conf = Math.max(...Object.values(res.confidences||{0:0}));
+          const n = parseInt(res.label,10);
+          if(Number.isFinite(n) && conf>=minConf){
+            results.push({n, conf, r, c});
+          }
+        }
+      }catch(e){ /* ignore tile */ }
     }
-    return tray;
   }
-  function clearTray() {
-    const tray = ensureTray();
-    while (tray.firstChild) tray.removeChild(tray.firstChild);
+  // merge duplicates from overlapping tiles: keep by (n,r,c) already unique enough
+  // Just sum numbers of all hits
+  const nums = results.map(x=>x.n);
+  const sum = nums.reduce((a,b)=>a+b,0);
+  return {nums, sum};
+}
+
+// === v5.16.1-ml: multi-tile via Connected Components (Otsu + CCL) ===
+function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
+function __rk_otsu(gray, w, h){
+  const hist = new Array(256).fill(0);
+  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
+  const total = w*h; let sum=0;
+  for(let t=0;t<256;t++) sum += t*hist[t];
+  let sumB=0, wB=0, varMax=0, thr=0;
+  for(let t=0;t<256;t++){
+    wB += hist[t]; if(wB===0) continue;
+    const wF = total - wB; if(wF===0) break;
+    sumB += t*hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB*wF*(mB-mF)*(mB-mF);
+    if (between > varMax){ varMax = between; thr = t; }
   }
-  function addThumb(url, label, conf) {
-    const tray = ensureTray();
-    const box = document.createElement('div');
-    box.style.cssText = [
-      'position:relative','width:90px','height:90px','border-radius:10px',
-      'overflow:hidden','background:#111','box-shadow:0 2px 6px rgba(0,0,0,.35)'
-    ].join(';');
+  return thr;
+}
+// returns {boxes:[{x,y,w,h}], ox, oy, nw, nh}
+function __rk_segment_image_to_boxes(img, opts){
+  const CW = 960, CH = 540;
+  const stage = document.getElementById('stage_cc') || (()=>{
+    const c = document.createElement('canvas'); c.id='stage_cc'; c.width=CW; c.height=CH; c.style.display='none'; document.body.appendChild(c); return c;
+  })();
+  const ctx = stage.getContext('2d');
+  const scale = Math.min(CW/img.width, CH/img.height);
+  const nw = Math.round(img.width*scale), nh = Math.round(img.height*scale);
+  const ox = Math.round((CW - nw)/2), oy = Math.round((CH - nh)/2);
+  ctx.clearRect(0,0,CW,CH);
+  ctx.drawImage(img, ox, oy, nw, nh);
+
+  const id = ctx.getImageData(ox, oy, nw, nh);
+  const data = id.data;
+  const gray = new Uint8ClampedArray(nw*nh);
+  for(let y=0;y<nh;y++){
+    for(let x=0;x<nw;x++){
+      const i=(y*nw+x)*4; const r=data[i], g=data[i+1], b=data[i+2];
+      gray[y*nw+x] = opts.ignoreColor ? __rk_toGray(r,g,b) : Math.max(r,g,b);
+    }
+  }
+  const thr = opts.thr>0 ? opts.thr : __rk_otsu(gray, nw, nh);
+  const bin = new Uint8Array(nw*nh);
+  // Tiles are generally brighter on white backgrounds; invert threshold as needed for your set
+  for(let i=0;i<gray.length;i++) bin[i] = gray[i] > thr ? 1 : 0;
+
+  // Connected components
+  const labels = new Int32Array(nw*nh).fill(-1);
+  const boxes=[]; let label=0;
+  const qx=[], qy=[];
+  for(let y=0;y<nh;y++){
+    for(let x=0;x<nw;x++){
+      const idx=y*nw+x;
+      if(bin[idx]===0 || labels[idx]!==-1) continue;
+      // BFS flood fill
+      let minx=x, miny=y, maxx=x, maxy=y, area=0;
+      qx.length=0; qy.length=0; qx.push(x); qy.push(y); labels[idx]=label;
+      while(qx.length){
+        const cx=qx.pop(), cy=qy.pop();
+        const cidx=cy*nw+cx; area++;
+        if(cx<minx)minx=cx; if(cy<miny)miny=cy; if(cx>maxx)maxx=cx; if(cy>maxy)maxy=cy;
+        const nbs=[[1,0],[-1,0],[0,1],[0,-1]];
+        for(const [dx,dy] of nbs){
+          const nx=cx+dx, ny=cy+dy;
+          if(nx<0||ny<0||nx>=nw||ny>=nh) continue;
+          const nidx = ny*nw+nx;
+          if(bin[nidx]===1 && labels[nidx]===-1){ labels[nidx]=label; qx.push(nx); qy.push(ny); }
+        }
+      }
+      const bw=maxx-minx+1, bh=maxy-miny+1;
+      const aspect = Math.min(bw,bh)/Math.max(bw,bh); // ~ מלבני
+      if(area >= (opts.minArea||1200) && aspect >= (opts.aspectMin||0.5) && aspect <= (opts.aspectMax||1.2)){
+        boxes.push({x:minx,y:miny,w:bw,h:bh,area,aspect});
+      }
+      label++;
+    }
+  }
+  // סדר: מלמעלה למטה ואז משמאל לימין
+  boxes.sort((a,b)=> a.y===b.y ? a.x-b.x : a.y-b.y);
+  if(boxes.length>(opts.maxCount||20)) boxes.length = (opts.maxCount||20);
+  return {boxes, ox, oy, nw, nh, CW, CH};
+}
+async function __rk_classify_boxes(seg){
+  await ensureModels?.();
+  const resNums=[]; const urls=[];
+  const off = document.createElement('canvas'); off.width=128; off.height=128;
+  const oc = off.getContext('2d');
+  const stage = document.getElementById('stage_cc');
+  for(const b of seg.boxes){
+    const pad = Math.floor(Math.min(b.w,b.h)*0.10);
+    oc.clearRect(0,0,128,128);
+    oc.drawImage(stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
+    try{ urls.push(off.toDataURL('image/jpeg')); }catch(_){ }
+    try{
+      const emb = net.infer(off, true);
+      const pred = await classifier.predictClass(emb, 3);
+      if(pred && pred.label!=null){
+        const n = parseInt(pred.label,10);
+        const c = Math.max(...Object.values(pred.confidences||{0:0}));
+        if(Number.isFinite(n) && c>=0.5){ resNums.push(n); }
+      }
+    }catch(_){ /* ignore this crop */ }
+  }
+  return {nums: resNums, thumbs: urls};
+}
+async function __rk_detect_many_and_fill(file, idx, row){
+  try{
+    const {img} = await imgToTensor(file);
+    // segment → classify per box
+    const seg = __rk_segment_image_to_boxes(img, {ignoreColor:true, thr:0, minArea:1200, maxCount:20, aspectMin:0.5, aspectMax:1.2});
+    const out = await __rk_classify_boxes(seg);
+    const nums = out && out.nums || []; const thumbs = out && out.thumbs || [];
+    if(nums && nums.length>=2){
+      try{ __rk_renderThumbs(thumbs); }catch(_){ }
+      const sum = nums.reduce((a,b)=>a+b,0);
+      // label
+      const lbl = document.getElementById('lastDetectLabel');
+      if(lbl) lbl.textContent = `זוהו: ${nums.join(', ')} (סה״כ ${sum}) — שחקן ${idx+1} • ${players[idx]?.name||''}`;
+      // fill only this player's input
+      try{ (row.querySelector('input.manual')||row.querySelector('input[type=\"number\"]')).value = sum; }catch(_){ }
+      return true; // handled
+    }
+  }catch(err){
+    try{ log && log('multi-CC error: '+(err?.message||err)); }catch(_){}
+  }
+  return false; // not handled, fallback to single detection path
+}
+
+// v5.16.1-ml thumbnails helper
+function __rk_renderThumbs(urls){
+  let host = document.getElementById('detThumbs');
+  if(!host){
+    const lbl = document.getElementById('lastDetectLabel');
+    host = document.createElement('div');
+    host.id = 'detThumbs';
+    if(lbl && lbl.parentNode){
+      lbl.parentNode.insertBefore(host, lbl.nextSibling);
+    } else {
+      document.body.appendChild(host);
+    }
+  }
+  host.innerHTML = '';
+  (urls||[]).forEach(u=>{
     const img = document.createElement('img');
-    img.src = url;
-    img.alt = label || '';
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-    const tag = document.createElement('div');
-    tag.textContent = (label||'?') + (conf!=null?` • ${Math.round(conf*100)}%`:'');
-    tag.style.cssText = [
-      'position:absolute','left:6px','bottom:6px',
-      'font:600 12px/1.2 system-ui,Segoe UI,Arial',
-      'padding:4px 6px','border-radius:6px',
-      'background:rgba(0,0,0,.6)','color:#fff','text-shadow:0 1px 1px #000'
-    ].join(';');
-    box.appendChild(img);
-    box.appendChild(tag);
-    tray.appendChild(box);
-  }
-
-  function getImageBitmapFromAny(src) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        if (src instanceof ImageBitmap) return resolve(src);
-        if (src instanceof HTMLImageElement || src instanceof HTMLVideoElement || src instanceof HTMLCanvasElement) {
-          resolve(await createImageBitmap(src));
-          return;
-        }
-        if (src instanceof Blob) {
-          resolve(await createImageBitmap(src));
-          return;
-        }
-        // try selector
-        if (typeof src === 'string') {
-          const el = document.querySelector(src);
-          if (el) return resolve(await createImageBitmap(el));
-        }
-        reject(new Error('Unsupported source for bitmap'));
-      } catch (e) { reject(e); }
-    });
-  }
-
-  function luminance(r,g,b){ return 0.2126*r + 0.7152*g + 0.0722*b; }
-
-  // Very fast highlight-based region proposal
-  function proposeBoxes(imgData, W, H) {
-    const gw = Math.max(4, Math.floor(W/grid)), gh = Math.max(4, Math.floor(H/grid));
-    const visited = new Set();
-    const boxes = [];
-    function key(x,y){ return (y<<16)|x; }
-    function flood(sx,sy){
-      const stack = [[sx,sy]];
-      let minX=sx, minY=sy, maxX=sx, maxY=sy, count=0;
-      while (stack.length){
-        const [x,y]=stack.pop();
-        const k=key(x,y); if (visited.has(k)) continue;
-        visited.add(k); count++;
-        minX = Math.min(minX, x); minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-        const neigh = [[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
-        for (const [nx,ny] of neigh){
-          if (nx<0||ny<0||nx>=gw||ny>=gh) continue;
-          const kk=key(nx,ny); if (visited.has(kk)) continue;
-          const idx = ((ny*grid)*W + (nx*grid)) * 4;
-          const L = luminance(
-            imgData[idx], imgData[idx+1], imgData[idx+2]
-          );
-          if (L>=THRESH) stack.push([nx,ny]);
-        }
-      }
-      const scale = grid;
-      const x = Math.max(0, minX*scale - PAD);
-      const y = Math.max(0, minY*scale - PAD);
-      const w = Math.min(W - x, (maxX - minX + 1)*scale + PAD*2);
-      const h = Math.min(H - y, (maxY - minY + 1)*scale + PAD*2);
-      if (w*h >= MIN_AREA) boxes.push({x,y,w,h});
-    }
-
-    for (let gy=0; gy<gh; gy++){
-      for (let gx=0; gx<gw; gx++){
-        const k=key(gx,gy); if (visited.has(k)) continue;
-        const idx = ((gy*grid)*W + (gx*grid)) * 4;
-        const L = luminance(imgData[idx], imgData[idx+1], imgData[idx+2]);
-        if (L>=THRESH) flood(gx,gy);
-      }
-    }
-    return boxes;
-  }
-
-  async function cropsFromBitmap(bitmap) {
-    const W = bitmap.width, H = bitmap.height;
-    const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
-    const cx = cv.getContext('2d', { willReadFrequently:true });
-    cx.drawImage(bitmap,0,0);
-    const data = cx.getImageData(0,0,W,H).data;
-    let boxes = proposeBoxes(data, W, H);
-    // Merge boxes that overlap a lot
-    boxes = boxes.filter(b=>b.w*b.h>=MIN_AREA).slice(0, 12);
-    // Create crops + dataUrls
-    const outs = [];
-    for (const b of boxes){
-      const c = document.createElement('canvas');
-      c.width = b.w; c.height = b.h;
-      c.getContext('2d').drawImage(cv, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
-      const url = c.toDataURL('image/jpeg', 0.85);
-      outs.push({ url, box:b });
-      if (outs.length>=MAX_THUMBS) break;
-    }
-    return outs;
-  }
-
-  // Optional classifier hook
-  async function classifyCropURL(url) {
-    try {
-      if (!window.mobilenet || !window.knnClassifier) return {label:'?', conf:null};
-      // Expect an existing classifyImage function in page (non-invasive). If exists—use it.
-      if (typeof window.classifyImage === 'function') {
-        const res = await window.classifyImage(url); // developer’s classifier should accept url/blob/canvas
-        if (res && res.label) return res;
-      }
-    } catch (e){}
-    return {label:'?', conf:null};
-  }
-
-  async function detectAndShow(src) {
-    try {
-      clearTray();
-      const bmp = await getImageBitmapFromAny(src);
-      const crops = await cropsFromBitmap(bmp);
-      if (crops.length===0){
-        // show original as fallback small
-        const cv = document.createElement('canvas');
-        cv.width = Math.min(300, bmp.width); cv.height = cv.width*(bmp.height/bmp.width)|0;
-        cv.getContext('2d').drawImage(bmp,0,0,cv.width,cv.height);
-        addThumb(cv.toDataURL('image/jpeg',0.8), '—', null);
-        return [];
-      }
-      const results = [];
-      for (const c of crops){
-        const r = await classifyCropURL(c.url);
-        addThumb(c.url, r.label, r.conf);
-        results.push({ ...c, ...r });
-      }
-      return results;
-    } catch (e){
-      console.warn('[multiDice] detect error', e);
-      return [];
-    }
-  }
-
-  // Export minimal API
-  window.multiDiceDetect = detectAndShow;
-  window.multiDiceAddonVersion = VERSION;
-
-  // Auto-wrap snapClassify (if exists)
-  const _wrap = () => {
-    const orig = window.snapClassify;
-    if (typeof orig !== 'function') return;
-    if (orig.__wrapped_by_multiDice) return;
-    async function wrappedSnapClassify(cameraBlob, playerIndex) {
-      // Show thumbnails & get the best crop if any
-      let best = null;
-      try {
-        const found = await detectAndShow(cameraBlob);
-        if (found && found.length){
-          best = found.reduce((a,b)=> (a.conf||0)>(b.conf||0)?a:b );
-        }
-      } catch(e){ /* ignore */ }
-      const toSend = best ? await (await fetch(best.url)).blob() : cameraBlob;
-      return orig.call(this, toSend, playerIndex);
-    }
-    wrappedSnapClassify.__wrapped_by_multiDice = true;
-    window.snapClassify = wrappedSnapClassify;
-    console.log('[multiDice]', VERSION, 'wrapper active');
-  };
-  const _obs = new MutationObserver(_wrap);
-  _wrap();
-  setTimeout(_wrap, 200);
-  _obs.observe(document.documentElement, {subtree:true, childList:true});
-})();
-
+    img.src = u;
+    host.appendChild(img);
+  });
+}
 </script>
 
-<!-- v5.16-ml — KNN partial model save/restore (non-invasive) -->
+
+<!-- v5.16.1-ml — Robust KNN save/restore: chunked localStorage + Float16 quantization + download/upload helpers -->
 <script>
 (function(){
-  if (window.__knnPartialPersistPatched) return;
-  window.__knnPartialPersistPatched = true;
+  if (window.__knnPersist_v3) return; window.__knnPersist_v3 = true;
 
-  const KEY = 'remi_knn_v2';
-  const MAX_BYTES = 5 * 1024 * 1024; // guard: 5MB
+  const KEY_PREFIX = 'remi_knn_v3';
+  const CHUNK_SIZE = 900_000; // ~0.9MB per chunk (safe vs. 5MB quota)
+  const QUANT = 'f16';        // quantize Float32 embeddings to Float16 to reduce size ~2x
+  const META_KEY = KEY_PREFIX + '.meta';
+  const MAX_PARTS = 40;       // guard
 
   function now(){ return new Date().toISOString(); }
   function kb(n){ return (n/1024).toFixed(1)+' KB'; }
   function safeLog(msg){ try{ (window.log||console.log)('[knn-store]', msg); }catch(e){} }
+  function b64FromU8(u8){ // base64 from Uint8Array
+    let bin=''; for(let i=0;i<u8.length;i++) bin += String.fromCharCode(u8[i]);
+    return btoa(bin);
+  }
+  function u8FromB64(b64){
+    const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+    return u8;
+  }
+
+  // Float32 <-> Float16 (IEEE 754)
+  function f32toF16Buf(f32){
+    const out = new Uint16Array(f32.length);
+    for (let i=0;i<f32.length;i++){
+      let x = f32[i];
+      if (isNaN(x)) { out[i]=0x7e00; continue; }
+      const sign = (x<0) ? 1 : 0; if (sign) x = -x;
+      if (x === Infinity) { out[i] = (sign<<15) | 0x7c00; continue; }
+      if (x === 0) { out[i] = sign<<15; continue; }
+      let exp = Math.floor(Math.log2(x));
+      let frac = x / Math.pow(2, exp) - 1;
+      exp += 15;
+      if (exp <= 0){ // subnormal
+        const val = Math.round(x / Math.pow(2, -24));
+        out[i] = (sign<<15) | val;
+        continue;
+      }
+      if (exp >= 31){ // overflow
+        out[i] = (sign<<15) | 0x7c00; continue;
+      }
+      const mant = Math.round(frac * 1024);
+      out[i] = (sign<<15) | (exp<<10) | (mant & 0x3ff);
+    }
+    return new Uint8Array(out.buffer);
+  }
+  function f16toF32Buf(u8){
+    const u16 = new Uint16Array(u8.buffer, u8.byteOffset, u8.byteLength/2);
+    const out = new Float32Array(u16.length);
+    for (let i=0;i<u16.length;i++){
+      const h = u16[i];
+      const s = (h>>15)&1, e=(h>>10)&0x1f, m=h&0x3ff;
+      let f;
+      if (e===0){
+        f = (m? (m/1024)*Math.pow(2, -14) : 0);
+      } else if (e===31){
+        f = m? NaN : Infinity;
+      } else {
+        f = (1 + m/1024) * Math.pow(2, e-15);
+      }
+      out[i] = s? -f : f;
+    }
+    return out;
+  }
 
   function getClassifier(){
-    // prefer existing global 'classifier', else create if possible
     if (window.classifier && typeof window.classifier.getClassifierDataset === 'function') return window.classifier;
     if (window.knnClassifier && typeof window.knnClassifier.create === 'function'){
       if (!window.__fallbackKnn) window.__fallbackKnn = window.knnClassifier.create();
@@ -844,92 +894,142 @@ else {
     return null;
   }
 
-  // Serialize current dataset to JSON (supports partial classes)
   async function serialize(){
-    const knn = getClassifier();
-    if (!knn) throw new Error('KNN not ready');
+    const knn = getClassifier(); if (!knn) throw new Error('KNN not ready');
     const ds = knn.getClassifierDataset();
-    const out = { meta:{ver:'v2', savedAt: now()}, classes:{}, shapes:{} };
-    const classIds = Object.keys(ds);
-    for (const cid of classIds){
-      const t = ds[cid];
-      if (!t) continue;
-      const data = await t.data(); // Float32Array
-      out.classes[cid] = Array.from(data);
-      out.shapes[cid]  = Array.from(t.shape||[]);
+    const classes = {}; const shapes = {};
+    const ids = Object.keys(ds);
+    for (const id of ids){
+      const t = ds[id]; if (!t) continue;
+      const f32 = await t.data();
+      let payloadU8;
+      if (QUANT === 'f16'){
+        payloadU8 = f32toF16Buf(f32);
+      } else {
+        payloadU8 = new Uint8Array(new Float32Array(f32).buffer);
+      }
+      classes[id] = b64FromU8(payloadU8);
+      shapes[id]  = Array.from(t.shape||[]);
     }
-    const json = JSON.stringify(out);
-    if (json.length > MAX_BYTES) throw new Error('model too large: '+kb(json.length));
-    return json;
+    const meta = { ver:'v3', quant:QUANT, savedAt:now(), classes:Object.keys(classes).length };
+    const body = JSON.stringify({ meta, classes, shapes });
+    // chunk
+    const parts = Math.ceil(body.length / CHUNK_SIZE);
+    if (parts > MAX_PARTS) throw new Error('model too large (parts='+parts+')');
+    localStorage.setItem(META_KEY, JSON.stringify({parts, bytes: body.length, ...meta}));
+    for (let i=0;i<parts;i++){
+      const chunk = body.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE);
+      localStorage.setItem(`${KEY_PREFIX}.part.${i}`, chunk);
+    }
+    return { bytes: body.length, parts, meta };
   }
 
-  // Restore dataset from JSON; loads **whatever exists** (partial ok)
-  function deserialize(json){
-    const knn = getClassifier();
-    if (!knn) throw new Error('KNN not ready');
+  function restore(){
+    const metaStr = localStorage.getItem(META_KEY);
+    if (!metaStr) return { ok:false, empty:true };
+    let meta; try{ meta = JSON.parse(metaStr); }catch(e){ return {ok:false, error:'bad meta'}; }
+    const { parts=0 } = meta;
+    if (!parts) return { ok:false, empty:true };
+    let body='';
+    for (let i=0;i<parts;i++){
+      const chunk = localStorage.getItem(`${KEY_PREFIX}.part.${i}`) || '';
+      body += chunk;
+    }
     let parsed=null;
-    try{ parsed = JSON.parse(json); }catch(e){ throw new Error('bad json'); }
-    const {classes={}, shapes={}} = parsed;
-    const ds = {};
-    let clsCount = 0, vecCount = 0;
-    for (const cid of Object.keys(classes)){
-      const arr = classes[cid]; const shape = shapes[cid] || [arr.length];
-      if (!arr || !arr.length) continue;
-      const tensor = tf.tensor(arr, shape, 'float32');
-      ds[cid] = tensor; clsCount++;
-      // shape like [N, D] → vecCount += N
-      if (shape && shape.length && shape[0]) vecCount += shape[0];
+    try{ parsed = JSON.parse(body); }catch(e){ return {ok:false, error:'bad body'}; }
+    const { classes={}, shapes={}, meta:inner={} } = parsed;
+    const knn = getClassifier(); if (!knn) return { ok:false, error:'KNN not ready' };
+    const ds = {}; let clsCount=0, vecCount=0;
+    for (const id of Object.keys(classes)){
+      const b64 = classes[id];
+      const shape = shapes[id] || [];
+      const u8 = u8FromB64(b64);
+      let f32;
+      if ((inner.quant||QUANT)==='f16'){
+        f32 = f16toF32Buf(u8);
+      } else {
+        f32 = new Float32Array(u8.buffer, u8.byteOffset, u8.byteLength/4);
+      }
+      const t = tf.tensor(f32, shape, 'float32');
+      ds[id]=t; clsCount++; if (shape && shape.length) vecCount += (shape[0]||0);
     }
-    if (clsCount===0){
-      safeLog('no classes in stored model'); 
-      return {clsCount:0, vecCount:0, bytes: (json||'').length};
-    }
+    if (clsCount===0) return { ok:false, empty:true };
     knn.setClassifierDataset(ds);
-    return {clsCount, vecCount, bytes:(json||'').length};
+    return { ok:true, bytes: body.length, parts, clsCount, vecCount, quant:(inner.quant||QUANT) };
   }
 
   // Public API
   window.remiModel = window.remiModel || {};
   window.remiModel.save = async function(){
     try{
-      const json = await serialize();
-      localStorage.setItem(KEY, json);
-      const info = { ok:true, bytes: json.length };
-      safeLog('saved '+kb(json.length));
-      // UI hint if element exists
+      const info = await serialize();
+      safeLog(`saved ${kb(info.bytes)} in ${info.parts} part(s), classes=${info.meta.classes}`);
       const el = document.getElementById('modelStatus') || document.getElementById('modelSize');
-      if (el) el.textContent = 'saved • '+kb(json.length);
-      return info;
+      if (el) el.textContent = `saved • ${kb(info.bytes)} • ${info.meta.classes} classes`;
+      return {ok:true, ...info};
     }catch(e){
       safeLog('save error: '+(e && e.message || e));
-      return { ok:false, error: (e && e.message || String(e))};
+      // Fallback: offer download
+      try{
+        const knn = getClassifier(); if (!knn) throw new Error('KNN not ready');
+        const ds = knn.getClassifierDataset();
+        const classes = {}, shapes = {};
+        const ids = Object.keys(ds);
+        for (const id of ids){
+          const t = ds[id]; if (!t) continue;
+          const f32 = await t.data();
+          const blobU8 = (QUANT==='f16') ? f32toF16Buf(f32) : new Uint8Array(new Float32Array(f32).buffer);
+          classes[id] = b64FromU8(blobU8);
+          shapes[id]  = Array.from(t.shape||[]);
+        }
+        const meta = {ver:'v3', quant:QUANT, savedAt:now(), classes:Object.keys(classes).length};
+        const body = JSON.stringify({ meta, classes, shapes });
+        const a = document.createElement('a');
+        a.download = 'remi_knn_backup.json';
+        a.href = URL.createObjectURL(new Blob([body], {type:'application/json'}));
+        a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+        safeLog('downloaded backup');
+      }catch(_){}
+      return { ok:false, error:(e && e.message || String(e)) };
     }
   };
   window.remiModel.load = function(){
     try{
-      const json = localStorage.getItem(KEY);
-      if (!json){ safeLog('no saved model'); return {ok:false, empty:true}; }
-      const info = deserialize(json);
-      safeLog('restored classes='+info.clsCount+' vecs~'+info.vecCount+' size='+kb(info.bytes));
-      const el = document.getElementById('modelStatus') || document.getElementById('modelSize');
-      if (el) el.textContent = 'restored • '+kb(info.bytes)+' • '+info.clsCount+' classes';
-      return { ok:true, ...info };
+      const info = restore();
+      if (info.ok){
+        safeLog(`restored ${kb(info.bytes)} • parts=${info.parts} • classes=${info.clsCount} • vecs~${info.vecCount} • ${info.quant}`);
+        const el = document.getElementById('modelStatus') || document.getElementById('modelSize');
+        if (el) el.textContent = `restored • ${kb(info.bytes)} • ${info.clsCount} classes`;
+      } else {
+        safeLog('no stored model or restore failed');
+      }
+      return info;
     }catch(e){
       safeLog('load error: '+(e && e.message || e));
       return { ok:false, error:(e && e.message || String(e)) };
     }
   };
+  // optional: manual upload of backup file
+  window.remiModel.upload = async function(file){
+    try{
+      const txt = await file.text();
+      // store into chunks
+      const parts = Math.ceil(txt.length / CHUNK_SIZE);
+      localStorage.setItem(META_KEY, JSON.stringify({parts, bytes:txt.length, ver:'v3', quant:QUANT, uploaded:true}));
+      for (let i=0;i<parts;i++){
+        localStorage.setItem(`${KEY_PREFIX}.part.${i}`, txt.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE));
+      }
+      return window.remiModel.load();
+    }catch(e){
+      return { ok:false, error:(e && e.message || String(e)) };
+    }
+  };
 
-  // Auto-load on startup (non-invasive)
-  document.addEventListener('DOMContentLoaded', function(){
-    try{ window.remiModel.load(); }catch(_){}
-  }, {once:true});
-
-  // Best-effort: auto-save on beforeunload (non-blocking)
-  window.addEventListener('beforeunload', function(){
-    // fire and forget
-    try{ window.remiModel.save(); }catch(_){}
-  });
+  // Auto-restore
+  document.addEventListener('DOMContentLoaded', function(){ try{ window.remiModel.load(); }catch(_){} }, {once:true});
+  // Best-effort auto-save
+  window.addEventListener('beforeunload', function(){ try{ window.remiModel.save(); }catch(_){} });
 })();
 </script>
 </body>
