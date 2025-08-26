@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.6-ml</small>
+<small class="tag" id="verBadge">v5.16.4-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.6-ml</div>
+<div class="muted">© v5.16.4-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.6-ml';
+const VERSION = 'v5.16.4-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -510,7 +510,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.10-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.16.4-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -591,101 +591,200 @@ function awardPointsFromDetection(playerIdx, points) {
 </script>
 
 
+<!-- v5.16.4-ml — KNN v2 per-class save/restore inline patch -->
 <script>
-(function(){
-  const VERSION_TAG = "v5.16.3-ml";
-  function dbg(msg){
-    try{
-      const el = document.querySelector('#debug, pre.debug, .debug pre');
-      if(el){ el.textContent += (el.textContent ? "\n" : "") + msg; el.scrollTop = el.scrollHeight; }
-    }catch(e){}
-    console.log(msg);
+(function () {
+  const META_KEY = 'knn:meta:v2';
+  const CLS_KEY = (id) => `knn:cls:${id}`;
+  const DIM = 1024;
+
+  function getKNN() {
+    return window.knn || (window.knnClassifierInstance) || null;
   }
-  function fmtBytes(n){
-    if (!n && n !== 0) return "?B";
-    const u = ["B","KB","MB","GB"]; let i=0; while(n>=1024 && i<u.length-1){n/=1024;i++;} 
-    return (Math.round(n*10)/10)+" "+u[i];
+  function log(...args) {
+    console.log('[knn v2]', ...args);
+    const d = document.querySelector('#debug,[data-debug]');
+    if (d) d.textContent += '\\n' + args.map(x=> (typeof x==='string'? x : JSON.stringify(x))).join(' ');
   }
 
-  // Try to update a visible version badge if one exists
-  document.addEventListener('DOMContentLoaded', () => {
-    const badge = Array.from(document.querySelectorAll('*'))
-      .find(el => /^\s*v\d+\.\d+(\.\d+)?-ml\s*$/i.test(el.textContent||""));
-    if (badge) badge.textContent = VERSION_TAG;
-    // Also expose on window for other code to read
-    window.__APP_VERSION__ = VERSION_TAG;
-    dbg("log-kit ready • version: " + VERSION_TAG);
+  async function saveKnnV2() {
+    const knn = getKNN();
+    if (!knn || !knn.getClassifierDataset) { log('ERR save: knn not ready'); return; }
+    const ds = knn.getClassifierDataset();
+    const classes = Object.keys(ds);
+    if (!classes.length) { localStorage.removeItem(META_KEY); log('save v2: empty dataset'); return; }
+
+    let total=0;
+    for (const id of classes) {
+      const t = ds[id]; if (!t) continue;
+      const arr = Array.from(t.dataSync());
+      const rows = Math.floor(arr.length / DIM);
+      total += rows;
+      localStorage.setItem(CLS_KEY(id), JSON.stringify({ n: rows, data: arr.slice(0, rows*DIM) }));
+    }
+    const meta = { ver:2, dim:DIM, classes: classes };
+    localStorage.setItem(META_KEY, JSON.stringify(meta));
+    log(`💾 saved v2 • classes=${classes.length} • vectors=${total}`);
+  }
+
+  function loadKnnV2() {
+    const knn = getKNN();
+    if (!knn || !knn.setClassifierDataset) { log('ERR load: knn not ready'); return; }
+    const metaTxt = localStorage.getItem(META_KEY);
+    if (!metaTxt) { log('no v2 meta'); return; }
+    let meta; try{ meta = JSON.parse(metaTxt); }catch(e){ log('ERR parse meta',e); return; }
+    const ds = {}; let total=0;
+    for (const id of meta.classes||[]) {
+      const raw = localStorage.getItem(CLS_KEY(id)); if (!raw) continue;
+      try {
+        const rec = JSON.parse(raw);
+        const n = rec.n, arr = rec.data;
+        if (!n || !arr || arr.length!==n*meta.dim) { log(`mismatch class=${id}`); continue; }
+        ds[id] = tf.tensor2d(new Float32Array(arr), [n, meta.dim]);
+        total+=n;
+      } catch(e){ log('ERR parse class',id,e); }
+    }
+    if (Object.keys(ds).length) {
+      knn.setClassifierDataset(ds);
+      log(`📦 restored v2 • classes=${Object.keys(ds).length} • vectors=${total}`);
+    }
+  }
+
+  // Hook buttons if exist
+  document.addEventListener('DOMContentLoaded', ()=>{
+    document.querySelectorAll('button, .btn').forEach(b=>{
+      const txt = (b.textContent||'').trim();
+      if (txt.includes('שמור מודל')) b.addEventListener('click', ev=>{ if (!ev.shiftKey){ ev.preventDefault(); saveKnnV2(); }}, true);
+      if (txt.includes('שחזר מודל')) b.addEventListener('click', ev=>{ if (!ev.shiftKey){ ev.preventDefault(); loadKnnV2(); }}, true);
+    });
+    // auto restore if dataset empty
+    setTimeout(()=>{ try{ 
+      const knn = getKNN(); 
+      const ds = knn.getClassifierDataset(); 
+      const hasAny = Object.values(ds||{}).some(t=> t && t.size>0);
+      if (!hasAny) loadKnnV2(); 
+    }catch(e){} },1500);
+    log('knn v2 patch loaded');
   });
+  window.__knnV2 = {saveKnnV2, loadKnnV2};
+})();
+</script>
 
-  // localStorage wrappers to observe save/restore of the KNN dataset
-  try{
-    const P = Object.getPrototypeOf(localStorage);
-    const _setItem = P.setItem;
-    const _getItem = P.getItem;
-    P.setItem = function(key, val){
-      let size = val ? (typeof val === 'string' ? val.length : JSON.stringify(val).length) : 0;
-      if (key === "knnDataset" || (typeof key === 'string' && key.includes("knn"))) {
-        dbg(`📥 save localStorage key="${key}" • ${fmtBytes(size)} (chars: ${size})`);
-        try{
-          const obj = typeof val === 'string' ? JSON.parse(val) : val;
-          if (obj && obj.tag && obj.classes){
-            let total=0, classes=0, dim=null;
-            Object.values(obj.classes).forEach(arr=>{ total += arr.length; });
-            if (obj.meta && obj.meta.dim) dim = obj.meta.dim;
-            classes = Object.keys(obj.classes).length;
-            dbg(`  └─ snapshot • classes: ${classes} • vectors: ${total}` + (dim?` • dim: ${dim}`:""));
-          }
-        }catch(e){ dbg("  └─ (non-JSON / parse skipped)"); }
-      }
-      return _setItem.call(this, key, val);
-    };
-    P.getItem = function(key){
-      const val = _getItem.call(this, key);
-      if (key === "knnDataset" || (typeof key === 'string' && key.includes("knn"))) {
-        const size = val ? val.length : 0;
-        dbg(`📦 load localStorage key="${key}" • ${fmtBytes(size)} (chars: ${size})`);
-      }
-      return val;
-    };
-  }catch(e){ console.warn("ls-wrap failed", e); }
+<!-- knn v2 per-class save/restore (inline) -->
+<script>
+(function () {
+  const META_KEY = 'knn:meta:v2';
+  const CLS_KEY = (id) => `knn:cls:${id}`;
 
-  // JSON stringify/parse taps for our tagged payloads only
-  try{
-    const J = window.JSON;
-    const _parse = J.parse.bind(J);
-    const _stringify = J.stringify.bind(J);
-    J.stringify = function(x, ...rest){
-      try{
-        if (x && x.tag === "remmikub-knn" && x.classes){
-          let total=0, classes=Object.keys(x.classes).length;
-          Object.values(x.classes).forEach(arr=> total += arr.length);
-          dbg(`📝 export JSON • classes: ${classes} • vectors: ${total} • dim: ${x.meta && x.meta.dim}`);
-        }
-      }catch(e){}
-      return _stringify(x, ...rest);
-    };
-    J.parse = function(str, ...rest){
-      const obj = _parse(str, ...rest);
-      try{
-        if (obj && obj.tag === "remmikub-knn"){
-          let total=0, classes=Object.keys(obj.classes||{}).length;
-          Object.values(obj.classes||{}).forEach(arr=> total += arr.length);
-          dbg(`📖 import JSON • classes: ${classes} • vectors: ${total} • dim: ${obj.meta && obj.meta.dim}`);
-        }
-      }catch(e){}
-      return obj;
-    };
-  }catch(e){ console.warn("json-wrap failed", e); }
-
-  // TensorFlow and KNN quick probes
-  (async function(){
+  function getKNN() {
     try{
-      if (window.tf){
-        await tf.ready();
-        dbg("TF: " + tf.getBackend() + " • " + tf.version_core);
+      if (window.classifier && typeof window.classifier.getClassifierDataset === 'function') return window.classifier;
+      if (window.knn && typeof window.knn.getClassifierDataset === 'function') return window.knn;
+      if (window.knnClassifierInstance && typeof window.knnClassifierInstance.getClassifierDataset === 'function') return window.knnClassifierInstance;
+    }catch(_){}
+    return null;
+  }
+
+  function debugEl() { return document.querySelector('#debug, [data-debug]'); }
+  function log() {
+    const msg = Array.from(arguments).map(a=> (typeof a==='string'? a : (a && a.message) || JSON.stringify(a))).join(' ');
+    try{ console.log('[knn v2]', msg); }catch(_){}
+    const d = debugEl();
+    if (d) { d.textContent = (d.textContent||'') + (d.textContent? '\n':'') + msg; }
+  }
+
+  async function saveKnnV2() {
+    const knn = getKNN();
+    if (!knn || !knn.getClassifierDataset) { log('ERR save: knn not ready'); alert('שמירה נכשלה (KNN לא מוכן)'); return; }
+    const ds = knn.getClassifierDataset();
+    const classIds = Object.keys(ds);
+    if (!classIds.length){ localStorage.removeItem(META_KEY); log('save v2: empty -> cleared'); alert('לא נשמר (אין דוגמאות)'); return; }
+    // clear old v2 keys only
+    Object.keys(localStorage).forEach(k=>{ if (k.startsWith('knn:cls:') || k===META_KEY) localStorage.removeItem(k); });
+
+    const dim = 1024;
+    let total=0, classes=0;
+    for (const id of classIds){
+      const t = ds[id];
+      if (!t) continue;
+      let arr;
+      if (t.dataSync) {
+        arr = Array.from(t.dataSync());
+        const rows = Math.floor(arr.length / dim);
+        if (!rows) continue;
+        total += rows; classes++;
+        localStorage.setItem(CLS_KEY(id), JSON.stringify({ n: rows, data: arr.slice(0, rows*dim) }));
+      } else if (t.arraySync){
+        const mat = t.arraySync(); const rows = mat.length;
+        total += rows; classes++;
+        localStorage.setItem(CLS_KEY(id), JSON.stringify({ n: rows, data: mat.flat() }));
       }
-    }catch(e){}
-  })();
+    }
+    localStorage.setItem(META_KEY, JSON.stringify({ version:2, classes: classIds.map(Number), dim, savedAt: Date.now(), total }));
+    log(`💾 saved v2 • classes=${classes} • vectors=${total}`);
+    try{ alert('💾 נשמר מקומית (v2)'); }catch(_){}
+  }
+
+  async function loadKnnV2() {
+    const knn = getKNN();
+    if (!knn || !knn.setClassifierDataset) { log('ERR load: knn not ready'); alert('שחזור נכשל (KNN לא מוכן)'); return; }
+    const metaTxt = localStorage.getItem(META_KEY);
+    if (!metaTxt){ log('load v2: no meta'); alert('לא נמצא מודל v2 לשחזור'); return; }
+    let meta; try{ meta = JSON.parse(metaTxt); }catch(e){ log('ERR meta parse', e); alert('שחזור נכשל (Meta)'); return; }
+    const dim = +meta.dim || 1024;
+    const ids = Array.isArray(meta.classes) ? meta.classes : [];
+    const ds = {}; let total=0;
+    for (const id of ids){
+      const raw = localStorage.getItem(CLS_KEY(id));
+      if (!raw){ log('WARN missing class', id); continue; }
+      try{
+        const rec = JSON.parse(raw);
+        const n = +rec.n || 0; const data = rec.data || [];
+        if (!n || data.length !== n*dim){ log('WARN mismatch', id, 'n=',n,'len=',data.length); continue; }
+        ds[id] = tf.tensor2d(new Float32Array(data), [n, dim]);
+        total += n;
+      }catch(e){ log('ERR parse class', id, e); }
+    }
+    if (!Object.keys(ds).length){ alert('שחזור נכשל (ריק)'); return; }
+    knn.setClassifierDataset(ds);
+    log(`📦 restored v2 • classes=${Object.keys(ds).length} • vectors=${total}`);
+    try{ alert('📦 שוחזר מקומית (v2)'); }catch(_){}
+  }
+
+  function hookButtons(){
+    const nodes = Array.from(document.querySelectorAll('button, .btn, [role="button"], a'));
+    const textHas = (el, t)=> ((el.textContent||'').replace(/\\s+/g,' ').includes(t));
+    nodes.forEach(el=>{
+      if (textHas(el, 'שמור מודל') && !el.__knnV2save){
+        el.addEventListener('click', (ev)=>{ if (ev.shiftKey) return; ev.preventDefault(); ev.stopPropagation(); saveKnnV2(); }, true);
+        el.__knnV2save = true;
+      }
+      if (textHas(el, 'שחזר מודל') && !el.__knnV2load){
+        el.addEventListener('click', (ev)=>{ if (ev.shiftKey) return; ev.preventDefault(); ev.stopPropagation(); loadKnnV2(); }, true);
+        el.__knnV2load = true;
+      }
+    });
+  }
+
+  function autoRestoreIfEmpty(){
+    try{
+      const knn = getKNN(); if (!knn) return;
+      const ds = knn.getClassifierDataset?.() || {};
+      const hasAny = Object.values(ds).some(t => t && (t.size>0 || (t.dataSync && t.dataSync().length>0)));
+      if (!hasAny && localStorage.getItem(META_KEY)){
+        log('auto-restore v2…');
+        loadKnnV2();
+      }
+    }catch(_){}
+  }
+
+  if (document.readyState !== 'loading') { hookButtons(); setTimeout(hookButtons, 800); setTimeout(autoRestoreIfEmpty, 1200); }
+  else {
+    document.addEventListener('DOMContentLoaded', ()=>{ hookButtons(); setTimeout(hookButtons, 800); setTimeout(autoRestoreIfEmpty, 1200); });
+  }
+
+  // expose for console if needed
+  window.__knnV2 = { saveKnnV2, loadKnnV2 };
 })();
 </script>
 </body>
