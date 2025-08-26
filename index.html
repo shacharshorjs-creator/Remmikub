@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.14-ml</small>
+<small class="tag" id="verBadge">v5.14.2-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.14-ml</div>
+<div class="muted">© v5.14.2-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.14-ml';
+const VERSION = 'v5.14.2-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -512,7 +512,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.14-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.14.2-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -602,39 +602,40 @@ else {
 </script>
 
 
-<!-- v5.14 thumbnail preview (minimal, non-invasive) -->
+<!-- v5.14.2 — patch: show thumbnail for player snap without changing UI/flow -->
 <script>
 (function(){
-  function showThumbFromFile(file){
-    if(!file) return;
-    var lbl = document.getElementById('lastDetectLabel') || document.querySelector('[data-last-detect]') || document.getElementById('lastDetect');
-    if(!lbl) return;
+  if (window.__rkThumbSnapPatched) return;
+  window.__rkThumbSnapPatched = true;
+  if (typeof window.showLastDetect !== 'function') return;
+
+  const _orig = window.showLastDetect;
+  window.showLastDetect = function(playerIndex, file){
+    // call original logic first (keeps flow/logic/UI intact)
+    const ret = _orig.apply(this, arguments);
     try{
-      // Clear previous content
-      lbl.textContent = '';
-      var url = (window.URL || window.webkitURL).createObjectURL(file);
-      var img = new Image();
-      img.onload = function(){ try{ (window.URL||window.webkitURL).revokeObjectURL(url);}catch(e){} };
-      img.src = url;
-      img.style.width = '64px';
-      img.style.height = '64px';
-      img.style.objectFit = 'cover';
-      img.style.borderRadius = '6px';
-      img.style.display = 'inline-block';
-      img.alt = 'זיהוי אחרון';
-      lbl.appendChild(img);
-    }catch(e){
-      console && console.warn && console.warn('thumb preview error', e);
-    }
-  }
-  // Listen to changes on any file input (camera/gallery)
-  document.addEventListener('change', function(ev){
-    var t = ev.target;
-    if(!t || t.tagName !== 'INPUT') return;
-    if((t.type||'').toLowerCase() !== 'file') return;
-    var f = t.files && t.files[0];
-    if(f) showThumbFromFile(f);
-  }, true);
+      // find existing "last detect" host (no UI changes, just reuse):
+      var host = document.getElementById('lastDetectLabel') ||
+                 document.getElementById('lastDetect') ||
+                 document.querySelector('[data-last-detect]');
+      if (host && file){
+        // replace text with a small image preview
+        while (host.firstChild) host.removeChild(host.firstChild);
+        var url = (window.URL || window.webkitURL).createObjectURL(file);
+        var img = new Image();
+        img.onload = function(){ try{ (window.URL||window.webkitURL).revokeObjectURL(url); }catch(e){} };
+        img.src = url;
+        img.alt = 'זיהוי אחרון';
+        img.style.width = '64px';
+        img.style.height = '64px';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '6px';
+        img.style.display = 'inline-block';
+        host.appendChild(img);
+      }
+    }catch(e){ /* silent */ }
+    return ret;
+  };
 })();
 </script>
 </body>
