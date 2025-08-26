@@ -45,12 +45,17 @@
   .scrollx{overflow:auto}
   .copybtn{margin-inline-start:.5rem}
 </style>
+
+<style>
+#detThumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+#detThumbs img{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #2a3e5c}
+</style>
 </head>
 <body>
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.13.1-ml</small>
+<small class="tag" id="verBadge">v5.13.2-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +129,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.13.1-ml</div>
+<div class="muted">© v5.13.2-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +215,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.13.1-ml';
+const VERSION = 'v5.13.2-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -265,7 +270,7 @@ function renderBoard(){
         
 
 
-// v5.13.1-ml: try CC multi-detect first
+// v5.13.2-ml: try CC multi-detect first
 try{
   const handled = await __rk_detect_many_and_fill(e.target.files[0], idx, row);
   if(handled) return; // stop here; user will press "הוסף"
@@ -535,7 +540,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.13.1-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.13.2-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -623,7 +628,7 @@ else {
   }
 })();
 
-// === v5.13.1-ml: multi-tile grid detection (non-invasive) ===
+// === v5.13.2-ml: multi-tile grid detection (non-invasive) ===
 async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
   await ensureModels?.();
   const {img} = await imgToTensor(file);
@@ -661,7 +666,7 @@ async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
   return {nums, sum};
 }
 
-// === v5.13.1-ml: multi-tile via Connected Components (Otsu + CCL) ===
+// === v5.13.2-ml: multi-tile via Connected Components (Otsu + CCL) ===
 function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
 function __rk_otsu(gray, w, h){
   const hist = new Array(256).fill(0);
@@ -745,7 +750,7 @@ function __rk_segment_image_to_boxes(img, opts){
 }
 async function __rk_classify_boxes(seg){
   await ensureModels?.();
-  const resNums=[];
+  const resNums=[]; const urls=[];
   const off = document.createElement('canvas'); off.width=128; off.height=128;
   const oc = off.getContext('2d');
   const stage = document.getElementById('stage_cc');
@@ -753,6 +758,7 @@ async function __rk_classify_boxes(seg){
     const pad = Math.floor(Math.min(b.w,b.h)*0.10);
     oc.clearRect(0,0,128,128);
     oc.drawImage(stage, seg.ox+b.x-pad, seg.oy+b.y-pad, b.w+pad*2, b.h+pad*2, 0,0,128,128);
+    try{ urls.push(off.toDataURL('image/jpeg')); }catch(_){ }
     try{
       const emb = net.infer(off, true);
       const pred = await classifier.predictClass(emb, 3);
@@ -763,15 +769,17 @@ async function __rk_classify_boxes(seg){
       }
     }catch(_){ /* ignore this crop */ }
   }
-  return resNums;
+  return {nums: resNums, thumbs: urls};
 }
 async function __rk_detect_many_and_fill(file, idx, row){
   try{
     const {img} = await imgToTensor(file);
     // segment → classify per box
     const seg = __rk_segment_image_to_boxes(img, {ignoreColor:true, thr:0, minArea:1200, maxCount:20, aspectMin:0.5, aspectMax:1.2});
-    const nums = await __rk_classify_boxes(seg);
+    const out = await __rk_classify_boxes(seg);
+    const nums = out && out.nums || []; const thumbs = out && out.thumbs || [];
     if(nums && nums.length>=2){
+      try{ __rk_renderThumbs(thumbs); }catch(_){ }
       const sum = nums.reduce((a,b)=>a+b,0);
       // label
       const lbl = document.getElementById('lastDetectLabel');
@@ -784,6 +792,27 @@ async function __rk_detect_many_and_fill(file, idx, row){
     try{ log && log('multi-CC error: '+(err?.message||err)); }catch(_){}
   }
   return false; // not handled, fallback to single detection path
+}
+
+// v5.13.2-ml thumbnails helper
+function __rk_renderThumbs(urls){
+  let host = document.getElementById('detThumbs');
+  if(!host){
+    const lbl = document.getElementById('lastDetectLabel');
+    host = document.createElement('div');
+    host.id = 'detThumbs';
+    if(lbl && lbl.parentNode){
+      lbl.parentNode.insertBefore(host, lbl.nextSibling);
+    } else {
+      document.body.appendChild(host);
+    }
+  }
+  host.innerHTML = '';
+  (urls||[]).forEach(u=>{
+    const img = document.createElement('img');
+    img.src = u;
+    host.appendChild(img);
+  });
 }
 </script>
 
