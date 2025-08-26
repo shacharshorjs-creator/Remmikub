@@ -337,6 +337,7 @@ function bump(index, delta){
 // == זיהוי אחרון – תצוגה ==
 function showLastDetect(playerIndex, file){
   const url = URL.createObjectURL(file);
+  try { if (typeof __rk_renderThumbs === 'function') { __rk_renderThumbs([url]); } } catch(_){ }
   const img = null;
   const label = $$('#lastDetectLabel');
   // no image preview
