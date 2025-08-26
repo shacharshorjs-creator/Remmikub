@@ -55,7 +55,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.13.5-ml</small>
+<small class="tag" id="verBadge">v5.13.7-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -95,7 +95,7 @@
 </div>
 <!-- אימון מודל – תמיד גלוי (על המכשיר) -->
 <div class="card" id="trainCard">
-<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/></div><h2>אימון מודל זיהוי (CPU)</h2>
+<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#111;border:1px solid #333;padding:10px;border-radius:6px;display:none"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><strong>זיהוי אחרון:</strong> <span id="lastDetectLabel" class="chip">—</span></div><div id="lastDetectThumbs" style="display:flex;gap:6px;flex-wrap:wrap"></div></div><h2>אימון מודל זיהוי (CPU)</h2>
 <div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
 <div class="sep"></div>
 <div class="row" style="align-items:center;gap:10px">
@@ -129,7 +129,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.13.5-ml</div>
+<div class="muted">© v5.13.7-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -215,7 +215,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.13.5-ml';
+const VERSION = 'v5.13.7-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -270,7 +270,7 @@ function renderBoard(){
         
 
 
-// v5.13.5-ml: try CC multi-detect first
+// v5.13.7-ml: try CC multi-detect first
 try{
   const handled = await __rk_detect_many_and_fill(e.target.files[0], idx, row);
   if(handled) return; // stop here; user will press "הוסף"
@@ -336,11 +336,27 @@ function bump(index, delta){
 
 // == זיהוי אחרון – תצוגה ==
 function showLastDetect(playerIndex, file){
-  const url = URL.createObjectURL(file);
-  const img = null;
-  const label = $$('#lastDetectLabel');
-  // no image preview
-  if(label){ label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`; }
+  try{ log(`showLastDetect: idx=${playerIndex}, file=${file ? (file.name||'blob') : 'none'}, size=${file?.size||0}`);}catch(e){}
+  const wrap = $('#lastDetectWrap');
+  if(wrap){ wrap.style.display='block'; }
+  const label = $('#lastDetectLabel');
+  if(label){ label.textContent = `שחקן ${playerIndex+1} • ${players[playerIndex]?.name||''}`; }
+  const thumbs = $('#lastDetectThumbs');
+  if(thumbs){
+    thumbs.innerHTML='';
+    if (file){
+      const url = URL.createObjectURL(file);
+      const im = new Image();
+      im.onload = ()=>{ try{ URL.revokeObjectURL(url);}catch(_e){}; try{ log(`thumb ready ${im.naturalWidth}x${im.naturalHeight}`);}catch(_e){}; };
+      im.width = 56; im.height = 56; im.style.objectFit='cover'; im.style.borderRadius='6px';
+      im.src = url;
+      thumbs.appendChild(im);
+      try{ log('thumb appended'); }catch(e){}
+    } else {
+      try{ log('no file for thumb'); }catch(e){}
+    }
+  } else { try{ console.warn('lastDetectThumbs missing'); log('WARN: lastDetectThumbs missing'); }catch(e){} }
+} • ${players[playerIndex].name}`; }
 }
 
 // ====== אתחול שמות וניקוד ======
@@ -540,7 +556,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.13.5-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.13.7-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -628,7 +644,7 @@ else {
   }
 })();
 
-// === v5.13.5-ml: multi-tile grid detection (non-invasive) ===
+// === v5.13.7-ml: multi-tile grid detection (non-invasive) ===
 async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
   await ensureModels?.();
   const {img} = await imgToTensor(file);
@@ -666,7 +682,7 @@ async function __rk_gridMultiDetect(file, grid=3, minConf=0.5){
   return {nums, sum};
 }
 
-// === v5.13.5-ml: multi-tile via Connected Components (Otsu + CCL) ===
+// === v5.13.7-ml: multi-tile via Connected Components (Otsu + CCL) ===
 function __rk_toGray(r,g,b){ return (r*0.299 + g*0.587 + b*0.114) | 0; }
 function __rk_otsu(gray, w, h){
   const hist = new Array(256).fill(0);
@@ -794,7 +810,7 @@ async function __rk_detect_many_and_fill(file, idx, row){
   return false; // not handled, fallback to single detection path
 }
 
-// v5.13.5-ml thumbnails helper
+// v5.13.7-ml thumbnails helper
 function __rk_renderThumbs(urls){
   let host = document.getElementById('detThumbs');
   if(!host){
