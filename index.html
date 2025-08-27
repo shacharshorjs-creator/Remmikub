@@ -44,16 +44,13 @@
   .ok{color:#baffc3}
   .scrollx{overflow:auto}
   .copybtn{margin-inline-start:.5rem}
-
-  .thumbCap{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.6);
-            padding:2px 6px;border-radius:8px;font-size:12px;color:#fff}
 </style>
 </head>
 <body>
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v6.3-ml</small>
+<small class="tag" id="verBadge">v6.4-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -127,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v6.3-ml</div>
+<div class="muted">© v6.4-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -213,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v6.3-ml';
+const VERSION = 'v6.4-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -333,33 +330,7 @@ function showLastDetect(playerIndex, file){
       thumb.onload = ()=>{
         host.prepend(thumb);
         while (host.children.length > 10) host.removeChild(host.lastElementChild);
-      
-      // --- v6.3 segmentation append (non-destructive) ---
-      try{
-        if(e.target.files && e.target.files[0]){
-          // draw file into a working canvas
-          const file = e.target.files[0];
-          const imgTmp = new Image();
-          imgTmp.onload = async ()=>{
-            const can = document.createElement('canvas'); can.width=imgTmp.naturalWidth; can.height=imgTmp.naturalHeight;
-            can.getContext('2d').drawImage(imgTmp,0,0);
-            const tiles = __segmentTiles_v63(can);
-            for(const t of tiles){
-              // classify each tile (if model is ready)
-              let labelTxt = '';
-              try{
-                const pred = await __classifyCanvasTile(t);
-                labelTxt = pred ? (pred.label + ' • ' + ((pred.score*100)|0)+'%') : '';
-              }catch(_){}
-              const urlTile = t.toDataURL('image/jpeg',0.9);
-              __appendThumbToStrip(urlTile, labelTxt);
-            }
-          };
-          imgTmp.src = URL.createObjectURL(file);
-        }
-      }catch(_){}
-
-  };
+      };
       thumb.src = url;
     }
     // revoke later to allow display
@@ -582,7 +553,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v6.3-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v6.4-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -672,134 +643,80 @@ else {
 </script>
 
 <!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 -->
-<script>
-// __seg_cc_v63__: improved segmentation + classify & thumbnail (minimal hooks)
-async function __classifyCanvasTile(cnv){
-  try{
-    if (typeof net==='undefined' || !net || !net.infer ||
-        typeof classifier==='undefined' || !classifier || !classifier.predictClass) return null;
-    const tfimg = tf.browser.fromPixels(cnv);
-    const emb = net.infer(tfimg, true);
-    const res = await classifier.predictClass(emb, 3);
-    tf.dispose([tfimg, emb]);
-    if(!res || !res.confidences) return null;
-    const lbl = res.label;
-    const score = res.confidences[lbl] || 0;
-    return {label: lbl, score};
-  }catch(e){ try{console.debug('tile classify err',e)}catch(_){ } return null; }
-}
-
-// Connected-components based tile extraction with gradient projection (v6.3)
-function __segmentTiles_v63(srcCanvas){
+// -------- Improved segmentation v6.4 --------
+function __segmentTiles_v64(srcCanvas){
   const W = srcCanvas.width, H = srcCanvas.height;
-  const ctx = srcCanvas.getContext('2d', {willReadFrequently:true});
+  const ctx = srcCanvas.getContext('2d',{willReadFrequently:true});
   const img = ctx.getImageData(0,0,W,H); const data = img.data;
-
-  // Grayscale
+  // grayscale
   const gray = new Float32Array(W*H);
   for(let i=0,j=0;i<data.length;i+=4,j++){
-    gray[j] = (data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114);
+    gray[j] = (data[i]*0.3+data[i+1]*0.59+data[i+2]*0.11);
   }
-  // Sobel-lite magnitude
+  // simple edge magnitude
   const mag = new Float32Array(W*H);
   for(let y=1;y<H-1;y++){
     for(let x=1;x<W-1;x++){
       const i=y*W+x;
-      const gx = -gray[i-W-1]-2*gray[i-1]-gray[i+W-1] + gray[i-W+1]+2*gray[i+1]+gray[i+W+1];
-      const gy = -gray[i-W-1]-2*gray[i-W]-gray[i-W+1] + gray[i+W-1]+2*gray[i+W]+gray[i+W+1];
-      mag[i] = Math.hypot(gx,gy);
+      const gx = gray[i+1]-gray[i-1];
+      const gy = gray[i+W]-gray[i-W];
+      mag[i] = Math.abs(gx)+Math.abs(gy);
     }
   }
-  // Threshold by percentile
+  // threshold edges
   const sample=[]; for(let i=0;i<mag.length;i+=16) sample.push(mag[i]);
   sample.sort((a,b)=>a-b);
-  const thr = sample[Math.floor(sample.length*0.75)] || 40;
+  const thr = sample[Math.floor(sample.length*0.75)]||20;
   const bin = new Uint8Array(W*H);
-  for(let i=0;i<mag.length;i++) bin[i] = mag[i] > thr ? 1 : 0;
+  for(let i=0;i<mag.length;i++) bin[i] = mag[i]>thr?1:0;
 
-  // Morph close (dilate then erode)
-  const dil = (src)=>{
-    const dst=new Uint8Array(W*H);
-    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){
-      const i=y*W+x;
-      dst[i] = src[i]||src[i-1]||src[i+1]||src[i-W]||src[i+W] ? 1:0;
-    }
-    return dst;
-  };
-  const ero = (src)=>{
-    const dst=new Uint8Array(W*H);
-    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){
-      const i=y*W+x;
-      dst[i] = (src[i]&&src[i-1]&&src[i+1]&&src[i-W]&&src[i+W]) ? 1:0;
-    }
-    return dst;
-  };
-  let m1 = dil(bin); m1 = dil(m1); m1 = ero(m1);
-
-  // Connected components -> boxes
-  const seen = new Uint8Array(W*H);
-  const boxes = [];
+  // connected components
+  const seen=new Uint8Array(W*H); const boxes=[];
   for(let y=1;y<H-1;y++){
     for(let x=1;x<W-1;x++){
-      const i=y*W+x;
-      if(!m1[i] || seen[i]) continue;
-      let q=[i]; seen[i]=1;
-      let minx=x,maxx=x,miny=y,maxy=y, area=0;
+      const idx=y*W+x;
+      if(!bin[idx]||seen[idx]) continue;
+      let q=[idx]; seen[idx]=1;
+      let minx=x,maxx=x,miny=y,maxy=y,count=0;
       while(q.length){
         const p=q.pop();
-        const py=(p/W)|0, px=p%W; area++;
-        if(px<minx)minx=px; if(px>maxx)maxx=px;
-        if(py<miny)miny=py; if(py>maxy)maxy=py;
+        const py=(p/W)|0, px=p%W; count++;
         const nb=[p-1,p+1,p-W,p+W];
         for(const n of nb){
           if(n<=0||n>=W*H) continue;
-          if(m1[n] && !seen[n]){ seen[n]=1; q.push(n); }
+          if(bin[n]&&!seen[n]){seen[n]=1;q.push(n);}
         }
+        if(px<minx)minx=px; if(px>maxx)maxx=px;
+        if(py<miny)miny=py; if(py>maxy)maxy=py;
       }
-      const bw=maxx-minx+1, bh=maxy-miny+1;
-      const A=bw*bh, Aimg=W*H; const ar=bw/bh;
-      if(A>Aimg*0.01 && A<Aimg*0.4 && ar>0.6 && ar<1.8){
-        const pad = Math.floor(Math.min(bw,bh)*0.1)+6;
+      const bw=maxx-minx+1,bh=maxy-miny+1;
+      const area=bw*bh, ar=bw/bh;
+      if(area>W*H*0.01 && area<W*H*0.4 && ar>0.5 && ar<2.0){
+        const pad=6;
         minx=Math.max(0,minx-pad); miny=Math.max(0,miny-pad);
         maxx=Math.min(W-1,maxx+pad); maxy=Math.min(H-1,maxy+pad);
         boxes.push([minx,miny,maxx,maxy]);
       }
     }
   }
-  // If none found -> fallback split into 2-3 columns
   if(!boxes.length){
-    const cols = (W>H?2:1) + (W/H>1.4?1:0);
-    const sw = Math.floor(W/cols);
+    // fallback grid
+    const cols=(W>H?2:1)+(W/H>1.3?1:0);
+    const sw=Math.floor(W/cols);
     for(let c=0;c<cols;c++){
-      const x=c*sw, w=(c==cols-1? W-x: sw);
-      boxes.push([x, Math.floor(H*0.2), Math.min(W-1, x+w-1), Math.floor(H*0.8)]);
+      const x=c*sw,w=(c==cols-1?W-x:sw);
+      boxes.push([x,0,Math.min(W-1,x+w-1),H-1]);
     }
   }
-  // sort left->right and crop to canvases
   boxes.sort((a,b)=>a[0]-b[0]);
   const out=[];
   for(const [x1,y1,x2,y2] of boxes){
-    const cw=x2-x1+1, ch=y2-y1+1;
+    const cw=x2-x1+1,ch=y2-y1+1;
     const c=document.createElement('canvas'); c.width=cw; c.height=ch;
-    c.getContext('2d').drawImage(srcCanvas, x1,y1,cw,ch, 0,0,cw,ch);
+    c.getContext('2d').drawImage(srcCanvas,x1,y1,cw,ch,0,0,cw,ch);
     out.push(c);
   }
   return out.slice(0,6);
 }
-
-// Add thumb (image + small label) into #snapThumbs, without changing existing layout
-function __appendThumbToStrip(dataURL, text){
-  const host = document.getElementById('snapThumbs');
-  if(!host) return;
-  const box = document.createElement('div');
-  box.style.position='relative'; box.style.width='48px'; box.style.height='48px';
-  box.style.border='1px solid #22324a'; box.style.borderRadius='6px'; box.style.overflow='hidden';
-  const im = new Image(); im.src=dataURL; im.style.width='100%'; im.style.height='100%'; im.style.objectFit='cover';
-  const cap = document.createElement('div'); cap.className='thumbCap'; cap.textContent=text||'';
-  box.appendChild(im); box.appendChild(cap);
-  host.prepend(box);
-  while(host.children.length>12) host.removeChild(host.lastElementChild);
-}
-</script>
 </body>
 </html>
