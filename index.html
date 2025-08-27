@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v6.0-ml</small>
+<small class="tag" id="verBadge">v5.6-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -64,7 +64,7 @@
 <div class="card board" id="leaderCard">
 <div class="row" style="justify-content:space-between;align-items:center">
 <h2 style="margin:0">לוח הובלה</h2>
-<div class="hint"><span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
+<div class="hint">בחרו משתתפים למטה. לחיצה על <span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
 </div>
 <div class="thead">
 <div>#</div>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v6.0-ml</div>
+<div class="muted">© v5.6-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v6.0-ml';
+const VERSION = 'v5.6-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -285,8 +285,6 @@ try{
       lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
     }
   }
-  // מילוי תיבת 'ערך' בשורת השחקן הנכון
-  if(Number.isFinite(detected)) { try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = detected; }catch(_){ } }
   // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
   if(typeof detected !== 'undefined' && detected){
     if(typeof awardPointsFromDetection === 'function'){
@@ -307,6 +305,7 @@ function bump(index, delta){
 
 
 // == זיהוי אחרון – תצוגה ==
+
 function showLastDetect(playerIndex, file){
   try{
     const url = URL.createObjectURL(file);
@@ -319,7 +318,6 @@ function showLastDetect(playerIndex, file){
       imgEl.src = url;
       imgEl.style.display = 'block';
     }
-    // add a small thumbnail of the snap (non-destructive)
     const host = document.getElementById('snapThumbs');
     if (host){
       const thumb = new Image();
@@ -329,16 +327,97 @@ function showLastDetect(playerIndex, file){
       thumb.style.objectFit = 'cover';
       thumb.onload = ()=>{
         host.prepend(thumb);
-        while (host.children.length > 10) host.removeChild(host.lastElementChild);
+        while (host.children.length > 12) host.removeChild(host.lastElementChild);
       };
       thumb.src = url;
     }
-    // revoke later to allow display
-    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 5000);
+    // NEW: segmentation thumbnails per detected tile
+    __seg_generateThumbsFromURL(url);
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 6000);
   }catch(e){
-    log('showLastDetect ERR: ' + (e && e.message || e));
+    if (typeof log === 'function') log('showLastDetect ERR: ' + (e && e.message || e));
   }
 }
+
+
+// --- minimal segmentation helpers (non-invasive) ---
+async function __seg_toCanvasFromURL(url){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      resolve(c);
+    };
+    img.onerror = reject;
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+  });
+}
+function __seg_regionStdDev(ctx, x, y, w, h){
+  const d = ctx.getImageData(x, y, w, h).data;
+  let sum=0, sum2=0, n=w*h;
+  for(let i=0;i<d.length;i+=4){
+    const v = (0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]);
+    sum += v; sum2 += v*v;
+  }
+  const mean = sum / n;
+  const varc = Math.max(0, sum2/n - mean*mean);
+  return Math.sqrt(varc);
+}
+function __seg_cropDataURL(srcCanvas, x, y, w, h, out=96){
+  const c = document.createElement('canvas'); c.width=out; c.height=out;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality='high';
+  ctx.drawImage(srcCanvas, x, y, w, h, 0, 0, out, out);
+  return c.toDataURL('image/jpeg', 0.86);
+}
+async function __seg_generateThumbsFromURL(url){
+  const host = document.getElementById('snapThumbs');
+  if (!host) return;
+  try{
+    const base = await __seg_toCanvasFromURL(url);
+    const W = base.width, H = base.height;
+    const ctx = base.getContext('2d', { willReadFrequently: true });
+    const candidates = [];
+    const splits = [2,3];
+    for (const parts of splits){
+      const sw = Math.floor(W / parts);
+      for(let i=0;i<parts;i++){
+        const x = i*sw, y = 0, w = (i===parts-1? W - i*sw : sw), h = H;
+        const std = __seg_regionStdDev(ctx, x, y, w, h);
+        candidates.push({x,y,w,h,std});
+      }
+    }
+    candidates.sort((a,b)=> b.std - a.std);
+    const kept = [];
+    for(const c of candidates){
+      const tooClose = kept.some(k=>{
+        const ix = Math.max(0, Math.min(c.x+c.w, k.x+k.w) - Math.max(c.x, k.x));
+        const iy = Math.max(0, Math.min(c.y+c.h, k.y+k.h) - Math.max(c.y, k.y));
+        const inter = ix*iy;
+        const uni = c.w*c.h + k.w*k.h - inter;
+        const iou = uni? inter/uni : 0;
+        return iou > 0.5;
+      });
+      if (!tooClose && c.std > 12) kept.push(c);
+      if (kept.length>=3) break;
+    }
+    kept.forEach(k=>{
+      const dataURL = __seg_cropDataURL(base, k.x, k.y, k.w, k.h, 84);
+      const img = new Image(); img.width=48; img.height=48;
+      img.style.borderRadius='6px'; img.style.border='1px solid #22324a'; img.style.objectFit='cover';
+      img.src = dataURL;
+      host.prepend(img);
+    });
+    while (host.children.length > 12) host.removeChild(host.lastElementChild);
+  }catch(e){
+    try{ console.debug('seg thumbs err:', e); }catch(_){}
+  }
+}
+
 
 // ====== אתחול שמות וניקוד ======
 loadNames();
@@ -439,34 +518,18 @@ on($$('#jsonIn'),'change',async e=>{
 function restoreFromJSON(text, show=true){
   try{
     const obj = JSON.parse(text);
-    const dataObj = obj.dataObj || obj.dataset || obj;
     classifier = knnClassifier.create();
     const dataset = {};
-    let classes = 0, totalRows = 0;
-    Object.keys(dataObj || {}).forEach(key => {
-      let arr = dataObj[key];
-      if (arr && typeof arr === 'object' && ('data' in arr)) arr = arr.data;
-      if (!arr || !arr.length) return;
-      const flat = Array.from(arr, Number).filter(n => Number.isFinite(n));
-      const rows = Math.floor(flat.length / 1024);
-      if (rows <= 0) { log('⚠️ skip class '+key+' (no full vectors)'); return; }
-      const used = flat.slice(0, rows*1024);
-      if (used.length !== flat.length) {
-        log('ℹ️  class '+key+': truncated '+(flat.length-used.length)+' to fit 1024 dims');
-      }
-      const tensor = tf.tensor2d(used, [rows, 1024]);
+    Object.keys(obj.dataObj).forEach(key=>{
+      const tensor = tf.tensor(obj.dataObj[key], obj.shape);
       dataset[key] = tensor;
-      classes += 1; totalRows += rows;
     });
     classifier.setClassifierDataset(dataset);
-    totalExamples = totalRows;
+    const vectors = Object.values(dataset).reduce((a,t)=>a+(t.shape?.[0]||0),0);
+    totalExamples = vectors;
     $$('#examplesBadge').textContent = 'דוגמאות: ' + totalExamples;
+    if(show) log('✅ model restored from JSON');
     $$('#modelBadge').textContent = 'model: restored';
-    if (show){
-      const kb = (text.length/1024).toFixed(1);
-      log('📦 restored from JSON • '+classes+' classes • '+totalRows+' vectors • ~'+kb+' KB');
-      log('✅ model restored from JSON');
-    }
   }catch(err){
     log('ERR restore: '+err.message);
     alert('ייבוא נכשל');
@@ -553,7 +616,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v6.0-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.10-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -594,29 +657,20 @@ function awardPointsFromDetection(playerIdx, points) {
     return null;
   }
 
-  
   function fillDetectedValue(idx, val){
     try{
       if (!Number.isFinite(val)) return;
-      // strictly target the player's own row by data attribute
-      var row = document.querySelector('[data-player-index="'+idx+'"]');
-      if (!row) return;
-      var input = row.querySelector('input.manual') ||
-                  row.querySelector('input[type="number"]') ||
-                  row.querySelector('input[placeholder="ערך"]') ||
-                  row.querySelector('input[name="value"]') ||
-                  row.querySelector('input[data-role="value"]');
+      var row = getPlayerRow(idx);
+      // If wrapper fallback returned, we cannot set inside cloned nodes; so try a more direct search:
+      var input = (row && row.querySelector && row.querySelector('input[type="number"]')) ||
+                  document.querySelectorAll('input[type="number"]')[idx] ||
+                  document.querySelector('input[placeholder="ערך"]') ||
+                  document.querySelector('input[name="value"]') ||
+                  document.querySelector('input[data-role="value"]');
       if (input){
         input.value = val;
-        dlog('fill(row-only): idx='+idx+' val='+val);
+        dlog('fill: idx='+idx+' val='+val+' -> set into value input');
       } else {
-        dlog('fill(row-only): input not found in row for idx='+idx);
-      }
-    }catch(err){
-      dlog('fill error: '+(err && err.message || err));
-    }
-  }
-else {
         dlog('fill: idx='+idx+' val='+val+' -> input not found');
       }
     }catch(err){
@@ -642,5 +696,6 @@ else {
 })();
 </script>
 
-<!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 --></body>
+<!-- refresh -->
+<!-- multi-seg thumbs 1756295224.578542 --></body>
 </html>
