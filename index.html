@@ -1,409 +1,805 @@
-<!doctype html>
-<html lang="he" dir="rtl">
+<!DOCTYPE html>
+
+<html dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>רמיקוב — אימון+משחק (v6.2-ml)</title>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>רמיקוב – ניקוד + אימון (CPU)</title>
 <style>
-  :root{--bg:#0d131a;--card:#121a23;--ink:#e8f0ff;--muted:#9bb1c9;--accent:#61dafb;--ok:#2ecc71;--bad:#e74c3c;}
-  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  .wrap{max-width:900px;margin:0 auto;padding:16px}
-  .pill{display:inline-block;background:#182232;color:var(--ink);padding:6px 10px;border-radius:999px;margin:4px 6px;font-size:13px}
-  .btn{background:#243145;color:var(--ink);border:none;border-radius:10px;padding:10px 12px;margin:6px 4px;cursor:pointer}
-  .btn.ok{background:#1e7e34} .btn.bad{background:#8e2c2c}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .board{background:var(--card);border-radius:16px;padding:14px;margin:12px 0}
-  table{width:100%;border-collapse:collapse}
-  th,td{padding:10px;border-bottom:1px solid #1e2a3a;text-align:center}
-  .num{font-variant-numeric:tabular-nums}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-  .thumb{position:relative;background:#0b0f16;border-radius:12px;overflow:hidden;border:1px solid #233047}
-  .thumb img{width:100%;display:block}
-  .thumb .cap{position:absolute;bottom:6px;inset-inline:6px;background:rgba(0,0,0,.55);padding:4px 6px;border-radius:8px;font-size:12px}
-  .mono{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;background:#0b0f16;border:1px solid #1f2b3c;border-radius:12px;padding:10px}
-  input[type=number]{background:#0b0f16;border:1px solid #223047;border-radius:8px;color:var(--ink);padding:8px 10px;width:80px;text-align:center}
-  .camera{display:inline-block;border:1px dashed #445a77;border-radius:10px;padding:10px 12px}
+  :root{
+    --bg:#0f1724; --panel:#121c2b; --muted:#9fb3c8; --text:#eaf6ff;
+    --acc:#89e3ff; --good:#2ecc71; --bad:#c14949;
+  }
+  html,body{height:100%}
+  body{margin:0;background:linear-gradient(180deg,#0b1420,#0e1623 40%,#0b1420);
+       color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji",sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:14px 14px 48px}
+  .row{display:flex;flex-wrap:wrap;gap:12px}
+  .pill{display:inline-flex;align-items:center;gap:.5rem;padding:.35rem .7rem;border-radius:999px;background:#122235;color:#d7edff;font-size:.9rem}
+  .muted{color:var(--muted)}
+  h2{margin:.6rem 0 0.2rem;font-size:1.35rem}
+  h3{margin:1rem 0 .4rem;font-size:1.1rem;color:#cfeaff}
+  .card{background:var(--panel);border-radius:14px;padding:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);margin:10px 0}
+  .board .thead, .board .row{display:grid;grid-template-columns:42px 1fr 100px 190px;gap:10px;align-items:center}
+  .board .thead{opacity:.8;padding-bottom:6px;border-bottom:1px solid #1e2a3c}
+  .board .row{padding:6px 0;border-bottom:1px dashed #1a2537}
+  .btn{border:0;border-radius:10px;padding:.48rem .7rem;background:#16314a;color:#e9f6ff;cursor:pointer}
+  .btn:hover{filter:brightness(1.1)}
+  .btn.bad{background:#3a1e26;color:#ffc7c7}
+  .btn.good{background:#113021;color:#c6ffd9}
+  .btn.acc{background:#14344a;color:#bfefff}
+  .btn.cam{display:inline-flex;gap:.35rem;align-items:center}
+  input[type="text"], input[type="number"]{width:100%;padding:.48rem .6rem;border-radius:10px;background:#0d1522;border:1px solid #1c2a3c;color:#eaf6ff}
+  .hint{font-size:.85rem;color:#94adc4}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .kbd{background:#0b1420;border:1px solid #203049;padding:.15rem .45rem;border-radius:6px}
+  .sep{height:1px;background:#1a2738;margin:.75rem 0}
+  .footer{position:sticky;bottom:0;backdrop-filter:blur(8px);background:rgba(8,13,22,.75);border-top:1px solid #22324a;padding:10px;margin:0 -14px}
+  small.tag{background:#0f263a;color:#d2f1ff;border:1px solid #234761;border-radius:999px;padding:.15rem .55rem;margin-inline-end:.35rem}
+  .ghost{opacity:.35}
+  .flex{display:flex;gap:.5rem;align-items:center}
+  .btn.inline{padding:.35rem .55rem;border-radius:8px}
+  .nowrap{white-space:nowrap}
+  .danger{color:#ffb2b2}
+  .ok{color:#baffc3}
+  .scrollx{overflow:auto}
+  .copybtn{margin-inline-start:.5rem}
+
+  .thumbCap{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.6);
+            padding:2px 6px;border-radius:8px;font-size:12px;color:#fff}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="row">
-    <span class="pill">v6.2-ml</span>
-    <span class="pill" id="tfBadge">TF: init</span>
-    <span class="pill" id="modelBadge">model: init</span>
-  </div>
-
-  <div class="board">
-    <h3 style="margin-top:0">לוח הובלה</h3>
-    <table id="scoreTbl">
-      <thead><tr><th>#</th><th>שם</th><th>נקודות</th><th>פעולות</th></tr></thead>
-      <tbody id="playersTbody"></tbody>
-    </table>
-  </div>
-
-  <div class="board">
-    <h3 style="margin-top:0">בחירת משתתפים (עד 4)</h3>
-    <div class="row">
-      <input id="p1" placeholder="שחקן 1" class="btn" style="flex:1"/>
-      <input id="p2" placeholder="שחקן 2" class="btn" style="flex:1"/>
-    </div>
-    <div class="row">
-      <input id="p3" placeholder="שחקן 3" class="btn" style="flex:1"/>
-      <input id="p4" placeholder="שחקן 4" class="btn" style="flex:1"/>
-    </div>
-    <button class="btn" id="startGame">התחל משחק</button>
-  </div>
-
-  <div class="board">
-    <h3 style="margin:0 0 8px 0">זיהוי אחרון</h3>
-    <div id="detectLine" class="mono">—</div>
-    <div id="thumbs" class="grid" style="margin-top:10px"></div>
-  </div>
-
-  <div class="board">
-    <h3 style="margin:0 0 10px 0">(CPU) אימון מודל זיהוי</h3>
-    <div class="row">
-      <label>בחר/י מחלקה (מספר):</label>
-      <input type="number" id="classIdx" value="1" min="0" max="13"/>
-      <button class="btn" id="snapBtn">צילום מהמצלמה</button>
-      <label class="camera">
-        <input id="fileInput" type="file" accept="image/*" multiple style="display:none">
-        <span class="btn">הוסף ממג'יר (גלריה)</span>
-      </label>
-      <button class="btn" id="clearBtn">נקה הכל</button>
-    </div>
-    <div class="row">
-      <button class="btn" id="saveLocal">שמור מודל</button>
-      <button class="btn" id="restoreLocal">שחזר מודל</button>
-      <button class="btn" id="exportJson">ייצא JSON</button>
-      <input type="file" id="importJson" accept="application/json" style="display:none">
-      <button class="btn" id="importBtn">ייבא JSON</button>
-    </div>
-    <div class="mono" id="log"></div>
-  </div>
+<div class="wrap" id="app">
+<div class="row" style="justify-content:space-between;align-items:center">
+<div class="flex">
+<small class="tag" id="verBadge">v6.3-ml</small>
+<small class="tag" id="tfBadge">TF: init</small>
+<small class="tag" id="modelBadge">model: —</small>
+<small class="tag" id="examplesBadge">דוגמאות: —</small>
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
-<script>
-// ------- minimal game state (unchanged layout) -------
-const players = [
-  {name:'שחר', score:0},
-  {name:'איתי', score:0},
-  {name:'שלוש', score:0},
-  {name:'ארבע', score:0},
-];
-function renderPlayers(){
-  const tb = document.getElementById('playersTbody');
-  tb.innerHTML = '';
-  players.forEach((p,i)=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = \`
-      <td class="num">\${i+1}</td>
-      <td>\${p.name}</td>
-      <td class="num" id="score-\${i}">\${p.score}</td>
-      <td>
-        <button class="btn bad" data-i="\${i}" data-d="-10">10-</button>
-        <button class="btn ok"  data-i="\${i}" data-d="10">10+</button>
-      </td>\`;
-    tb.appendChild(tr);
-  });
-  tb.querySelectorAll('button').forEach(b=>b.onclick = e=>{
-    const i = +b.dataset.i, d = +b.dataset.d;
-    players[i].score += d;
-    document.getElementById('score-'+i).textContent = players[i].score;
-  });
-}
-renderPlayers();
-document.getElementById('startGame').onclick = ()=>{
-  ['p1','p2','p3','p4'].forEach((id,i)=>{
-    const v = document.getElementById(id).value.trim();
-    if(v) players[i].name = v;
-  });
-  renderPlayers();
-};
-
-// ---------- TF / MobileNet / KNN ----------
-let net, knn, ready=false;
-(async ()=>{
-  try{
-    document.getElementById('tfBadge').textContent = 'TF: '+tf.getBackend();
-  }catch(e){}
-  knn = knnClassifier.create();
-  net = await mobilenet.load({version:2,alpha:1.0});
-  ready = true;
-  document.getElementById('modelBadge').textContent = 'model: ready';
-  log('models loaded');
-  autoRestoreLocal();
-})();
-
-function embedFrom(img){
-  // get conv embeddings (1024)
-  return net.infer(img, true);
-}
-
-async function addExampleFromImage(img, label){
-  tf.tidy(()=>{
-    const emb = embedFrom(img);
-    knn.addExample(emb, label);
-  });
-}
-
-// ---------- segmentation: improved connected-components on gradient ----------
-function segmentTiles(image){
-  const maxTiles = 6; // safety
-  const w = image.naturalWidth || image.videoWidth || image.width;
-  const h = image.naturalHeight || image.videoHeight || image.height;
-  const can = document.createElement('canvas'); can.width=w; can.height=h;
-  const ctx = can.getContext('2d'); ctx.drawImage(image,0,0,w,h);
-  const {data} = ctx.getImageData(0,0,w,h);
-  // grayscale + Sobel
-  const gray = new Float32Array(w*h);
-  for(let y=0, i=0, j=0;y<h;y++) for(let x=0;x<w;x++, i+=4, j++){
-    gray[j] = (data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114);
+<div class="flex">
+<button class="btn inline" id="btnResetScores">איפוס נקודות</button>
+<button class="btn inline" id="btnSaveNames">שמור שמות</button>
+</div>
+</div>
+<!-- לוח הובלה יחיד -->
+<div class="card board" id="leaderCard">
+<div class="row" style="justify-content:space-between;align-items:center">
+<h2 style="margin:0">לוח הובלה</h2>
+<div class="hint"><span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
+</div>
+<div class="thead">
+<div>#</div>
+<div>שם</div>
+<div>נקודות</div>
+<div>פעולות</div>
+</div>
+<div id="boardRows"></div>
+</div>
+<!-- בחירת משתתפים -->
+<div class="card">
+<h2>בחירת משתתפים (עד 4)</h2>
+<div class="grid2">
+<div><label class="hint">שחקן 1</label><input id="p1" placeholder="שם" type="text"/></div>
+<div><label class="hint">שחקן 2</label><input id="p2" placeholder="שם" type="text"/></div>
+<div><label class="hint">שחקן 3</label><input id="p3" placeholder="שם" type="text"/></div>
+<div><label class="hint">שחקן 4</label><input id="p4" placeholder="שם" type="text"/></div>
+</div>
+<div class="row" style="margin-top:10px">
+<button class="btn acc" id="btnStart">התחל משחק</button>
+<div class="hint">השמות נשמרים מקומית.</div>
+</div>
+</div>
+<!-- אימון מודל – תמיד גלוי (על המכשיר) -->
+<div class="card" id="trainCard">
+<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/><div id="snapThumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-inline-start:8px;"></div></div><h2>אימון מודל זיהוי (CPU)</h2>
+<div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
+<div class="sep"></div>
+<div class="row" style="align-items:center;gap:10px">
+<label class="hint">בחר/י מחלקה (מספר):</label>
+<input id="classId" max="4" min="1" style="width:5rem" type="number" value="1"/>
+<button class="btn inline" id="btnNukeExamples">נקה הכל</button>
+<button class="btn inline" id="btnInitModel">אתחל מודל</button>
+<button class="btn inline" id="btnSaveModel">שמור מודל</button>
+<button class="btn inline" id="btnLoadModel">שחזר מודל</button>
+<button class="btn inline" id="btnExportJSON">JSON ייצא</button>
+<label class="btn inline nowrap">
+        ייבא JSON
+        <input accept="application/json" hidden="" id="jsonIn" type="file"/>
+</label>
+<span class="hint">מצב: <span id="statusSpan">מוכן</span></span>
+</div>
+<div class="row" style="margin-top:10px;align-items:center;gap:10px">
+<label class="btn inline nowrap">
+        הוסף מגז’יר (גלריה)
+        <input accept="image/*" hidden="" id="filePick" multiple="" type="file"/>
+</label>
+<label class="btn inline nowrap">
+        צילום מהמצלמה
+        <input accept="image/*" capture="environment" hidden="" id="filePickCam" type="file"/>
+</label>
+</div>
+<div class="sep"></div>
+<div class="scrollx">
+<pre id="debug" style="min-height:80px;margin:0;background:#0b1420;border:1px solid #22324a;border-radius:12px;padding:10px;white-space:pre-wrap"></pre>
+</div>
+</div>
+<div class="footer row" style="justify-content:space-between">
+<div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
+<div class="muted">© v6.3-ml</div>
+</div>
+</div>
+<!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js">
+// === הוספת נקודות מהזיהוי לשחקן ===
+function awardPointsFromDetection(playerIdx, points) {
+  try {
+    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    if (Array.isArray(window.players) && window.players[playerIdx]) {
+      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+    }
+    // עדכון UI אם יש
+    let row = document.querySelectorAll('.board-row')[playerIdx];
+    let scoreEl = row ? row.querySelector('.score') : null;
+    if (scoreEl) {
+      const newScore = window.players[playerIdx].score;
+      scoreEl.textContent = newScore;
+    }
+    // הצגה בתחתית
+    const lastDetLabel = document.getElementById('lastDetectLabel');
+    if (lastDetLabel) {
+      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
+      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
   }
-  const gx = new Float32Array(w*h), gy = new Float32Array(w*h), mag = new Float32Array(w*h);
-  const sx = [-1,0,1,-2,0,2,-1,0,1], sy=[-1,-2,-1,0,0,0,1,2,1];
-  for(let y=1;y<h-1;y++){
-    for(let x=1;x<w-1;x++){
-      let ix = 0, iy = 0, k=0;
-      for(let yy=-1; yy<=1; yy++){
-        const ry = y+yy;
-        for(let xx=-1; xx<=1; xx++, k++){
-          const rx = x+xx;
-          const v = gray[ry*w+rx];
-          ix += v * sx[k]; iy += v * sy[k];
-        }
-      }
-      const m = Math.hypot(ix,iy);
-      mag[y*w+x] = m;
+}
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0">
+// === הוספת נקודות מהזיהוי לשחקן ===
+function awardPointsFromDetection(playerIdx, points) {
+  try {
+    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    if (Array.isArray(window.players) && window.players[playerIdx]) {
+      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+    }
+    // עדכון UI אם יש
+    let row = document.querySelectorAll('.board-row')[playerIdx];
+    let scoreEl = row ? row.querySelector('.score') : null;
+    if (scoreEl) {
+      const newScore = window.players[playerIdx].score;
+      scoreEl.textContent = newScore;
+    }
+    // הצגה בתחתית
+    const lastDetLabel = document.getElementById('lastDetectLabel');
+    if (lastDetLabel) {
+      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
+      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+  }
+}
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2">
+// === הוספת נקודות מהזיהוי לשחקן ===
+function awardPointsFromDetection(playerIdx, points) {
+  try {
+    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    if (Array.isArray(window.players) && window.players[playerIdx]) {
+      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+    }
+    // עדכון UI אם יש
+    let row = document.querySelectorAll('.board-row')[playerIdx];
+    let scoreEl = row ? row.querySelector('.score') : null;
+    if (scoreEl) {
+      const newScore = window.players[playerIdx].score;
+      scoreEl.textContent = newScore;
+    }
+    // הצגה בתחתית
+    const lastDetLabel = document.getElementById('lastDetectLabel');
+    if (lastDetLabel) {
+      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
+      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+  }
+}
+
+</script>
+<script>
+const VERSION = 'v6.3-ml';
+const $$ = sel => document.querySelector(sel);
+const on = (el,ev,fn) => el.addEventListener(ev,fn);
+const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
+
+// ====== מצב אפליקציה בסיסי (שמות + ניקוד) ======
+let players = []; // {name, score}
+function loadNames(){
+  const saved = JSON.parse(localStorage.getItem('rk_players') || '[]');
+  for(let i=0;i<4;i++){
+    const val = saved[i]?.name || '';
+    $$('#p'+(i+1)).value = val;
+  }
+}
+function saveNames(){
+  players = [];
+  for(let i=0;i<4;i++){
+    const name = ($$('#p'+(i+1)).value || '').trim() || ('שחקן ' + (i+1));
+    players.push({name, score:0});
+  }
+  localStorage.setItem('rk_players', JSON.stringify(players));
+}
+function renderBoard(){
+  const holder = $$('#boardRows'); holder.innerHTML='';
+  players.forEach((p,idx)=>{
+    const row=document.createElement('div'); row.className='row';
+    row.innerHTML = `
+      <div>${idx+1}</div>
+      <div>${p.name}</div>
+      <div><span id="sc_${idx}">${p.score}</span></div>
+      <div class="flex">
+        <button class="btn good" data-d="+10">+10</button>
+        <button class="btn bad" data-d="-10">-10</button>
+        <input class="manual" type="number" placeholder="ערך" style="width:92px">
+        <button class="btn acc" data-d="manual">הוסף</button>
+        <label class="btn cam nowrap">📷
+          <input class="snap" type="file" accept="image/*" capture="environment" hidden>
+        </label>
+      </div>`;
+    holder.appendChild(row);
+    // אירועים
+    const [bPlus,bMinus,inputManual,bManual,labelCam] = row.querySelectorAll('button,input,label');
+    bPlus.onclick=()=>bump(idx, +10);
+    bMinus.onclick=()=>bump(idx, -10);
+    bManual.onclick=()=>{
+      const v = parseInt(inputManual.value||'0',10);
+      if(!isNaN(v)) bump(idx, v);
+    };
+    labelCam.querySelector('input.snap').onchange = async (e)=>{
+      // תמונת שחקן -> כרגע רק מציגה חיווי; (המודל נשאר מודול אימון למטה).
+      if(e.target.files?.length){
+        log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
+        
+// show textual indication only
+showLastDetect(idx, e.target.files[0]);
+try{
+  await ensureModels?.();
+  const {img} = await imgToTensor(e.target.files[0]);
+  let detected = null, confPct = 0;
+  if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
+    const emb = net.infer(img, true);
+    const res = await classifier.predictClass(emb, 3);
+    if(res && res.label != null){
+      detected = parseInt(res.label,10);
+      confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
     }
   }
-  // threshold at 75th percentile of gradient
-  const sample = []; for(let i=0;i<mag.length;i+=16) sample.push(mag[i]);
+  const lbl = document.getElementById('lastDetectLabel');
+  if(lbl){
+    if(detected || detected===0){
+      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — זוהתה קובייה: ${detected} (${confPct}%)`;
+    }else{
+      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
+    }
+  }
+  // מילוי תיבת 'ערך' בשורת השחקן הנכון
+  if(Number.isFinite(detected)) { try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = detected; }catch(_){ } }
+  // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
+  if(typeof detected !== 'undefined' && detected){
+    if(typeof awardPointsFromDetection === 'function'){
+      awardPointsFromDetection(idx, detected);
+    }
+  }
+}catch(_){ /* keep silent */ }
+if(typeof detectedValue!=='undefined'){ awardPointsFromDetection(idx, detectedValue); }
+      }
+    }
+  });
+}
+function bump(index, delta){
+  players[index].score += delta;
+  $$('#sc_'+index).textContent = players[index].score;
+  localStorage.setItem('rk_players', JSON.stringify(players));
+}
+
+
+// == זיהוי אחרון – תצוגה ==
+function showLastDetect(playerIndex, file){
+  try{
+    const url = URL.createObjectURL(file);
+    const imgEl = document.getElementById('lastDetectImg');
+    const label = document.getElementById('lastDetectLabel');
+    if (label) {
+      label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`;
+    }
+    if (imgEl){
+      imgEl.src = url;
+      imgEl.style.display = 'block';
+    }
+    // add a small thumbnail of the snap (non-destructive)
+    const host = document.getElementById('snapThumbs');
+    if (host){
+      const thumb = new Image();
+      thumb.width = 48; thumb.height = 48;
+      thumb.style.borderRadius = '6px';
+      thumb.style.border = '1px solid #22324a';
+      thumb.style.objectFit = 'cover';
+      thumb.onload = ()=>{
+        host.prepend(thumb);
+        while (host.children.length > 10) host.removeChild(host.lastElementChild);
+      
+      // --- v6.3 segmentation append (non-destructive) ---
+      try{
+        if(e.target.files && e.target.files[0]){
+          // draw file into a working canvas
+          const file = e.target.files[0];
+          const imgTmp = new Image();
+          imgTmp.onload = async ()=>{
+            const can = document.createElement('canvas'); can.width=imgTmp.naturalWidth; can.height=imgTmp.naturalHeight;
+            can.getContext('2d').drawImage(imgTmp,0,0);
+            const tiles = __segmentTiles_v63(can);
+            for(const t of tiles){
+              // classify each tile (if model is ready)
+              let labelTxt = '';
+              try{
+                const pred = await __classifyCanvasTile(t);
+                labelTxt = pred ? (pred.label + ' • ' + ((pred.score*100)|0)+'%') : '';
+              }catch(_){}
+              const urlTile = t.toDataURL('image/jpeg',0.9);
+              __appendThumbToStrip(urlTile, labelTxt);
+            }
+          };
+          imgTmp.src = URL.createObjectURL(file);
+        }
+      }catch(_){}
+
+  };
+      thumb.src = url;
+    }
+    // revoke later to allow display
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 5000);
+  }catch(e){
+    log('showLastDetect ERR: ' + (e && e.message || e));
+  }
+}
+
+// ====== אתחול שמות וניקוד ======
+loadNames();
+saveNames();
+renderBoard();
+
+on($$('#btnSaveNames'),'click',()=>{ saveNames(); renderBoard(); });
+on($$('#btnStart'),'click',()=>{ saveNames(); renderBoard(); });
+on($$('#btnResetScores'),'click',()=>{
+  players.forEach(p=>p.score=0); renderBoard();
+  localStorage.setItem('rk_players', JSON.stringify(players));
+});
+
+// ====== מודול אימון (MobileNet+KNN) – כמו בגרסה הבסיסית, ללא שינוי מהותי ======
+let net, classifier;
+let totalExamples = 0;
+
+// הכרחת CPU – לביציבות במובייל
+(async ()=>{
+  try{
+    await tf.setBackend('cpu');
+  }catch(e){}
+  $$('#tfBadge').textContent = 'TF: ' + tf.getBackend();
+})();
+
+async function ensureModels(){
+  if(net && classifier) return;
+  log('loading mobilenet/knn...');
+  classifier = knnClassifier.create();
+  net = await mobilenet.load();
+  log('models loaded');
+  $$('#modelBadge').textContent = 'model: ready';
+}
+
+function imgToTensor(file){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload=()=>{
+      const t = tf.tidy(()=>tf.browser.fromPixels(img).toFloat());
+      resolve({img, tensor:t});
+    };
+    img.onerror=reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function addExample(file, classId){
+  await ensureModels();
+  const {img, tensor} = await imgToTensor(file);
+  const activation = net.infer(img, true);
+  classifier.addExample(activation, classId);
+  activation.dispose(); tensor.dispose();
+  totalExamples++;
+  $$('#examplesBadge').textContent = 'דוגמאות: ' + totalExamples;
+}
+
+async function handleFiles(files, classId){
+  if(!files || files.length===0) return;
+  for(const f of files){
+    await addExample(f, classId);
+  }
+  $$('#statusSpan').textContent = `נוספו ${files.length} דוגמאות למחלקה ${classId}`;
+}
+
+on($$('#filePick'),'change',e=>{
+  const classId = parseInt($$('#classId').value,10)||1;
+  handleFiles(e.target.files, classId);
+});
+on($$('#filePickCam'),'change',e=>{
+  const classId = parseInt($$('#classId').value,10)||1;
+  handleFiles(e.target.files, classId);
+});
+
+// ניהול מודל (ייצוא/ייבוא/שמירה מקומית)
+function exportJSON(){
+  if(!classifier){ alert('אין מודל טעון'); return; }
+  const dataset = classifier.getClassifierDataset();
+  const dataObj = {};
+  Object.keys(dataset).forEach(key=>{
+    const data = dataset[key].dataSync();
+    dataObj[key] = Array.from(data);
+  });
+  const json = JSON.stringify({dataObj, shape: dataset[Object.keys(dataset)[0]]?.shape || []});
+  const blob = new Blob([json], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'rk_model.json';
+  a.click();
+}
+on($$('#btnExportJSON'),'click', exportJSON);
+
+on($$('#jsonIn'),'change',async e=>{
+  const file = e.target.files?.[0]; if(!file) return;
+  const text = await file.text();
+  restoreFromJSON(text,true);
+});
+
+function restoreFromJSON(text, show=true){
+  try{
+    const obj = JSON.parse(text);
+    const dataObj = obj.dataObj || obj.dataset || obj;
+    classifier = knnClassifier.create();
+    const dataset = {};
+    let classes = 0, totalRows = 0;
+    Object.keys(dataObj || {}).forEach(key => {
+      let arr = dataObj[key];
+      if (arr && typeof arr === 'object' && ('data' in arr)) arr = arr.data;
+      if (!arr || !arr.length) return;
+      const flat = Array.from(arr, Number).filter(n => Number.isFinite(n));
+      const rows = Math.floor(flat.length / 1024);
+      if (rows <= 0) { log('⚠️ skip class '+key+' (no full vectors)'); return; }
+      const used = flat.slice(0, rows*1024);
+      if (used.length !== flat.length) {
+        log('ℹ️  class '+key+': truncated '+(flat.length-used.length)+' to fit 1024 dims');
+      }
+      const tensor = tf.tensor2d(used, [rows, 1024]);
+      dataset[key] = tensor;
+      classes += 1; totalRows += rows;
+    });
+    classifier.setClassifierDataset(dataset);
+    totalExamples = totalRows;
+    $$('#examplesBadge').textContent = 'דוגמאות: ' + totalExamples;
+    $$('#modelBadge').textContent = 'model: restored';
+    if (show){
+      const kb = (text.length/1024).toFixed(1);
+      log('📦 restored from JSON • '+classes+' classes • '+totalRows+' vectors • ~'+kb+' KB');
+      log('✅ model restored from JSON');
+    }
+  }catch(err){
+    log('ERR restore: '+err.message);
+    alert('ייבוא נכשל');
+  }
+}
+
+// שמירה/שחזור ל-localStorage
+on($$('#btnSaveModel'),'click',()=>{
+  if(!classifier){ alert('אין מודל'); return; }
+  const dataset = classifier.getClassifierDataset();
+  const dataObj = {};
+  Object.keys(dataset).forEach(key=> dataObj[key] = Array.from(dataset[key].dataSync()));
+  const payload = JSON.stringify({dataObj, shape: dataset[Object.keys(dataset)[0]]?.shape || []});
+  localStorage.setItem('rk_model', payload);
+  const bytes = new Blob([payload]).size;
+  log(`💾 נשמר מקומית • ~${(bytes/1024).toFixed(1)} KB`);
+  $$('#modelBadge').textContent = 'model: saved';
+});
+
+on($$('#btnLoadModel'),'click',()=>{
+  const payload = localStorage.getItem('rk_model');
+  if(!payload){ alert('לא נמצא מודל'); return; }
+  restoreFromJSON(payload,false);
+  const bytes = new Blob([payload]).size;
+  log(`📦 שוחזר מקומית • ${(bytes/1024).toFixed(1)} KB`);
+  $$('#modelBadge').textContent = 'model: restored';
+});
+
+on($$('#btnNukeExamples'),'click',()=>{
+  classifier = knnClassifier.create();
+  totalExamples = 0;
+  $$('#examplesBadge').textContent = 'דוגמאות: —';
+  log('🧹 נוקה.');
+});
+
+on($$('#btnInitModel'),'click',()=>{
+  // Initialize model: wipe in-memory KNN and clear saved model
+  classifier = knnClassifier.create();
+  totalExamples = 0;
+  $$('#examplesBadge').textContent = 'דוגמאות: —';
+  localStorage.removeItem('rk_model'); // forget saved model
+  $$('#modelBadge').textContent = 'model: initialized';
+  log('♻️ אתחול מודל: הדאטה נוקה וה־localStorage הוסר');
+});
+
+// אתחול ראשוני
+(async function init(){
+  $$('#verBadge').textContent = VERSION;
+  try{
+    await ensureModels();
+    $$('#modelBadge').textContent = 'model: ready';
+    // נסיון לשחזר אוטומטית
+    const payload = localStorage.getItem('rk_model');
+    if(payload){ restoreFromJSON(payload,false); log('auto-restore: ok'); }
+  }catch(err){
+    log('init error: '+err.message);
+  }
+})();
+
+// === הוספת נקודות מהזיהוי לשחקן ===
+function awardPointsFromDetection(playerIdx, points) {
+  try {
+    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
+    if (Array.isArray(window.players) && window.players[playerIdx]) {
+      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
+    }
+    // עדכון UI אם יש
+    let row = document.querySelectorAll('.board-row')[playerIdx];
+    let scoreEl = row ? row.querySelector('.score') : null;
+    if (scoreEl) {
+      const newScore = window.players[playerIdx].score;
+      scoreEl.textContent = newScore;
+    }
+    // הצגה בתחתית
+    const lastDetLabel = document.getElementById('lastDetectLabel');
+    if (lastDetLabel) {
+      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
+      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
+    }
+  } catch(err) {
+    console.error("awardPointsFromDetection error", err);
+  }
+}
+
+</script>
+
+<!-- v6.3-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<script>
+(function(){
+  // Helper: safe debug log
+  function dlog(msg){
+    try {
+      var dbg = document.getElementById('debug') || document.querySelector('.debug, #Debug');
+      if (!dbg) return;
+      var line = (dbg.value ?? dbg.textContent ?? '');
+      var add = String(msg);
+      if ('value' in dbg) dbg.value = (line ? line + '\n' : '') + add;
+      else dbg.textContent = (line ? line + '\n' : '') + add;
+      dbg.scrollTop = dbg.scrollHeight;
+    } catch(_) {}
+  }
+
+  // Try to find the UI row for a given player index
+  function getPlayerRow(idx){
+    // 1) Preferred: data attribute
+    var row = document.querySelector('[data-player-index="'+idx+'"]');
+    if (row) return row;
+    // 2) Common containers
+    var candidates = document.querySelectorAll('#players > * , .boardGrid > * , .board-row, .leaderboard-row, .player-row');
+    if (candidates && candidates.length){
+      // assume 4 columns per row -> try grouping by 4 (index*4 … index*4+3)
+      if (candidates.length >= (idx*4+1)) {
+        var groupStart = idx*4;
+        // wrap a div to represent the row if needed
+        var wrapper = document.createElement('div');
+        for (var i=groupStart;i<Math.min(groupStart+4, candidates.length);i++){
+          wrapper.appendChild(candidates[i].cloneNode(true));
+        }
+        return wrapper; // fallback (will still allow finding an input inside if structure matches)
+      }
+    }
+    // 3) As a last resort, take nth occurrence of a row-like block
+    var rows = document.querySelectorAll('.row, .grid, .line');
+    if (rows && rows[idx]) return rows[idx];
+    return null;
+  }
+
+  
+  function fillDetectedValue(idx, val){
+    try{
+      if (!Number.isFinite(val)) return;
+      // strictly target the player's own row by data attribute
+      var row = document.querySelector('[data-player-index="'+idx+'"]');
+      if (!row) return;
+      var input = row.querySelector('input.manual') ||
+                  row.querySelector('input[type="number"]') ||
+                  row.querySelector('input[placeholder="ערך"]') ||
+                  row.querySelector('input[name="value"]') ||
+                  row.querySelector('input[data-role="value"]');
+      if (input){
+        input.value = val;
+        dlog('fill(row-only): idx='+idx+' val='+val);
+      } else {
+        dlog('fill(row-only): input not found in row for idx='+idx);
+      }
+    }catch(err){
+      dlog('fill error: '+(err && err.message || err));
+    }
+  }
+else {
+        dlog('fill: idx='+idx+' val='+val+' -> input not found');
+      }
+    }catch(err){
+      dlog('fill error: '+(err && err.message || err));
+    }
+  }
+
+  // If awardPointsFromDetection exists, wrap it to ALSO fill the input (without changing its behavior).
+  if (typeof window.awardPointsFromDetection === 'function'){
+    var __origAward = window.awardPointsFromDetection;
+    window.awardPointsFromDetection = function(idx, points){
+      // Fill the number box for manual confirmation if desired
+      try { fillDetectedValue(idx, Number(points)); } catch(_){}
+      // Preserve original behavior exactly
+      return __origAward.apply(this, arguments);
+    };
+    dlog('patch v5.10: wrapped awardPointsFromDetection to fill input');
+  } else {
+    // Expose a helper for your detection code to call explicitly:
+    window.__afterDetected_fillValue_v510 = fillDetectedValue;
+    dlog('patch v5.10: expose __afterDetected_fillValue_v510(idx,val)');
+  }
+})();
+</script>
+
+<!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 -->
+<script>
+// __seg_cc_v63__: improved segmentation + classify & thumbnail (minimal hooks)
+async function __classifyCanvasTile(cnv){
+  try{
+    if (typeof net==='undefined' || !net || !net.infer ||
+        typeof classifier==='undefined' || !classifier || !classifier.predictClass) return null;
+    const tfimg = tf.browser.fromPixels(cnv);
+    const emb = net.infer(tfimg, true);
+    const res = await classifier.predictClass(emb, 3);
+    tf.dispose([tfimg, emb]);
+    if(!res || !res.confidences) return null;
+    const lbl = res.label;
+    const score = res.confidences[lbl] || 0;
+    return {label: lbl, score};
+  }catch(e){ try{console.debug('tile classify err',e)}catch(_){ } return null; }
+}
+
+// Connected-components based tile extraction with gradient projection (v6.3)
+function __segmentTiles_v63(srcCanvas){
+  const W = srcCanvas.width, H = srcCanvas.height;
+  const ctx = srcCanvas.getContext('2d', {willReadFrequently:true});
+  const img = ctx.getImageData(0,0,W,H); const data = img.data;
+
+  // Grayscale
+  const gray = new Float32Array(W*H);
+  for(let i=0,j=0;i<data.length;i+=4,j++){
+    gray[j] = (data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114);
+  }
+  // Sobel-lite magnitude
+  const mag = new Float32Array(W*H);
+  for(let y=1;y<H-1;y++){
+    for(let x=1;x<W-1;x++){
+      const i=y*W+x;
+      const gx = -gray[i-W-1]-2*gray[i-1]-gray[i+W-1] + gray[i-W+1]+2*gray[i+1]+gray[i+W+1];
+      const gy = -gray[i-W-1]-2*gray[i-W]-gray[i-W+1] + gray[i+W-1]+2*gray[i+W]+gray[i+W+1];
+      mag[i] = Math.hypot(gx,gy);
+    }
+  }
+  // Threshold by percentile
+  const sample=[]; for(let i=0;i<mag.length;i+=16) sample.push(mag[i]);
   sample.sort((a,b)=>a-b);
-  const thr = sample[Math.floor(sample.length*0.75)]||40;
-  const bin = new Uint8Array(w*h);
+  const thr = sample[Math.floor(sample.length*0.75)] || 40;
+  const bin = new Uint8Array(W*H);
   for(let i=0;i<mag.length;i++) bin[i] = mag[i] > thr ? 1 : 0;
-  // dilate then erode (close) x2
-  const K=[
-    [0,1,0],
-    [1,1,1],
-    [0,1,0]
-  ];
+
+  // Morph close (dilate then erode)
   const dil = (src)=>{
-    const dst = new Uint8Array(w*h);
-    for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){
-      let on=0;
-      if(src[(y-1)*w+x]) on=1;
-      else if(src[(y+1)*w+x]) on=1;
-      else if(src[y*w+x-1]) on=1;
-      else if(src[y*w+x+1]) on=1;
-      else if(src[y*w+x]) on=1;
-      dst[y*w+x]=on;
+    const dst=new Uint8Array(W*H);
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){
+      const i=y*W+x;
+      dst[i] = src[i]||src[i-1]||src[i+1]||src[i-W]||src[i+W] ? 1:0;
     }
     return dst;
   };
   const ero = (src)=>{
-    const dst = new Uint8Array(w*h);
-    for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){
-      let ok= src[(y-1)*w+x] && src[(y+1)*w+x] && src[y*w+x-1] && src[y*w+x+1] && src[y*w+x];
-      dst[y*w+x]= ok?1:0;
+    const dst=new Uint8Array(W*H);
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){
+      const i=y*W+x;
+      dst[i] = (src[i]&&src[i-1]&&src[i+1]&&src[i-W]&&src[i+W]) ? 1:0;
     }
     return dst;
   };
   let m1 = dil(bin); m1 = dil(m1); m1 = ero(m1);
 
-  // connected components (4-neigh)
-  const visited = new Uint8Array(w*h);
+  // Connected components -> boxes
+  const seen = new Uint8Array(W*H);
   const boxes = [];
-  const qx = new Int32Array(w*h); const qy = new Int32Array(w*h);
-  for(let y=1;y<h-1;y++){
-    for(let x=1;x<w-1;x++){
-      const idx = y*w+x;
-      if(m1[idx] && !visited[idx]){
-        let head=0, tail=0; qx[tail]=x; qy[tail]=y; tail++; visited[idx]=1;
-        let minx=x, miny=y, maxx=x, maxy=y, count=0;
-        while(head<tail){
-          const cx=qx[head], cy=qy[head]; head++; count++;
-          const nbr=[[1,0],[-1,0],[0,1],[0,-1]];
-          for(const [dx,dy] of nbr){
-            const nx=cx+dx, ny=cy+dy, nidx=ny*w+nx;
-            if(nx>0 && nx<w-1 && ny>0 && ny<h-1 && m1[nidx] && !visited[nidx]){
-              visited[nidx]=1; qx[tail]=nx; qy[tail]=ny; tail++;
-              if(nx<minx)minx=nx; if(nx>maxx)maxx=nx; if(ny<miny)miny=ny; if(ny>maxy)maxy=ny;
-            }
-          }
+  for(let y=1;y<H-1;y++){
+    for(let x=1;x<W-1;x++){
+      const i=y*W+x;
+      if(!m1[i] || seen[i]) continue;
+      let q=[i]; seen[i]=1;
+      let minx=x,maxx=x,miny=y,maxy=y, area=0;
+      while(q.length){
+        const p=q.pop();
+        const py=(p/W)|0, px=p%W; area++;
+        if(px<minx)minx=px; if(px>maxx)maxx=px;
+        if(py<miny)miny=py; if(py>maxy)maxy=py;
+        const nb=[p-1,p+1,p-W,p+W];
+        for(const n of nb){
+          if(n<=0||n>=W*H) continue;
+          if(m1[n] && !seen[n]){ seen[n]=1; q.push(n); }
         }
-        const bw = maxx-minx+1, bh = maxy-miny+1;
-        const area = bw*bh;
-        const imgArea = w*h;
-        const ar = bw/bh;
-        if(area > imgArea*0.01 && area < imgArea*0.4 && ar>0.6 && ar<1.8){
-          // expand a bit
-          const pad = Math.floor(Math.min(bw,bh)*0.1)+6;
-          minx=Math.max(0,minx-pad); miny=Math.max(0,miny-pad);
-          maxx=Math.min(w-1,maxx+pad); maxy=Math.min(h-1,maxy+pad);
-          boxes.push([minx,miny,maxx,maxy]);
-        }
+      }
+      const bw=maxx-minx+1, bh=maxy-miny+1;
+      const A=bw*bh, Aimg=W*H; const ar=bw/bh;
+      if(A>Aimg*0.01 && A<Aimg*0.4 && ar>0.6 && ar<1.8){
+        const pad = Math.floor(Math.min(bw,bh)*0.1)+6;
+        minx=Math.max(0,minx-pad); miny=Math.max(0,miny-pad);
+        maxx=Math.min(W-1,maxx+pad); maxy=Math.min(H-1,maxy+pad);
+        boxes.push([minx,miny,maxx,maxy]);
       }
     }
   }
-  // NMS to avoid duplicates
-  const iou = (a,b)=>{
-    const [ax1,ay1,ax2,ay2]=a, [bx1,by1,bx2,by2]=b;
-    const x1=Math.max(ax1,bx1), y1=Math.max(ay1,by1);
-    const x2=Math.min(ax2,bx2), y2=Math.min(ay2,by2);
-    const inter=Math.max(0,x2-x1)*Math.max(0,y2-y1);
-    const area1=(ax2-ax1)*(ay2-ay1), area2=(bx2-bx1)*(by2-by1);
-    return inter/(area1+area2-inter+1e-6);
-  };
-  boxes.sort((a,b)=> (b[2]-b[0])*(b[3]-b[1]) - (a[2]-a[0])*(a[3]-a[1]));
-  const pick=[];
-  boxes.forEach(b=>{
-    if(pick.every(p=>iou(p,b)<0.25)) pick.push(b);
-  });
-  return pick.slice(0,maxTiles).map(([x1,y1,x2,y2])=>{
-    const cw=x2-x1, ch=y2-y1;
+  // If none found -> fallback split into 2-3 columns
+  if(!boxes.length){
+    const cols = (W>H?2:1) + (W/H>1.4?1:0);
+    const sw = Math.floor(W/cols);
+    for(let c=0;c<cols;c++){
+      const x=c*sw, w=(c==cols-1? W-x: sw);
+      boxes.push([x, Math.floor(H*0.2), Math.min(W-1, x+w-1), Math.floor(H*0.8)]);
+    }
+  }
+  // sort left->right and crop to canvases
+  boxes.sort((a,b)=>a[0]-b[0]);
+  const out=[];
+  for(const [x1,y1,x2,y2] of boxes){
+    const cw=x2-x1+1, ch=y2-y1+1;
     const c=document.createElement('canvas'); c.width=cw; c.height=ch;
-    c.getContext('2d').drawImage(image,x1,y1,cw,ch,0,0,cw,ch);
-    return c;
-  });
-}
-
-function log(t){ const el = document.getElementById('log'); el.textContent += (t+'\n'); el.scrollTop=1e9; }
-
-// ---------- capture / gallery ----------
-const thumbs = document.getElementById('thumbs');
-function addThumb(canvas, label, prob){
-  const url = canvas.toDataURL('image/jpeg',0.9);
-  const div = document.createElement('div'); div.className='thumb';
-  const im = new Image(); im.src=url;
-  const cap = document.createElement('div'); cap.className='cap';
-  cap.textContent = (label!=null ? (label+' • '+Math.round(prob*100)+'%') : '—');
-  div.appendChild(im); div.appendChild(cap);
-  thumbs.prepend(div);
-}
-
-async function handleImageInput(imgEl, forTraining=false){
-  if(!ready){ alert('TF not ready yet'); return; }
-  const tiles = segmentTiles(imgEl);
-  if(tiles.length===0){
-    // fallback: whole image
-    tiles.push(imgEl);
+    c.getContext('2d').drawImage(srcCanvas, x1,y1,cw,ch, 0,0,cw,ch);
+    out.push(c);
   }
-  let texts=[];
-  for(const tile of tiles){
-    let label=null, prob=0;
-    if(forTraining){
-      const cls = document.getElementById('classIdx').value;
-      await addExampleFromImage(tile, cls);
-      label = cls; prob = 1;
-    }else if(knn.getNumClasses() > 0){
-      const res = await tf.tidy(()=>{
-        const emb = embedFrom(tile);
-        return knn.predictClass(emb);
-      });
-      label = res.label;
-      prob = res.confidences[res.label] || 0;
-    }
-    addThumb(tile, label, prob);
-    if(label!=null) texts.push(label);
-  }
-  if(texts.length){
-    document.getElementById('detectLine').textContent = 'זוהו קוביות: '+texts.join(', ');
-  }else{
-    document.getElementById('detectLine').textContent = 'לא זוהו קוביות';
-  }
+  return out.slice(0,6);
 }
 
-// camera input (uses file input with capture)
-document.getElementById('snapBtn').onclick = ()=>{
-  const inp = document.createElement('input');
-  inp.type='file'; inp.accept='image/*'; inp.capture='environment';
-  inp.onchange = async e=>{
-    const f = inp.files[0]; if(!f) return;
-    const url = URL.createObjectURL(f);
-    const im = new Image(); im.onload = ()=>{handleImageInput(im, true); URL.revokeObjectURL(url);}; im.src = url;
-  };
-  inp.click();
-};
-
-document.getElementById('fileInput').onchange = e=>{
-  const files = e.target.files;
-  for(const f of files){
-    const url = URL.createObjectURL(f);
-    const im = new Image(); im.onload = ()=>{handleImageInput(im, true); URL.revokeObjectURL(url);}; im.src = url;
-  }
-};
-
-// ---------- Save/Restore (localStorage + JSON) ----------
-function datasetToJSON(){
-  const ds = knn.getClassifierDataset();
-  const obj = {};
-  Object.keys(ds).forEach(k=>{
-    const t = ds[k];            // tf.Tensor2D
-    const data = Array.from(t.dataSync());
-    obj[k] = {data, shape: t.shape}; // keep exact shape per class
-  });
-  return obj;
+// Add thumb (image + small label) into #snapThumbs, without changing existing layout
+function __appendThumbToStrip(dataURL, text){
+  const host = document.getElementById('snapThumbs');
+  if(!host) return;
+  const box = document.createElement('div');
+  box.style.position='relative'; box.style.width='48px'; box.style.height='48px';
+  box.style.border='1px solid #22324a'; box.style.borderRadius='6px'; box.style.overflow='hidden';
+  const im = new Image(); im.src=dataURL; im.style.width='100%'; im.style.height='100%'; im.style.objectFit='cover';
+  const cap = document.createElement('div'); cap.className='thumbCap'; cap.textContent=text||'';
+  box.appendChild(im); box.appendChild(cap);
+  host.prepend(box);
+  while(host.children.length>12) host.removeChild(host.lastElementChild);
 }
-function jsonToDataset(json){
-  const obj = json;
-  const ds = {};
-  Object.keys(obj).forEach(k=>{
-    const {data, shape} = obj[k];
-    ds[k] = tf.tensor2d(data, shape, 'float32');
-  });
-  knn.setClassifierDataset(ds);
-}
-document.getElementById('saveLocal').onclick = ()=>{
-  const obj = datasetToJSON();
-  localStorage.setItem('rummikub_knn_v6', JSON.stringify(obj));
-  log('💾 נשמר מקומית • '+(new Blob([JSON.stringify(obj)]).size/1024).toFixed(1)+' KB');
-};
-function autoRestoreLocal(){
-  try{
-    const s = localStorage.getItem('rummikub_knn_v6');
-    if(s){
-      const obj = JSON.parse(s);
-      jsonToDataset(obj);
-      log('📦 שוחזר מקומית');
-    }
-  }catch(e){ log('ERR restore local: '+e); }
-}
-document.getElementById('restoreLocal').onclick = autoRestoreLocal;
-
-document.getElementById('exportJson').onclick = ()=>{
-  const obj = datasetToJSON();
-  const blob = new Blob([JSON.stringify(obj)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'rummikub_knn_v6.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-};
-document.getElementById('importBtn').onclick = ()=> document.getElementById('importJson').click();
-document.getElementById('importJson').onchange = e=>{
-  const f = e.target.files[0]; if(!f) return;
-  const fr = new FileReader();
-  fr.onload = ()=>{
-    try{
-      const obj = JSON.parse(fr.result);
-      jsonToDataset(obj);
-      log('✅ model restored from JSON');
-    }catch(err){ alert('ייבוא נכשל'); log('ERR import: '+err); }
-  };
-  fr.readAsText(f);
-};
-document.getElementById('clearBtn').onclick = ()=>{
-  knn = knnClassifier.create();
-  localStorage.removeItem('rummikub_knn_v6');
-  thumbs.innerHTML='';
-  document.getElementById('detectLine').textContent = '—';
-  log('🗑️ איפוס מודל');
-};
 </script>
 </body>
 </html>
