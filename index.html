@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.16.6-ml</small>
+<small class="tag" id="verBadge">v5.6-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.16.6-ml</div>
+<div class="muted">© v5.6-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.16.6-ml';
+const VERSION = 'v5.6-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -510,7 +510,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.16.6-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.10-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -591,124 +591,5 @@ function awardPointsFromDetection(playerIdx, points) {
 </script>
 
 <!-- refresh -->
-
-<!-- v5.16.6-ml: Robust KNN restore patch (non-invasive) -->
-<script>
-(function(){
-  const DIM = 1024;
-
-  function dbg(msg){
-    try{
-      const el = document.querySelector('#debug, [data-debug]');
-      if (el) { el.textContent += (el.textContent ? "\n" : "") + msg; }
-      console.log('[restore-patch]', msg);
-    }catch(_){}
-  }
-
-  // Extract Float32Array from various JSON shapes
-  function extractFloat32(entry){
-    if (!entry) return new Float32Array(0);
-    if (entry.data){
-      const d = entry.data;
-      if (d instanceof Float32Array) return d;
-      if (Array.isArray(d)) return new Float32Array(d);
-      if (ArrayBuffer.isView(d)) return new Float32Array(d.buffer, d.byteOffset, d.length);
-    }
-    if (Array.isArray(entry)) return new Float32Array(entry);
-    // Object-like {0:...,1:...}
-    const keys = Object.keys(entry||{}).filter(k=>!isNaN(+k)).sort((a,b)=>a-b);
-    if (keys.length){
-      const out = new Float32Array(keys.length);
-      for (let i=0;i<keys.length;i++) out[i] = Number(entry[keys[i]]);
-      return out;
-    }
-    return new Float32Array(0);
-  }
-
-  function fixVectorToMatrix(vec, label, metaN){
-    const nByLen = Math.floor(vec.length / DIM);
-    if (nByLen <= 0) {
-      dbg(`⚠️ class="${label}": invalid/empty (len=${vec.length}) — skipped`);
-      return null;
-    }
-    if (metaN && metaN !== nByLen){
-      dbg(`⚠️ class="${label}": meta n=${metaN} vs actual n=${nByLen} → using ${nByLen}`);
-    }
-    const need = nByLen * DIM;
-    const slice = (vec.length === need) ? vec : vec.slice(0, need);
-    try{
-      return tf.tensor2d(slice, [nByLen, DIM], 'float32');
-    }catch(e){
-      dbg(`❌ class="${label}": tensor2d failed (${e && e.message})`);
-      return null;
-    }
-  }
-
-  // Public helpers
-  async function restoreKNNFromJSONPatch(jsonObj, logFn){
-    if (!jsonObj) throw new Error('bad JSON');
-    const dsRaw = jsonObj.dataset || jsonObj;
-    if (!dsRaw || typeof dsRaw !== 'object') throw new Error('no dataset in JSON');
-    const ds = {};
-    let classes=0, rows=0;
-    for (const label of Object.keys(dsRaw)){
-      const rec = dsRaw[label];
-      const metaN = (rec && rec.shape && rec.shape[0]) ? Number(rec.shape[0]) : Number(rec && rec.n);
-      const vec = extractFloat32(rec && (rec.data ?? rec));
-      const t = fixVectorToMatrix(vec, label, metaN);
-      if (t){
-        ds[label] = t;
-        classes++; rows += t.shape[0];
-        (logFn||dbg)(`✅ ${label}: ${t.shape[0]}×${DIM}`);
-      }
-    }
-    const clf = (window.knnClassifier && window.knnClassifier.create) ? window.knnClassifier.create() : (window.classifier || null);
-    if (!clf || !clf.setClassifierDataset) throw new Error('knn classifier not available');
-    clf.setClassifierDataset(ds);
-    (logFn||dbg)(`📦 patched restore • classes=${classes} • rows=${rows}`);
-    return clf;
-  }
-
-  function restoreKNNFromLocalStoragePatch(key, logFn){
-    const raw = localStorage.getItem(key || 'knnDataset');
-    if (!raw) throw new Error('no dataset in localStorage');
-    let obj=null; try{ obj = JSON.parse(raw); } catch(e){ throw new Error('stored JSON corrupted'); }
-    return restoreKNNFromJSONPatch(obj, logFn);
-  }
-
-  // Expose for app code
-  window.KNNRestorePatch = { restoreKNNFromJSONPatch, restoreKNNFromLocalStoragePatch };
-
-  // Soft override remiModel.load if present (fallback to original on error)
-  if (window.remiModel){
-    const _origLoad = window.remiModel.load;
-    window.remiModel.load = function(){
-      try{
-        const info = window.KNNRestorePatch.restoreKNNFromLocalStoragePatch('knnDataset', dbg);
-        (dbg)('auto-restore: patched');
-        return info;
-      }catch(e){
-        if (typeof _origLoad === 'function') return _origLoad();
-        return { ok:false, error: e && e.message || String(e) };
-      }
-    };
-  }
-
-  // Try auto-restore (non-blocking) if app uses localStorage key
-  document.addEventListener('DOMContentLoaded', function(){
-    try{
-      // only if dataset empty
-      const knn = window.classifier || window.knn;
-      const hasAny = knn && knn.getClassifierDataset && Object.keys(knn.getClassifierDataset()).length>0;
-      if (!hasAny){
-        try { window.KNNRestorePatch.restoreKNNFromLocalStoragePatch('knnDataset', dbg); } catch(_){}
-      }
-    }catch(_){}
-  }, {once:true});
-
-  // Version marker
-  try{ window.__APP_VERSION__ = 'v5.16.6-ml'; }catch(_){}
-})();
-</script>
-</body>
+<!-- refreshed 1756282763.4528184 --></body>
 </html>
