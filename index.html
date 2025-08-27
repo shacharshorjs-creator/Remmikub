@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html dir="rtl" lang="he">
 <head>
 <meta charset="utf-8"/>
@@ -50,7 +49,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.6-ml</small>
+<small class="tag" id="verBadge">v6.0-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -64,7 +63,7 @@
 <div class="card board" id="leaderCard">
 <div class="row" style="justify-content:space-between;align-items:center">
 <h2 style="margin:0">לוח הובלה</h2>
-<div class="hint">בחרו משתתפים למטה. לחיצה על <span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
+<div class="hint"><span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
 </div>
 <div class="thead">
 <div>#</div>
@@ -124,96 +123,18 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.6-ml</div>
+<div class="muted">© v6.0-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js">
-// === הוספת נקודות מהזיהוי לשחקן ===
-function awardPointsFromDetection(playerIdx, points) {
-  try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
-    if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
-    }
-    // עדכון UI אם יש
-    let row = document.querySelectorAll('.board-row')[playerIdx];
-    let scoreEl = row ? row.querySelector('.score') : null;
-    if (scoreEl) {
-      const newScore = window.players[playerIdx].score;
-      scoreEl.textContent = newScore;
-    }
-    // הצגה בתחתית
-    const lastDetLabel = document.getElementById('lastDetectLabel');
-    if (lastDetLabel) {
-      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
-      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
-    }
-  } catch(err) {
-    console.error("awardPointsFromDetection error", err);
-  }
-}
-
-</script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0">
-// === הוספת נקודות מהזיהוי לשחקן ===
-function awardPointsFromDetection(playerIdx, points) {
-  try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
-    if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
-    }
-    // עדכון UI אם יש
-    let row = document.querySelectorAll('.board-row')[playerIdx];
-    let scoreEl = row ? row.querySelector('.score') : null;
-    if (scoreEl) {
-      const newScore = window.players[playerIdx].score;
-      scoreEl.textContent = newScore;
-    }
-    // הצגה בתחתית
-    const lastDetLabel = document.getElementById('lastDetectLabel');
-    if (lastDetLabel) {
-      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
-      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
-    }
-  } catch(err) {
-    console.error("awardPointsFromDetection error", err);
-  }
-}
-
-</script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2">
-// === הוספת נקודות מהזיהוי לשחקן ===
-function awardPointsFromDetection(playerIdx, points) {
-  try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
-    if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
-    }
-    // עדכון UI אם יש
-    let row = document.querySelectorAll('.board-row')[playerIdx];
-    let scoreEl = row ? row.querySelector('.score') : null;
-    if (scoreEl) {
-      const newScore = window.players[playerIdx].score;
-      scoreEl.textContent = newScore;
-    }
-    // הצגה בתחתית
-    const lastDetLabel = document.getElementById('lastDetectLabel');
-    if (lastDetLabel) {
-      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
-      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
-    }
-  } catch(err) {
-    console.error("awardPointsFromDetection error", err);
-  }
-}
-
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
 <script>
-const VERSION = 'v5.6-ml';
+const VERSION = 'v6.0-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
-const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
+const log = msg => { const d=$$('#debug'); if(!d) return; d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
 
 // ====== מצב אפליקציה בסיסי (שמות + ניקוד) ======
 let players = []; // {name, score}
@@ -235,7 +156,7 @@ function saveNames(){
 function renderBoard(){
   const holder = $$('#boardRows'); holder.innerHTML='';
   players.forEach((p,idx)=>{
-    const row=document.createElement('div'); row.className='row';
+    const row=document.createElement('div'); row.className='row'; row.setAttribute('data-player-index', idx);
     row.innerHTML = `
       <div>${idx+1}</div>
       <div>${p.name}</div>
@@ -259,40 +180,37 @@ function renderBoard(){
       if(!isNaN(v)) bump(idx, v);
     };
     labelCam.querySelector('input.snap').onchange = async (e)=>{
-      // תמונת שחקן -> כרגע רק מציגה חיווי; (המודל נשאר מודול אימון למטה).
       if(e.target.files?.length){
         log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
-        
-// show textual indication only
-showLastDetect(idx, e.target.files[0]);
-try{
-  await ensureModels?.();
-  const {img} = await imgToTensor(e.target.files[0]);
-  let detected = null, confPct = 0;
-  if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
-    const emb = net.infer(img, true);
-    const res = await classifier.predictClass(emb, 3);
-    if(res && res.label != null){
-      detected = parseInt(res.label,10);
-      confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
-    }
-  }
-  const lbl = document.getElementById('lastDetectLabel');
-  if(lbl){
-    if(detected || detected===0){
-      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — זוהתה קובייה: ${detected} (${confPct}%)`;
-    }else{
-      lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
-    }
-  }
-  // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
-  if(typeof detected !== 'undefined' && detected){
-    if(typeof awardPointsFromDetection === 'function'){
-      awardPointsFromDetection(idx, detected);
-    }
-  }
-}catch(_){ /* keep silent */ }
-if(typeof detectedValue!=='undefined'){ awardPointsFromDetection(idx, detectedValue); }
+        showLastDetect(idx, e.target.files[0]);
+        // זיהוי + מילוי תיבת "ערך" כמו קודם (ללא שינוי התנהגות)
+        try{
+          await ensureModels?.();
+          const {img} = await imgToTensor(e.target.files[0]);
+          let detected = null, confPct = 0;
+          if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
+            const emb = net.infer(img, true);
+            const res = await classifier.predictClass(emb, 3);
+            if(res && res.label != null){
+              detected = parseInt(res.label,10);
+              confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
+            }
+          }
+          const lbl = document.getElementById('lastDetectLabel');
+          if(lbl){
+            if(Number.isFinite(detected)){
+              lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — זוהתה קובייה: ${detected} (${confPct}%)`;
+            }else{
+              lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
+            }
+          }
+          // מילוי תיבת 'ערך' בשורת השחקן הנכון
+          if(Number.isFinite(detected)) { try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = detected; }catch(_){ } }
+          // נקודות (אם תרצה להשתמש בזה)
+          if(Number.isFinite(detected) && typeof awardPointsFromDetection === 'function'){
+            awardPointsFromDetection(idx, detected);
+          }
+        }catch(_){ /* keep silent */ }
       }
     }
   });
@@ -304,8 +222,7 @@ function bump(index, delta){
 }
 
 
-// == זיהוי אחרון – תצוגה ==
-
+// == זיהוי אחרון – תצוגה + חיתוך קוביות (תוספת זהירה) ==
 function showLastDetect(playerIndex, file){
   try{
     const url = URL.createObjectURL(file);
@@ -318,106 +235,146 @@ function showLastDetect(playerIndex, file){
       imgEl.src = url;
       imgEl.style.display = 'block';
     }
+    // תצוגת thumbnail מקורי
     const host = document.getElementById('snapThumbs');
     if (host){
-      const thumb = new Image();
-      thumb.width = 48; thumb.height = 48;
-      thumb.style.borderRadius = '6px';
-      thumb.style.border = '1px solid #22324a';
-      thumb.style.objectFit = 'cover';
-      thumb.onload = ()=>{
-        host.prepend(thumb);
-        while (host.children.length > 12) host.removeChild(host.lastElementChild);
-      };
-      thumb.src = url;
+      appendThumbFromURL(host, url);
     }
-    // NEW: segmentation thumbnails per detected tile
-    __seg_generateThumbsFromURL(url);
-    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 6000);
+    // חיתוך קוביות מתוך הצילום והצגה כצלמיות נפרדות
+    segmentImageIntoTiles(url).then(canvases => {
+      const host = document.getElementById('snapThumbs');
+      canvases.forEach(cv => {
+        cv.style.borderRadius = '6px';
+        cv.style.border = '1px solid #22324a';
+        cv.style.width = '48px';
+        cv.style.height = '48px';
+        cv.style.objectFit = 'cover';
+        host.prepend(cv);
+        while (host.children.length > 12) host.removeChild(host.lastElementChild);
+      });
+    }).catch(err => log('segment ERR: '+(err && err.message || err)));
+    // שחרור ה־URL מאוחר יותר
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 5000);
   }catch(e){
-    if (typeof log === 'function') log('showLastDetect ERR: ' + (e && e.message || e));
+    log('showLastDetect ERR: ' + (e && e.message || e));
   }
 }
 
+// יוצר thumb פשוט מתוך URL קיים
+function appendThumbFromURL(host, url){
+  const img = new Image();
+  img.width = 48; img.height = 48;
+  img.style.borderRadius = '6px';
+  img.style.border = '1px solid #22324a';
+  img.style.objectFit = 'cover';
+  img.onload = ()=>{
+    host.prepend(img);
+    while (host.children.length > 12) host.removeChild(host.lastElementChild);
+  };
+  img.src = url;
+}
 
-// --- minimal segmentation helpers (non-invasive) ---
-async function __seg_toCanvasFromURL(url){
-  return new Promise((resolve, reject)=>{
+// חיתוך קוביות: אלגוריתם מינימלי ללא ספריות – מוצא רווחים בהירים בין קוביות ומייצר חיתוכים אנכיים
+async function segmentImageIntoTiles(url){
+  return new Promise((resolve,reject)=>{
     const img = new Image();
-    img.onload = ()=>{
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
-      const ctx = c.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(img, 0, 0);
-      resolve(c);
+    img.onload = () => {
+      try {
+        const W = img.naturalWidth, H = img.naturalHeight;
+        const pad = Math.floor(W * 0.02);
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const g = c.getContext('2d');
+        g.drawImage(img, 0, 0);
+        const data = g.getImageData(0,0,W,H).data;
+
+        // נמדוד בהירות ממוצעת לכל עמודה באזור האמצעי (כדי להתעלם מהרבה רקע למעלה/למטה)
+        const y0 = Math.floor(H*0.30), y1 = Math.floor(H*0.70);
+        const colMean = new Float32Array(W);
+        for (let x=0; x<W; x++){
+          let s=0, n=0;
+          for (let y=y0; y<y1; y++){
+            const i = (y*W + x)*4;
+            const r=data[i], g1=data[i+1], b=data[i+2];
+            // luminance
+            s += 0.2126*r + 0.7152*g1 + 0.0722*b;
+            n++;
+          }
+          colMean[x] = s/(n||1);
+        }
+        // נזהה רווחים: מקומות בהירים במיוחד
+        const min = Math.min(...colMean), max = Math.max(...colMean);
+        const thr = min + (max-min)*0.65; // 65% לכיוון הבהיר
+        const separators = [];
+        for (let x=1; x<W-1; x++){
+          if (colMean[x] > thr && colMean[x-1] <= thr && colMean[x+1] > thr){
+            separators.push(x);
+          }
+        }
+        // נקבץ מפרידים סמוכים (cluster)
+        const gaps = [];
+        let start = null, prev = null;
+        for (const x of separators){
+          if (start===null){ start = x; prev = x; }
+          else if (x - prev <= Math.max(6, W*0.01)){ prev = x; }
+          else { gaps.push(Math.round((start+prev)/2)); start = x; prev = x; }
+        }
+        if (start!==null) gaps.push(Math.round((start+prev)/2));
+
+        // נבנה פרוסות בין [0,...gaps...,W]
+        const cuts = [0, ...gaps, W];
+        const canvases = [];
+        for (let i=0; i<cuts.length-1; i++){
+          const xA = Math.max(0, cuts[i] - pad);
+          const xB = Math.min(W, cuts[i+1] + pad);
+          const w = xB - xA;
+          if (w < Math.max(40, W*0.10)) continue; // סנן אזורים קטנים מדי
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = H;
+          cv.getContext('2d').drawImage(c, xA, 0, w, H, 0, 0, w, H);
+          // ננסה לקצר אנכית לאזור עם תוכן
+          const crop = verticalContentCrop(cv);
+          canvases.push(crop || cv);
+        }
+        resolve(canvases);
+      } catch (err){
+        reject(err);
+      }
     };
     img.onerror = reject;
-    img.crossOrigin = 'anonymous';
     img.src = url;
   });
 }
-function __seg_regionStdDev(ctx, x, y, w, h){
-  const d = ctx.getImageData(x, y, w, h).data;
-  let sum=0, sum2=0, n=w*h;
-  for(let i=0;i<d.length;i+=4){
-    const v = (0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]);
-    sum += v; sum2 += v*v;
-  }
-  const mean = sum / n;
-  const varc = Math.max(0, sum2/n - mean*mean);
-  return Math.sqrt(varc);
-}
-function __seg_cropDataURL(srcCanvas, x, y, w, h, out=96){
-  const c = document.createElement('canvas'); c.width=out; c.height=out;
-  const ctx = c.getContext('2d');
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality='high';
-  ctx.drawImage(srcCanvas, x, y, w, h, 0, 0, out, out);
-  return c.toDataURL('image/jpeg', 0.86);
-}
-async function __seg_generateThumbsFromURL(url){
-  const host = document.getElementById('snapThumbs');
-  if (!host) return;
-  try{
-    const base = await __seg_toCanvasFromURL(url);
-    const W = base.width, H = base.height;
-    const ctx = base.getContext('2d', { willReadFrequently: true });
-    const candidates = [];
-    const splits = [2,3];
-    for (const parts of splits){
-      const sw = Math.floor(W / parts);
-      for(let i=0;i<parts;i++){
-        const x = i*sw, y = 0, w = (i===parts-1? W - i*sw : sw), h = H;
-        const std = __seg_regionStdDev(ctx, x, y, w, h);
-        candidates.push({x,y,w,h,std});
-      }
-    }
-    candidates.sort((a,b)=> b.std - a.std);
-    const kept = [];
-    for(const c of candidates){
-      const tooClose = kept.some(k=>{
-        const ix = Math.max(0, Math.min(c.x+c.w, k.x+k.w) - Math.max(c.x, k.x));
-        const iy = Math.max(0, Math.min(c.y+c.h, k.y+k.h) - Math.max(c.y, k.y));
-        const inter = ix*iy;
-        const uni = c.w*c.h + k.w*k.h - inter;
-        const iou = uni? inter/uni : 0;
-        return iou > 0.5;
-      });
-      if (!tooClose && c.std > 12) kept.push(c);
-      if (kept.length>=3) break;
-    }
-    kept.forEach(k=>{
-      const dataURL = __seg_cropDataURL(base, k.x, k.y, k.w, k.h, 84);
-      const img = new Image(); img.width=48; img.height=48;
-      img.style.borderRadius='6px'; img.style.border='1px solid #22324a'; img.style.objectFit='cover';
-      img.src = dataURL;
-      host.prepend(img);
-    });
-    while (host.children.length > 12) host.removeChild(host.lastElementChild);
-  }catch(e){
-    try{ console.debug('seg thumbs err:', e); }catch(_){}
-  }
-}
 
+// קיצור אנכי לפי תוכן (חיפוש שורות עם ניגודיות)
+function verticalContentCrop(cv){
+  try{
+    const W = cv.width, H = cv.height;
+    const ctx = cv.getContext('2d');
+    const data = ctx.getImageData(0,0,W,H).data;
+    const rowEnergy = new Float32Array(H);
+    for (let y=0; y<H; y++){
+      let s=0;
+      for (let x=0; x<W; x++){
+        const i=(y*W+x)*4;
+        const r=data[i], g=data[i+1], b=data[i+2];
+        // energy ~ variance approximation
+        s += Math.max(r,g,b) - Math.min(r,g,b);
+      }
+      rowEnergy[y] = s/W;
+    }
+    const max = Math.max(...rowEnergy);
+    const thr = max*0.15;
+    let yTop = 0, yBot = H-1;
+    for (let y=0; y<H; y++){ if (rowEnergy[y] > thr){ yTop = Math.max(0,y-2); break; } }
+    for (let y=H-1; y>=0; y--){ if (rowEnergy[y] > thr){ yBot = Math.min(H-1,y+2); break; } }
+    const h = Math.max(16, yBot - yTop + 1);
+    const out = document.createElement('canvas');
+    out.width = W; out.height = h;
+    out.getContext('2d').drawImage(cv, 0, yTop, W, h, 0, 0, W, h);
+    return out;
+  }catch(_){ return null; }
+}
 
 // ====== אתחול שמות וניקוד ======
 loadNames();
@@ -431,15 +388,13 @@ on($$('#btnResetScores'),'click',()=>{
   localStorage.setItem('rk_players', JSON.stringify(players));
 });
 
-// ====== מודול אימון (MobileNet+KNN) – כמו בגרסה הבסיסית, ללא שינוי מהותי ======
+// ====== מודול אימון (MobileNet+KNN) – ללא שינוי מהותי ======
 let net, classifier;
 let totalExamples = 0;
 
 // הכרחת CPU – לביציבות במובייל
 (async ()=>{
-  try{
-    await tf.setBackend('cpu');
-  }catch(e){}
+  try{ await tf.setBackend('cpu'); }catch(e){}
   $$('#tfBadge').textContent = 'TF: ' + tf.getBackend();
 })();
 
@@ -518,18 +473,34 @@ on($$('#jsonIn'),'change',async e=>{
 function restoreFromJSON(text, show=true){
   try{
     const obj = JSON.parse(text);
+    const dataObj = obj.dataObj || obj.dataset || obj;
     classifier = knnClassifier.create();
     const dataset = {};
-    Object.keys(obj.dataObj).forEach(key=>{
-      const tensor = tf.tensor(obj.dataObj[key], obj.shape);
+    let classes = 0, totalRows = 0;
+    Object.keys(dataObj || {}).forEach(key => {
+      let arr = dataObj[key];
+      if (arr && typeof arr === 'object' && ('data' in arr)) arr = arr.data;
+      if (!arr || !arr.length) return;
+      const flat = Array.from(arr, Number).filter(n => Number.isFinite(n));
+      const rows = Math.floor(flat.length / 1024);
+      if (rows <= 0) { log('⚠️ skip class '+key+' (no full vectors)'); return; }
+      const used = flat.slice(0, rows*1024);
+      if (used.length !== flat.length) {
+        log('ℹ️  class '+key+': truncated '+(flat.length-used.length)+' to fit 1024 dims');
+      }
+      const tensor = tf.tensor2d(used, [rows, 1024]);
       dataset[key] = tensor;
+      classes += 1; totalRows += rows;
     });
     classifier.setClassifierDataset(dataset);
-    const vectors = Object.values(dataset).reduce((a,t)=>a+(t.shape?.[0]||0),0);
-    totalExamples = vectors;
+    totalExamples = totalRows;
     $$('#examplesBadge').textContent = 'דוגמאות: ' + totalExamples;
-    if(show) log('✅ model restored from JSON');
     $$('#modelBadge').textContent = 'model: restored';
+    if (show){
+      const kb = (text.length/1024).toFixed(1);
+      log('📦 restored from JSON • '+classes+' classes • '+totalRows+' vectors • ~'+kb+' KB');
+      log('✅ model restored from JSON');
+    }
   }catch(err){
     log('ERR restore: '+err.message);
     alert('ייבוא נכשל');
@@ -566,11 +537,10 @@ on($$('#btnNukeExamples'),'click',()=>{
 });
 
 on($$('#btnInitModel'),'click',()=>{
-  // Initialize model: wipe in-memory KNN and clear saved model
   classifier = knnClassifier.create();
   totalExamples = 0;
   $$('#examplesBadge').textContent = 'דוגמאות: —';
-  localStorage.removeItem('rk_model'); // forget saved model
+  localStorage.removeItem('rk_model');
   $$('#modelBadge').textContent = 'model: initialized';
   log('♻️ אתחול מודל: הדאטה נוקה וה־localStorage הוסר');
 });
@@ -581,7 +551,6 @@ on($$('#btnInitModel'),'click',()=>{
   try{
     await ensureModels();
     $$('#modelBadge').textContent = 'model: ready';
-    // נסיון לשחזר אוטומטית
     const payload = localStorage.getItem('rk_model');
     if(payload){ restoreFromJSON(payload,false); log('auto-restore: ok'); }
   }catch(err){
@@ -589,113 +558,20 @@ on($$('#btnInitModel'),'click',()=>{
   }
 })();
 
-// === הוספת נקודות מהזיהוי לשחקן ===
-function awardPointsFromDetection(playerIdx, points) {
-  try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
-    if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
-    }
-    // עדכון UI אם יש
-    let row = document.querySelectorAll('.board-row')[playerIdx];
-    let scoreEl = row ? row.querySelector('.score') : null;
-    if (scoreEl) {
-      const newScore = window.players[playerIdx].score;
-      scoreEl.textContent = newScore;
-    }
-    // הצגה בתחתית
-    const lastDetLabel = document.getElementById('lastDetectLabel');
-    if (lastDetLabel) {
-      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
-      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
-    }
-  } catch(err) {
-    console.error("awardPointsFromDetection error", err);
-  }
-}
-
-</script>
-
-<!-- v5.10-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
-<script>
-(function(){
-  // Helper: safe debug log
-  function dlog(msg){
+// === רק עטיפה לוגית קיימת (ללא שינוי התנהגות) – ממלא קלט "ערך" עם תוצאת הזיהוי ===
+if (typeof window.awardPointsFromDetection === 'function'){
+  const __origAward = window.awardPointsFromDetection;
+  window.awardPointsFromDetection = function(idx, points){
     try {
-      var dbg = document.getElementById('debug') || document.querySelector('.debug, #Debug');
-      if (!dbg) return;
-      var line = (dbg.value ?? dbg.textContent ?? '');
-      var add = String(msg);
-      if ('value' in dbg) dbg.value = (line ? line + '\n' : '') + add;
-      else dbg.textContent = (line ? line + '\n' : '') + add;
-      dbg.scrollTop = dbg.scrollHeight;
+      const row = document.querySelector('[data-player-index="'+idx+'"]');
+      const input = row && (row.querySelector('input.manual') || row.querySelector('input[type="number"]'));
+      if (input) input.value = Number(points)||0;
     } catch(_) {}
-  }
-
-  // Try to find the UI row for a given player index
-  function getPlayerRow(idx){
-    // 1) Preferred: data attribute
-    var row = document.querySelector('[data-player-index="'+idx+'"]');
-    if (row) return row;
-    // 2) Common containers
-    var candidates = document.querySelectorAll('#players > * , .boardGrid > * , .board-row, .leaderboard-row, .player-row');
-    if (candidates && candidates.length){
-      // assume 4 columns per row -> try grouping by 4 (index*4 … index*4+3)
-      if (candidates.length >= (idx*4+1)) {
-        var groupStart = idx*4;
-        // wrap a div to represent the row if needed
-        var wrapper = document.createElement('div');
-        for (var i=groupStart;i<Math.min(groupStart+4, candidates.length);i++){
-          wrapper.appendChild(candidates[i].cloneNode(true));
-        }
-        return wrapper; // fallback (will still allow finding an input inside if structure matches)
-      }
-    }
-    // 3) As a last resort, take nth occurrence of a row-like block
-    var rows = document.querySelectorAll('.row, .grid, .line');
-    if (rows && rows[idx]) return rows[idx];
-    return null;
-  }
-
-  function fillDetectedValue(idx, val){
-    try{
-      if (!Number.isFinite(val)) return;
-      var row = getPlayerRow(idx);
-      // If wrapper fallback returned, we cannot set inside cloned nodes; so try a more direct search:
-      var input = (row && row.querySelector && row.querySelector('input[type="number"]')) ||
-                  document.querySelectorAll('input[type="number"]')[idx] ||
-                  document.querySelector('input[placeholder="ערך"]') ||
-                  document.querySelector('input[name="value"]') ||
-                  document.querySelector('input[data-role="value"]');
-      if (input){
-        input.value = val;
-        dlog('fill: idx='+idx+' val='+val+' -> set into value input');
-      } else {
-        dlog('fill: idx='+idx+' val='+val+' -> input not found');
-      }
-    }catch(err){
-      dlog('fill error: '+(err && err.message || err));
-    }
-  }
-
-  // If awardPointsFromDetection exists, wrap it to ALSO fill the input (without changing its behavior).
-  if (typeof window.awardPointsFromDetection === 'function'){
-    var __origAward = window.awardPointsFromDetection;
-    window.awardPointsFromDetection = function(idx, points){
-      // Fill the number box for manual confirmation if desired
-      try { fillDetectedValue(idx, Number(points)); } catch(_){}
-      // Preserve original behavior exactly
-      return __origAward.apply(this, arguments);
-    };
-    dlog('patch v5.10: wrapped awardPointsFromDetection to fill input');
-  } else {
-    // Expose a helper for your detection code to call explicitly:
-    window.__afterDetected_fillValue_v510 = fillDetectedValue;
-    dlog('patch v5.10: expose __afterDetected_fillValue_v510(idx,val)');
-  }
-})();
+    return __origAward.apply(this, arguments);
+  };
+  log('patch v6.0: input-fill wrapper ready');
+}
 </script>
-
-<!-- refresh -->
-<!-- multi-seg thumbs 1756295224.578542 --></body>
+<!-- version remains v6.0-ml; added safe segmentation thumbs patch -->
+</body>
 </html>
