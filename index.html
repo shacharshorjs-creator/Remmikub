@@ -44,11 +44,6 @@
   .ok{color:#baffc3}
   .scrollx{overflow:auto}
   .copybtn{margin-inline-start:.5rem}
-
-/* v6.1 thumb badge */
-.thumbWrap{position:relative; display:inline-block; margin:4px;}
-.thumbWrap img{display:block; border-radius:6px}
-.thumbBadge{position:absolute; right:4px; bottom:4px; background:rgba(0,0,0,.65); color:#fff; font-size:12px; padding:2px 6px; border-radius:10px; line-height:16px}
 </style>
 </head>
 <body>
@@ -327,13 +322,13 @@ function showLastDetect(playerIndex, file){
     // add a small thumbnail of the snap (non-destructive)
     const host = document.getElementById('snapThumbs');
     if (host){
-      const wrap = document.createElement('div'); wrap.className='thumbWrap'; const thumb = new Image();
+      const thumb = new Image();
       thumb.width = 48; thumb.height = 48;
       thumb.style.borderRadius = '6px';
       thumb.style.border = '1px solid #22324a';
       thumb.style.objectFit = 'cover';
       thumb.onload = ()=>{
-        if(wrap){wrap.appendChild(thumb);} const badgeTxt = (window.__lastDetectPerPlayer && window.__lastDetectPerPlayer[pIdx])? window.__lastDetectPerPlayer[pIdx]:''; if(badgeTxt){const b=document.createElement('span'); b.className='thumbBadge'; b.textContent=badgeTxt; wrap.appendChild(b);} host.prepend(wrap);
+        host.prepend(thumb);
         while (host.children.length > 10) host.removeChild(host.lastElementChild);
       };
       thumb.src = url;
