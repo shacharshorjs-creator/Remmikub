@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v5.6-ml</small>
+<small class="tag" id="verBadge">v5.12-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -64,7 +64,7 @@
 <div class="card board" id="leaderCard">
 <div class="row" style="justify-content:space-between;align-items:center">
 <h2 style="margin:0">לוח הובלה</h2>
-<div class="hint">בחרו משתתפים למטה. לחיצה על <span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
+<div class="hint"><span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
 </div>
 <div class="thead">
 <div>#</div>
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v5.6-ml</div>
+<div class="muted">© v5.12-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v5.6-ml';
+const VERSION = 'v5.12-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -285,6 +285,8 @@ try{
       lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
     }
   }
+  // מילוי תיבת 'ערך' בשורת השחקן הנכון
+  if(Number.isFinite(detected)) { try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = detected; }catch(_){ } }
   // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
   if(typeof detected !== 'undefined' && detected){
     if(typeof awardPointsFromDetection === 'function'){
@@ -510,7 +512,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v5.10-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v5.12-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -551,20 +553,29 @@ function awardPointsFromDetection(playerIdx, points) {
     return null;
   }
 
+  
   function fillDetectedValue(idx, val){
     try{
       if (!Number.isFinite(val)) return;
-      var row = getPlayerRow(idx);
-      // If wrapper fallback returned, we cannot set inside cloned nodes; so try a more direct search:
-      var input = (row && row.querySelector && row.querySelector('input[type="number"]')) ||
-                  document.querySelectorAll('input[type="number"]')[idx] ||
-                  document.querySelector('input[placeholder="ערך"]') ||
-                  document.querySelector('input[name="value"]') ||
-                  document.querySelector('input[data-role="value"]');
+      // strictly target the player's own row by data attribute
+      var row = document.querySelector('[data-player-index="'+idx+'"]');
+      if (!row) return;
+      var input = row.querySelector('input.manual') ||
+                  row.querySelector('input[type="number"]') ||
+                  row.querySelector('input[placeholder="ערך"]') ||
+                  row.querySelector('input[name="value"]') ||
+                  row.querySelector('input[data-role="value"]');
       if (input){
         input.value = val;
-        dlog('fill: idx='+idx+' val='+val+' -> set into value input');
+        dlog('fill(row-only): idx='+idx+' val='+val);
       } else {
+        dlog('fill(row-only): input not found in row for idx='+idx);
+      }
+    }catch(err){
+      dlog('fill error: '+(err && err.message || err));
+    }
+  }
+else {
         dlog('fill: idx='+idx+' val='+val+' -> input not found');
       }
     }catch(err){
@@ -590,6 +601,174 @@ function awardPointsFromDetection(playerIdx, points) {
 })();
 </script>
 
-<!-- refresh -->
-<!-- refreshed 1756282763.4528184 --></body>
+
+<script>
+// ===== v5.16.9-ml — robust KNN save/restore (no UI changes) =====
+(function(){
+  const VER = "v5.16.9-ml";
+  // Try to surface version without changing UI
+  try {
+    const verEl = document.querySelector('[data-ver], #ver, .ver, .versionBadge');
+    if (verEl) verEl.textContent = VER;
+  } catch(e){}
+
+  // Simple debug log helper that appends to any <pre>/<code> with "Debug" title or an element[id*=debug]
+  function log(msg){
+    try{
+      const box = document.querySelector('#debug, .debug, pre.debug, pre[title*=Debug], .log, #log');
+      if (box) {
+        box.textContent += (box.textContent ? "\n" : "") + msg;
+      } else {
+        console.log(msg);
+      }
+    }catch(e){ console.log(msg); }
+  }
+
+  // Find global tf, mobilenet, and knnClassifier instances the app already uses
+  // We DO NOT create new ones to avoid changing the training model logic.
+  const waitForKNN = () => new Promise(resolve => {
+    let tries = 0;
+    const t = setInterval(() => {
+      tries++;
+      const knn = window.knn || window.knnClassifier || window.classifier || (window.app && window.app.knn);
+      if (knn && typeof knn.getClassifierDataset === 'function') {
+        clearInterval(t);
+        resolve(knn);
+      }
+      if (tries > 400) { clearInterval(t); resolve(null); } // ~20s
+    }, 50);
+  });
+
+  function flatTo2D(arr, depth=1024){
+    if (!Array.isArray(arr)) arr = Array.from(arr || []);
+    const rows = Math.floor(arr.length / depth);
+    const size = rows * depth;
+    const used = arr.slice(0, size);
+    return {rows, tensor: (rows ? tf.tensor2d(used, [rows, depth]) : null), size};
+  }
+
+  function datasetFromJSON(obj, depth=1024){
+    // Accept both {dataset:{}} and plain {} shapes
+    const src = obj && (obj.dataset || obj);
+    const map = {};
+    let total = 0, classes = 0;
+    for (const key in src){
+      const entry = src[key];
+      // support {data:[], shape:[r,1024]} or just array
+      const vec = Array.isArray(entry) ? entry
+                : Array.isArray(entry?.data) ? entry.data
+                : Array.isArray(entry?.values) ? entry.values
+                : [];
+      const {rows, tensor, size} = flatTo2D(vec, depth);
+      if (tensor && rows>0){
+        // knn expects 2D [N,1024]
+        map[key] = tensor;
+        total += size;
+        classes++;
+      }
+    }
+    return {map, total, classes};
+  }
+
+  async function autoRestoreFromLocalStorage(){
+    try{
+      const raw = localStorage.getItem("knnDataset");
+      if (!raw) return false;
+      const json = JSON.parse(raw);
+      const {map, total, classes} = datasetFromJSON(json, 1024);
+      const knn = await waitForKNN();
+      if (!knn) return false;
+      if (Object.keys(map).length){
+        knn.setClassifierDataset(map);
+        log(`✅ auto-restored from localStorage • classes: ${classes} • values: ${total}`);
+        // dispose tensors after copy to internal vars
+        for (const k in map) map[k].dispose && map[k].dispose();
+        return true;
+      }
+      return false;
+    }catch(e){
+      log("ERR auto-restore: "+e.message);
+      return false;
+    }
+  }
+
+  async function saveToLocalStorage(){
+    const knn = await waitForKNN();
+    if (!knn) return false;
+    const ds = knn.getClassifierDataset();
+    const out = {};
+    let total = 0, classes = 0;
+    for (const label in ds){
+      const t = ds[label];
+      if (!t || !t.dataSync) continue;
+      const data = Array.from(t.dataSync()); // Float32Array -> Array
+      out[label] = { data, shape: [Math.floor(data.length/1024), 1024] };
+      total += data.length;
+      classes++;
+    }
+    localStorage.setItem("knnDataset", JSON.stringify({dataset: out, depth: 1024, total, classes, ver: VER}));
+    log(`💾 saved to local • classes: ${classes} • values: ${total}`);
+    return true;
+  }
+
+  async function exportJSONFile(){
+    try{
+      const knn = await waitForKNN();
+      const ds = knn.getClassifierDataset();
+      const out = {};
+      let total = 0, classes = 0;
+      for (const label in ds){
+        const t = ds[label];
+        if (!t || !t.dataSync) continue;
+        const data = Array.from(t.dataSync());
+        out[label] = { data, shape: [Math.floor(data.length/1024), 1024] };
+        total += data.length; classes++;
+      }
+      const blob = new Blob([JSON.stringify({dataset: out, depth: 1024, total, classes, ver: VER})], {type:"application/json"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "remmikub-knn.json";
+      document.body.appendChild(a); a.click(); a.remove();
+      log(`📤 exported JSON • classes: ${classes} • values: ${total}`);
+    }catch(e){ alert("ייצוא נכשל"); log("ERR export: "+e.message); }
+  }
+
+  async function importJSONFile(file){
+    try{
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const {map, total, classes} = datasetFromJSON(json, 1024);
+      const knn = await waitForKNN();
+      if (!knn) throw new Error("KNN not ready");
+      if (Object.keys(map).length===0) throw new Error("קובץ ריק");
+      knn.setClassifierDataset(map);
+      for (const k in map) map[k].dispose && map[k].dispose();
+      log(`📦 restored from JSON • classes: ${classes} • values: ${total}`);
+      // also persist locally for auto-restore
+      localStorage.setItem("knnDataset", JSON.stringify(json));
+      return true;
+    }catch(e){
+      alert("ייבוא נכשל");
+      log("ERR restore: "+e.message);
+      return false;
+    }
+  }
+
+  // Wire existing buttons if they exist (names kept generic to avoid UI changes)
+  window.__knnIO__ = { saveToLocalStorage, autoRestoreFromLocalStorage, exportJSONFile, importJSONFile };
+
+  // Hook common buttons by text or id if present (non-breaking)
+  window.addEventListener('DOMContentLoaded', () => {
+    autoRestoreFromLocalStorage();
+    const btnSave = document.querySelector('#btnSaveModel, [data-save-model], button:contains("שמור מודל")');
+    if (btnSave) btnSave.addEventListener('click', saveToLocalStorage);
+    const btnExport = document.querySelector('#btnExportJSON, [data-export-json], button:contains("JSON ייצא")');
+    if (btnExport) btnExport.addEventListener('click', exportJSONFile);
+    const fileImport = document.querySelector('#fileImportJSON, input[type=file][data-json-import]');
+    if (fileImport) fileImport.addEventListener('change', e => e.target.files[0] && importJSONFile(e.target.files[0]));
+  });
+})();
+</script>
+
+</body>
 </html>
