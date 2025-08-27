@@ -90,7 +90,7 @@
 </div>
 <!-- אימון מודל – תמיד גלוי (על המכשיר) -->
 <div class="card" id="trainCard">
-<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/></div><h2>אימון מודל זיהוי (CPU)</h2>
+<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/><div id="snapThumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-inline-start:8px;"></div></div><h2>אימון מודל זיהוי (CPU)</h2>
 <div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
 <div class="sep"></div>
 <div class="row" style="align-items:center;gap:10px">
@@ -308,11 +308,36 @@ function bump(index, delta){
 
 // == זיהוי אחרון – תצוגה ==
 function showLastDetect(playerIndex, file){
-  const url = URL.createObjectURL(file);
-  const img = null;
-  const label = $$('#lastDetectLabel');
-  // no image preview
-  if(label){ label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`; }
+  try{
+    const url = URL.createObjectURL(file);
+    const imgEl = document.getElementById('lastDetectImg');
+    const label = document.getElementById('lastDetectLabel');
+    if (label) {
+      label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`;
+    }
+    if (imgEl){
+      imgEl.src = url;
+      imgEl.style.display = 'block';
+    }
+    // add a small thumbnail of the snap (non-destructive)
+    const host = document.getElementById('snapThumbs');
+    if (host){
+      const thumb = new Image();
+      thumb.width = 48; thumb.height = 48;
+      thumb.style.borderRadius = '6px';
+      thumb.style.border = '1px solid #22324a';
+      thumb.style.objectFit = 'cover';
+      thumb.onload = ()=>{
+        host.prepend(thumb);
+        while (host.children.length > 10) host.removeChild(host.lastElementChild);
+      };
+      thumb.src = url;
+    }
+    // revoke later to allow display
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 5000);
+  }catch(e){
+    log('showLastDetect ERR: ' + (e && e.message || e));
+  }
 }
 
 // ====== אתחול שמות וניקוד ======
@@ -617,5 +642,5 @@ else {
 })();
 </script>
 
-<!-- version updated 1756290570.2479835 --></body>
+<!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 --></body>
 </html>
