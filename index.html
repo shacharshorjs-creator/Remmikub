@@ -285,6 +285,21 @@ try{
       lbl.textContent = `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
     }
   }
+        // --- segmentation + per-tile classify (no UI changes elsewhere) ---
+        try{
+          const can = await __fileToCanvas(e.target.files[0]);
+          const tiles = __segmentTiles(can);
+          const host = document.getElementById('snapThumbs');
+          if (host){
+            for (const tcv of tiles){
+              const pred = await __classifyCanvas(tcv);
+              const txt = pred ? (pred.label + ' • ' + Math.round(pred.conf*100)+'%') : 'לא זוהה';
+              const urlTile = tcv.toDataURL('image/jpeg', 0.9);
+              __addThumb(host, urlTile, txt, !!pred);
+            }
+          }
+        }catch(_e){ /* silent */ }
+
   // מילוי תיבת 'ערך' בשורת השחקן הנכון
   if(Number.isFinite(detected)) { try{ (row.querySelector('input.manual')||row.querySelector('input[type="number"]')).value = detected; }catch(_){ } }
   // אם יש זיהוי נשתמש במנגנון הנקודות הקיים (אם ביקשת בעבר)
@@ -642,5 +657,70 @@ else {
 })();
 </script>
 
-<!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 --></body>
+<!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 -->
+<script>
+// __seg_helpers_v61__
+async function __fileToCanvas(file){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{ 
+      const c=document.createElement('canvas'); c.width=img.naturalWidth; c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      resolve(c);
+    };
+    img.onerror=reject;
+    img.src=URL.createObjectURL(file);
+  });
+}
+function __segmentTiles(canvas){
+  const W=canvas.width, H=canvas.height;
+  const ctx=canvas.getContext('2d');
+  const data=ctx.getImageData(0,0,W,H).data;
+  const proj=new Array(W).fill(0);
+  for(let x=0;x<W;x++){ let s=0; for(let y=0;y<H;y++){ const i=(y*W+x)*4; const v=(data[i]+data[i+1]+data[i+2])/3; s+= (255-v); } proj[x]=s/H; }
+  const thr = 20;
+  let regions=[], start=0;
+  for(let x=0;x<W;x++){ if(proj[x]<thr){ if(x-start>W*0.1) regions.push([start,x]); start=x+1; } }
+  if(W-start>W*0.1) regions.push([start,W]);
+  let crops=[];
+  for(const [sx,ex] of regions){ const w=ex-sx; if(w<40) continue; const c=document.createElement('canvas'); c.width=w; c.height=H; c.getContext('2d').drawImage(canvas,sx,0,w,H,0,0,w,H); crops.push(c); }
+  if(crops.length<2){ // fallback grid
+    const cols = (W>H*1.2)?3:2; const cell=Math.floor(W/cols); const alt=[];
+    for(let i=0;i<cols;i++){ const sx=i*cell, w=(i==cols-1? W-sx:cell); if(w<40) continue;
+      const c=document.createElement('canvas'); c.width=w; c.height=H; c.getContext('2d').drawImage(canvas,sx,0,w,H,0,0,w,H); alt.push(c);
+    }
+    if(alt.length>crops.length) crops=alt;
+  }
+  return crops.slice(0,6);
+}
+async function __classifyCanvas(cnv){
+  try{ 
+    if (typeof net==='undefined' || !net || !net.infer || typeof classifier==='undefined' || !classifier || !classifier.predictClass) return null;
+    const img = tf.browser.fromPixels(cnv).toFloat();
+    const bat = tf.tidy(()=>{ 
+      const resized=tf.image.resizeBilinear(img,[224,224]);
+      const norm = resized.div(255);
+      return norm.expandDims(0);
+    });
+    const emb = net.infer(bat, true);
+    const res = await classifier.predictClass(emb, 3);
+    bat.dispose(); emb.dispose(); img.dispose();
+    if(!res || !res.confidences || (res.label==null) || (res.confidences[res.label]===undefined)) return null;
+    return {label: res.label, conf: res.confidences[res.label]};
+  }catch(e){ try{console.debug('classify err',e)}catch(_){ } return null; }
+}
+function __addThumb(host, dataURL, text, ok){
+  const wrap=document.createElement('div'); wrap.className='thumb';
+  const im=new Image(); im.src=dataURL; im.loading='lazy';
+  im.style.width='100%'; im.style.height='78px'; im.style.objectFit='cover'; im.style.display='block';
+  const cap=document.createElement('div'); cap.className='cap';
+  const sp=document.createElement('span'); sp.className='p'; sp.textContent=text;
+  const st=document.createElement('span'); st.className= ok?'ok':'ko'; st.textContent= ok?'✓':'×';
+  cap.appendChild(sp); cap.appendChild(st);
+  wrap.appendChild(im); wrap.appendChild(cap);
+  host.prepend(wrap);
+  while(host.children.length>12) host.removeChild(host.lastElementChild);
+}
+</script>
+</body>
 </html>
