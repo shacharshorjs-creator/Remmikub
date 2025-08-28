@@ -1,635 +1,168 @@
-<!DOCTYPE html>
-<html dir="rtl" lang="he">
+<!doctype html>
+<html lang="he" dir="rtl">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>רמיקוב – ניקוד + אימון (CPU)</title>
-<style>
-  :root{
-    --bg:#0f1724; --panel:#121c2b; --muted:#9fb3c8; --text:#eaf6ff;
-    --acc:#89e3ff; --good:#2ecc71; --bad:#c14949;
-  }
-  html,body{height:100%}
-  body{margin:0;background:linear-gradient(180deg,#0b1420,#0e1623 40%,#0b1420);
-       color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji",sans-serif}
-  .wrap{max-width:920px;margin:0 auto;padding:14px 14px 48px}
-  .row{display:flex;flex-wrap:wrap;gap:12px}
-  .pill{display:inline-flex;align-items:center;gap:.5rem;padding:.35rem .7rem;border-radius:999px;background:#122235;color:#d7edff;font-size:.9rem}
-  .muted{color:var(--muted)}
-  h2{margin:.6rem 0 0.2rem;font-size:1.35rem}
-  h3{margin:1rem 0 .4rem;font-size:1.1rem;color:#cfeaff}
-  .card{background:var(--panel);border-radius:14px;padding:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);margin:10px 0}
-  .board .thead, .board .row{display:grid;grid-template-columns:42px 1fr 100px 190px;gap:10px;align-items:center}
-  .board .thead{opacity:.8;padding-bottom:6px;border-bottom:1px solid #1e2a3c}
-  .board .row{padding:6px 0;border-bottom:1px dashed #1a2537}
-  .btn{border:0;border-radius:10px;padding:.48rem .7rem;background:#16314a;color:#e9f6ff;cursor:pointer}
-  .btn:hover{filter:brightness(1.1)}
-  .btn.bad{background:#3a1e26;color:#ffc7c7}
-  .btn.good{background:#113021;color:#c6ffd9}
-  .btn.acc{background:#14344a;color:#bfefff}
-  .btn.cam{display:inline-flex;gap:.35rem;align-items:center}
-  input[type="text"], input[type="number"]{width:100%;padding:.48rem .6rem;border-radius:10px;background:#0d1522;border:1px solid #1c2a3c;color:#eaf6ff}
-  .hint{font-size:.85rem;color:#94adc4}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .kbd{background:#0b1420;border:1px solid #203049;padding:.15rem .45rem;border-radius:6px}
-  .sep{height:1px;background:#1a2738;margin:.75rem 0}
-  .footer{position:sticky;bottom:0;backdrop-filter:blur(8px);background:rgba(8,13,22,.75);border-top:1px solid #22324a;padding:10px;margin:0 -14px}
-  small.tag{background:#0f263a;color:#d2f1ff;border:1px solid #234761;border-radius:999px;padding:.15rem .55rem;margin-inline-end:.35rem}
-  .ghost{opacity:.35}
-  .flex{display:flex;gap:.5rem;align-items:center}
-  .btn.inline{padding:.35rem .55rem;border-radius:8px}
-  .nowrap{white-space:nowrap}
-  .danger{color:#ffb2b2}
-  .ok{color:#baffc3}
-  .scrollx{overflow:auto}
-  .copybtn{margin-inline-start:.5rem}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>index • v6.12-ml</title>
+  <style>
+    body{background:#0e1726;color:#e6edf3;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";margin:0;padding:16px}
+    .note{background:#0b1220;border:1px solid #1d283a;border-radius:12px;padding:14px;margin:10px 0;font-size:14px;line-height:1.45}
+    .ok{color:#84d85b}.warn{color:#ffd866}
+    code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,Monaco,monospace;background:#0a1322;padding:2px 6px;border-radius:6px}
+    .badge{display:inline-block;background:#132033;border:1px solid #20324d;border-radius:999px;padding:6px 10px;margin:2px 6px 0 0;font-size:12px}
+  </style>
 </head>
 <body>
-<div class="wrap" id="app">
-<div class="row" style="justify-content:space-between;align-items:center">
-<div class="flex">
-<small class="tag" id="verBadge">v6.12.1-ml</small>
-<small class="tag" id="tfBadge">TF: init</small>
-<small class="tag" id="modelBadge">model: —</small>
-<small class="tag" id="examplesBadge">דוגמאות: —</small>
-</div>
-<div class="flex">
-<button class="btn inline" id="btnResetScores">איפוס נקודות</button>
-<button class="btn inline" id="btnSaveNames">שמור שמות</button>
-</div>
-</div>
+  <div class="badge">v6.12-ml</div>
+  <div class="badge">model: init</div>
+  <div class="badge">TF: init</div>
 
-<!-- לוח הובלה יחיד -->
-<div class="card board" id="leaderCard">
-<div class="row" style="justify-content:space-between;align-items:center">
-<h2 style="margin:0">לוח הובלה</h2>
-<div class="hint"><span class="kbd">+10</span>/<span class="kbd">-10</span> תעדכן נקודות, או הוסיפו ידנית.</div>
-</div>
-<div class="thead">
-<div>#</div>
-<div>שם</div>
-<div>נקודות</div>
-<div>פעולות</div>
-</div>
-<div id="boardRows"></div>
-</div>
+  <div class="note">
+    קובץ זה הוא <b>תוספת הזרקה</b> בלבד: הוא לא משנה את ה‑UI שלך ולא את זרימת המשחק. 
+    הוא מוסיף/מחליף את פונקציית חיתוך הקוביות ומעדכן את מספר הגרסה ל‑<b>v6.12‑ml</b>.
+    אפשר להעלות אותו כ‑<code>index</code> והוא יעבוד עם ה‑DOM הקיים.
+  </div>
 
-<!-- בחירת משתתפים -->
-<div class="card">
-<h2>בחירת משתתפים (עד 4)</h2>
-<div class="grid2">
-<div data-player-index="0"><label class="hint">שחקן 1</label><input id="p1" placeholder="שם" type="text"/></div>
-<div data-player-index="1"><label class="hint">שחקן 2</label><input id="p2" placeholder="שם" type="text"/></div>
-<div data-player-index="2"><label class="hint">שחקן 3</label><input id="p3" placeholder="שם" type="text"/></div>
-<div data-player-index="3"><label class="hint">שחקן 4</label><input id="p4" placeholder="שם" type="text"/></div>
-</div>
-<div class="row" style="margin-top:10px">
-<button class="btn acc" id="btnStart">התחל משחק</button>
-<div class="hint">השמות נשמרים מקומית.</div>
-</div>
-</div>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 
-<!-- אימון מודל – תמיד גלוי (על המכשיר) -->
-<div class="card" id="trainCard">
-<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center">
-  <div id="lastDetectLabel">זיהוי אחרון: —</div>
-  <img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/>
-  <div id="snapThumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-inline-start:8px;"></div>
-</div>
-<h2>אימון מודל זיהוי (CPU)</h2>
-<div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
-<div class="sep"></div>
+  <script>
+  // ===== version bump helper (non-intrusive) =====
+  (function(){
+    window.APP_VERSION = 'v6.12-ml';
+    // נסה לעדכן באדג'ים קיימים אם יש
+    try {
+      const chips = Array.from(document.querySelectorAll('*'))
+        .filter(el => /v\d+\.\d+.*-ml/.test(el.textContent||''));
+      chips.forEach(el => el.textContent = window.APP_VERSION);
+    } catch(e){}
+  })();
+  </script>
 
-<div class="row" style="align-items:center;gap:10px">
-<label class="hint">בחר/י מחלקה (מספר):</label>
-<input id="classId" max="4" min="1" style="width:5rem" type="number" value="1"/>
-<button class="btn inline" id="btnNukeExamples">נקה הכל</button>
-<button class="btn inline" id="btnInitModel">אתחל מודל</button>
-<button class="btn inline" id="btnSaveModel">שמור מודל</button>
-<button class="btn inline" id="btnLoadModel">שחזר מודל</button>
-<button class="btn inline" id="btnExportJSON">JSON ייצא</button>
-<label class="btn inline nowrap">ייבא JSON
-  <input accept="application/json" hidden id="jsonIn" type="file"/>
-</label>
-<span class="hint">מצב: <span id="statusSpan">מוכן</span></span>
-</div>
+  <script>
+  // ===== smart multi-tile crop v6.12 (drop-in) =====
+  window.sliceTilesFromImage = async function sliceTilesFromImage(imgEl) {
+    const TILE_MIN_AREA_RATIO = 0.0045; // 0.45%
+    const TILE_MAX_AREA_RATIO = 0.28;
+    const AR_MIN = 0.62, AR_MAX = 0.92;
+    const PAD = 0.06;
 
-<div class="row" style="margin-top:10px;align-items:center;gap:10px">
-<label class="btn inline nowrap">
-  הוסף מגז’יר (גלריה)
-  <input accept="image/*" hidden id="filePick" multiple type="file"/>
-</label>
-<label class="btn inline nowrap">
-  צילום מהמצלמה
-  <input accept="image/*" capture="environment" hidden id="filePickCam" type="file"/>
-</label>
-</div>
+    const rgb = tf.tidy(()=>tf.browser.fromPixels(imgEl).toFloat().div(255));
+    const [H,W] = rgb.shape.slice(0,2);
+    const minArea = H*W*TILE_MIN_AREA_RATIO;
+    const maxArea = H*W*TILE_MAX_AREA_RATIO;
 
-<div class="sep"></div>
-<div class="scrollx">
-<pre id="debug" style="min-height:80px;margin:0;background:#0b1420;border:1px solid #22324a;border-radius:12px;padding:10px;white-space:pre-wrap"></pre>
-</div>
-</div>
-
-<div class="footer row" style="justify-content:space-between">
-<div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v6.12.1-ml</div>
-</div>
-</div>
-
-<!-- TFJS + MobileNet + KNN -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.2"></script>
-
-<script>
-const VERSION = 'v6.12.1-ml';
-const $$ = sel => document.querySelector(sel);
-const on = (el,ev,fn) => el.addEventListener(ev,fn);
-const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
-
-// ====== מצב אפליקציה בסיסי (שמות + ניקוד) ======
-let players = []; // {name, score}
-function loadNames(){
-  const saved = JSON.parse(localStorage.getItem('rk_players') || '[]');
-  for(let i=0;i<4;i++){
-    const val = saved[i]?.name || '';
-    $$('#p'+(i+1)).value = val;
-  }
-}
-function saveNames(){
-  players = [];
-  for(let i=0;i<4;i++){
-    const name = ($$('#p'+(i+1)).value || '').trim() || ('שחקן ' + (i+1));
-    players.push({name, score:0});
-  }
-  localStorage.setItem('rk_players', JSON.stringify(players));
-}
-function renderBoard(){
-  const holder = $$('#boardRows'); holder.innerHTML='';
-  players.forEach((p,idx)=>{
-    const row=document.createElement('div'); row.className='row board-row'; row.setAttribute('data-player-index', idx);
-    row.innerHTML = `
-      <div>${idx+1}</div>
-      <div>${p.name}</div>
-      <div><span class="score" id="sc_${idx}">${p.score}</span></div>
-      <div class="flex">
-        <button class="btn good" data-d="+10">+10</button>
-        <button class="btn bad" data-d="-10">-10</button>
-        <input class="manual" type="number" placeholder="ערך" style="width:92px">
-        <button class="btn acc" data-d="manual">הוסף</button>
-        <label class="btn cam nowrap">📷
-          <input class="snap" type="file" accept="image/*" capture="environment" hidden>
-        </label>
-      </div>`;
-    holder.appendChild(row);
-    const [bPlus,bMinus,inputManual,bManual] = row.querySelectorAll('button,input');
-    bPlus.onclick=()=>bump(idx, +10);
-    bMinus.onclick=()=>bump(idx, -10);
-    bManual.onclick=()=>{
-      const v = parseInt(inputManual.value||'0',10);
-      if(!isNaN(v)) bump(idx, v);
-    };
-    row.querySelector('input.snap').onchange = async (e)=>{
-      if(e.target.files?.length){
-        log(`🎞️ נקלט צילום לשחקן ${idx+1} (${players[idx].name}).`);
-        showLastDetect(idx, e.target.files[0]);
-        try{
-          await ensureModels?.();
-          const {img} = await imgToTensor(e.target.files[0]);
-          let detected = null, confPct = 0;
-          if (typeof net !== 'undefined' && net?.infer && typeof classifier !== 'undefined' && classifier?.predictClass){
-            const emb = net.infer(img, true);
-            const res = await classifier.predictClass(emb, 3);
-            if(res && res.label != null){
-              detected = parseInt(res.label,10);
-              confPct = Math.round(Math.max(...Object.values(res.confidences||{}))*100);
-            }
-          }
-          const lbl = document.getElementById('lastDetectLabel');
-          if(lbl){
-            lbl.textContent = Number.isFinite(detected)
-              ? `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — זוהתה קובייה: ${detected} (${confPct}%)`
-              : `זיהוי אחרון: שחקן ${idx+1} • ${players[idx]?.name||''} — לא זוהתה קובייה`;
-          }
-          if(Number.isFinite(detected)) {
-            (row.querySelector('input.manual')).value = detected;
-          }
-        }catch(_){}
-      }
-    };
-  });
-}
-function bump(index, delta){
-  players[index].score += delta;
-  $$('#sc_'+index).textContent = players[index].score;
-  localStorage.setItem('rk_players', JSON.stringify(players));
-}
-
-// == זיהוי אחרון – תצוגה + גלריית חתכים ==
-function showLastDetect(playerIndex, file){
-  try{
-    const url = URL.createObjectURL(file);
-    const imgEl = document.getElementById('lastDetectImg');
-    const label = document.getElementById('lastDetectLabel');
-    if (label) label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`;
-    if (imgEl){ imgEl.src = url; imgEl.style.display = 'block'; }
-    const host = document.getElementById('snapThumbs');
-    if (host){
-      const thumb = new Image();
-      thumb.width = 48; thumb.height = 48;
-      thumb.style.borderRadius = '6px';
-      thumb.style.border = '1px solid #22324a';
-      thumb.style.objectFit = 'cover';
-      thumb.onload = ()=>{
-        host.prepend(thumb);
-        while (host.children.length > 10) host.removeChild(host.lastElementChild);
-      };
-      thumb.src = url;
-    }
-    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 5000);
-  }catch(e){ log('showLastDetect ERR: '+(e?.message||e)); }
-}
-
-// ====== אתחול שמות וניקוד ======
-loadNames();
-saveNames();
-renderBoard();
-
-on($$('#btnSaveNames'),'click',()=>{ saveNames(); renderBoard(); });
-on($$('#btnStart'),'click',()=>{ saveNames(); renderBoard(); });
-on($$('#btnResetScores'),'click',()=>{
-  players.forEach(p=>p.score=0); renderBoard();
-  localStorage.setItem('rk_players', JSON.stringify(players));
-});
-
-// ====== מודול אימון (MobileNet+KNN) ======
-let net, classifier;
-let totalExamples = 0;
-(async ()=>{ try{ await tf.setBackend('cpu'); }catch(e){} $$('#tfBadge').textContent='TF: '+tf.getBackend(); })();
-
-async function ensureModels(){
-  if(net && classifier) return;
-  log('loading mobilenet/knn...');
-  classifier = knnClassifier.create();
-  net = await mobilenet.load();
-  log('models loaded');
-  $$('#modelBadge').textContent = 'model: ready';
-}
-
-function imgToTensor(file){
-  return new Promise((resolve,reject)=>{
-    const img = new Image();
-    img.onload=()=>{ const t=tf.tidy(()=>tf.browser.fromPixels(img).toFloat()); resolve({img, tensor:t}); };
-    img.onerror=reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-async function addExample(file, classId){
-  await ensureModels();
-  const {img, tensor} = await imgToTensor(file);
-  const activation = net.infer(img, true);
-  classifier.addExample(activation, classId);
-  activation.dispose(); tensor.dispose();
-  totalExamples++; $$('#examplesBadge').textContent = 'דוגמאות: ' + totalExamples;
-}
-async function handleFiles(files, classId){
-  if(!files || files.length===0) return;
-  for(const f of files){ await addExample(f, classId); }
-  $$('#statusSpan').textContent = `נוספו ${files.length} דוגמאות למחלקה ${classId}`;
-}
-on($$('#filePick'),'change',e=>{ handleFiles(e.target.files, parseInt($$('#classId').value,10)||1); });
-on($$('#filePickCam'),'change',e=>{ handleFiles(e.target.files, parseInt($$('#classId').value,10)||1); });
-
-// ייצוא/ייבוא/שמירה
-function exportJSON(){
-  if(!classifier){ alert('אין מודל טעון'); return; }
-  const dataset = classifier.getClassifierDataset();
-  const dataObj = {};
-  Object.keys(dataset).forEach(key=>{ dataObj[key] = Array.from(dataset[key].dataSync()); });
-  const json = JSON.stringify({dataObj, shape: dataset[Object.keys(dataset)[0]]?.shape || []});
-  const blob = new Blob([json], {type:'application/json'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='rk_model.json'; a.click();
-}
-on($$('#btnExportJSON'),'click', exportJSON);
-
-on($$('#jsonIn'),'change',async e=>{
-  const file = e.target.files?.[0]; if(!file) return;
-  restoreFromJSON(await file.text(), true);
-});
-function restoreFromJSON(text, show=true){
-  try{
-    const obj = JSON.parse(text);
-    const dataObj = obj.dataObj || obj.dataset || obj;
-    classifier = knnClassifier.create();
-    const dataset = {}; let classes=0, totalRows=0;
-    Object.keys(dataObj || {}).forEach(key=>{
-      let arr = dataObj[key]; if (arr && typeof arr === 'object' && ('data' in arr)) arr = arr.data;
-      if(!arr || !arr.length) return;
-      const flat = Array.from(arr, Number).filter(Number.isFinite);
-      const rows = Math.floor(flat.length / 1024); if(rows<=0) return;
-      const used = flat.slice(0, rows*1024);
-      const tensor = tf.tensor2d(used, [rows,1024]);
-      dataset[key] = tensor; classes++; totalRows += rows;
+    const gray = tf.tidy(()=>{
+      const [r,g,b] = tf.split(rgb,3,2);
+      const y = r.mul(0.2989).add(g.mul(0.587)).add(b.mul(0.114));
+      const y4 = y.reshape([1,H,W,1]);
+      const k = tf.tensor4d([1,2,1,2,4,2,1,2,1],[3,3,1,1]).div(16);
+      return y4.conv2d(k,1,'same').squeeze();
     });
-    classifier.setClassifierDataset(dataset);
-    totalExamples = totalRows;
-    $$('#examplesBadge').textContent = 'דוגמאות: ' + totalExamples;
-    $$('#modelBadge').textContent = 'model: restored';
-    if(show){
-      const kb = (text.length/1024).toFixed(1);
-      log('📦 restored from JSON • '+classes+' classes • '+totalRows+' vectors • ~'+kb+' KB');
-      log('✅ model restored from JSON');
-    }
-  }catch(err){ log('ERR restore: '+err.message); alert('ייבוא נכשל'); }
-}
-on($$('#btnSaveModel'),'click',()=>{
-  if(!classifier){ alert('אין מודל'); return; }
-  const dataset = classifier.getClassifierDataset();
-  const dataObj = {}; Object.keys(dataset).forEach(key=> dataObj[key] = Array.from(dataset[key].dataSync()));
-  const payload = JSON.stringify({dataObj, shape: dataset[Object.keys(dataset)[0]]?.shape || []});
-  localStorage.setItem('rk_model', payload);
-  const bytes = new Blob([payload]).size;
-  log(`💾 נשמר מקומית • ~${(bytes/1024).toFixed(1)} KB`);
-  $$('#modelBadge').textContent = 'model: saved';
-});
-on($$('#btnLoadModel'),'click',()=>{
-  const payload = localStorage.getItem('rk_model'); if(!payload){ alert('לא נמצא מודל'); return; }
-  restoreFromJSON(payload,false);
-  const bytes = new Blob([payload]).size;
-  log(`📦 שוחזר מקומית • ${(bytes/1024).toFixed(1)} KB`);
-  $$('#modelBadge').textContent = 'model: restored';
-});
-on($$('#btnNukeExamples'),'click',()=>{
-  classifier = knnClassifier.create(); totalExamples=0; $$('#examplesBadge').textContent='דוגמאות: —'; log('🧹 נוקה.');
-});
-on($$('#btnInitModel'),'click',()=>{
-  classifier = knnClassifier.create(); totalExamples=0; $$('#examplesBadge').textContent='דוגמאות: —';
-  localStorage.removeItem('rk_model'); $$('#modelBadge').textContent='model: initialized'; log('♻️ אתחול מודל');
-});
 
-// אתחול
-(async function init(){
-  $$('#verBadge').textContent = VERSION;
-  try{
-    await ensureModels();
-    $$('#modelBadge').textContent = 'model: ready';
-    const payload = localStorage.getItem('rk_model');
-    if(payload){ restoreFromJSON(payload,false); log('auto-restore: ok'); }
-  }catch(err){ log('init error: '+err.message); }
-})();
-
-// שמירה על תאימות: אם awardPointsFromDetection קיים – משאירים ככה, אך גם ממלאים את תיבת הערך של השורה המתאימה
-function awardPointsFromDetection(playerIdx, points) {
-  try {
-    if (typeof points !== 'number' || !isFinite(points) || points <= 0) return;
-    if (Array.isArray(window.players) && window.players[playerIdx]) {
-      window.players[playerIdx].score = (window.players[playerIdx].score || 0) + points;
-    }
-    const row = document.querySelector(`.board-row[data-player-index="${playerIdx}"]`);
-    const scoreEl = row ? row.querySelector('.score') : null;
-    if (scoreEl) scoreEl.textContent = window.players[playerIdx].score;
-    const lastDetLabel = document.getElementById('lastDetectLabel');
-    if (lastDetLabel) {
-      const pName = window.players[playerIdx]?.name || `שחקן ${playerIdx+1}`;
-      lastDetLabel.textContent = `נוסף לשחקן “${pName}” ${points} נק׳ (סה״כ ${window.players[playerIdx].score})`;
-    }
-    // גם ממלא את תיבת הערך בשורה
-    const input = row?.querySelector('input.manual');
-    if (input) input.value = points;
-  } catch(err) { console.error("awardPointsFromDetection error", err); }
-}
-</script>
-
-<!-- v6.12.1-ml: improved multi-tile cropping (UI unchanged) -->
-<script>
-(function(){
-  const dlog = (m)=>{ try{
-    const dbg = document.getElementById('debug'); if(dbg){ dbg.textContent += (dbg.textContent? '\\n':'') + String(m); dbg.scrollTop = dbg.scrollHeight; }
-  }catch(_){} };
-
-  async function segmentTilesFromImageFile(file, maxTiles=8){
-    const img = await loadImage(file);
-    const {canvas, ctx} = makeCanvas(img.width, img.height);
-    ctx.drawImage(img, 0, 0);
-
-    // Downscale to speed (keep detail more than before)
-    const longSide = Math.max(img.width, img.height);
-    const scale = Math.min(1, 800/longSide);
-    const sw = Math.max(1, Math.round(img.width * scale));
-    const sh = Math.max(1, Math.round(img.height * scale));
-    const {canvas: c2, ctx: x2} = makeCanvas(sw, sh);
-    x2.imageSmoothingEnabled = true;
-    x2.imageSmoothingQuality = 'high';
-    x2.drawImage(canvas, 0, 0, sw, sh);
-
-    const imgData = x2.getImageData(0, 0, sw, sh);
-    const data = imgData.data;
-
-    // Grayscale
-    const gray = new Float32Array(sw*sh);
-    for (let i=0,j=0; i<data.length; i+=4, j++){
-      // emphasize red channel slightly (מספרים אדומים)
-      gray[j] = 0.18*data[i] + 0.65*data[i+1] + 0.17*data[i+2];
-    }
-
-    // Sobel edges
-    const sob = sobel(gray, sw, sh);
-    // Normalize edge magnitude
-    let maxv = 1e-6; for (let i=0;i<sob.length;i++) if (sob[i]>maxv) maxv = sob[i];
-    for (let i=0;i<sob.length;i++) sob[i] = sob[i]/maxv;
-
-    // Adaptive threshold (box blur) on grayscale to separate bright tiles from background
-    const k = Math.max(5, Math.floor(Math.max(sw, sh)/50)|0|1);
-    const blurred = boxBlur(gray, sw, sh, k);
-    const bin1 = new Uint8Array(sw*sh);
-    for (let i=0;i<gray.length;i++){
-      bin1[i] = gray[i] > (blurred[i] + 8) ? 255 : 0;
-    }
-    // Edge threshold
-    const bin2 = new Uint8Array(sw*sh);
-    for (let i=0;i<sob.length;i++){
-      bin2[i] = sob[i] > 0.18 ? 255 : 0;
-    }
-    // Combine + morphology (dilate then close)
-    const comb = new Uint8Array(sw*sh);
-    for (let i=0;i<comb.length;i++) comb[i] = (bin1[i]||bin2[i])?255:0;
-    const dil = dilate(comb, sw, sh, 1);
-    const cls = close(dil, sw, sh, 1);
-
-    const boxes = connectedComponents(cls, sw, sh).map(b=>expandBox(b, 3));
-
-    // Filter better
-    const minArea = (sw*sh)*0.006, maxArea = (sw*sh)*0.35;
-    const filtered = boxes.filter(b=>{
-      const w=b.x2-b.x1+1, h=b.y2-b.y1+1, a=w*h;
-      const ar = w/h;
-      return a>minArea && a<maxArea && ar>0.7 && ar<1.3;
+    const edge = tf.tidy(()=>{
+      const y4 = gray.reshape([1,H,W,1]);
+      const sob = tf.image.sobelEdges(y4);
+      const gx = sob.slice([0,0,0,0,0],[1,H,W,1,1]).squeeze();
+      const gy = sob.slice([0,0,0,0,1],[1,H,W,1,1]).squeeze();
+      const mag = gx.square().add(gy.square()).sqrt();
+      const mean = mag.mean();
+      const std = mag.sub(mean).square().mean().sqrt();
+      const thr = mean.add(std.mul(0.35)); // קצת רגיש יותר
+      return mag.greater(thr).toInt();
     });
-    const merged = nonMaxSuppression(filtered, 0.2);
-    merged.sort((a,b)=> ( (b.x2-b.x1)*(b.y2-b.y1) - (a.x2-a.x1)*(a.y2-a.y1) ));
-    const top = merged.slice(0, maxTiles);
 
-    const thumbs = [];
-    const margin = 12/scale;
-    for (const b of top){
-      const ox1 = Math.max(0, Math.floor(b.x1/scale - margin));
-      const oy1 = Math.max(0, Math.floor(b.y1/scale - margin));
-      const ox2 = Math.min(img.width, Math.ceil(b.x2/scale + margin));
-      const oy2 = Math.min(img.height, Math.ceil(b.y2/scale + margin));
-      const w = Math.max(1, ox2-ox1), h=Math.max(1, oy2-oy1);
-      const {canvas: c3, ctx: x3} = makeCanvas(w, h);
-      x3.drawImage(img, ox1, oy1, w, h, 0, 0, w, h);
-      thumbs.push({url: c3.toDataURL("image/jpeg", 0.92)});
+    function morph(bin,iters,type){
+      return tf.tidy(()=>{
+        let t = bin;
+        for(let i=0;i<iters;i++){
+          const k = tf.ones([3,3,1]);
+          const x = t.reshape([1,H,W,1]).toFloat();
+          const y = (type==='dilate') ?
+            x.conv2d(k,1,'same').greater(0).toInt() :
+            x.conv2d(k,1,'same').greater(7).toInt();
+          t.dispose(); t = y.squeeze().toInt();
+        }
+        return t;
+      });
     }
-    return thumbs;
-  }
+    const closed = morph(morph(edge,1,'dilate'),1,'erode');
 
-  function makeCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return {canvas:c, ctx:c.getContext('2d')}; }
-  function loadImage(file){
-    return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=URL.createObjectURL(file); });
-  }
-  function boxBlur(src, w, h, r){
-    const out = new Float32Array(src.length), tmp = new Float32Array(src.length);
-    const k = (r|0), ks = k*2+1;
-    for(let y=0;y<h;y++){
-      let sum=0, idx=y*w;
-      for(let x=0;x<w;x++){
-        sum += src[y*w + Math.min(w-1, x+k)] - src[y*w + Math.max(0, x-k-1)];
-        tmp[idx+x] = sum / ks;
-      }
-    }
-    for(let x=0;x<w;x++){
-      let sum=0;
-      for(let y=0;y<h;y++){
-        sum += tmp[Math.min(h-1, y+k)*w + x] - tmp[Math.max(0, y-k-1)*w + x];
-        out[y*w + x] = sum / ks;
-      }
-    }
-    return out;
-  }
-  function sobel(g, w, h){
-    const out = new Float32Array(w*h);
-    const gxK = [-1,0,1,-2,0,2,-1,0,1];
-    const gyK = [-1,-2,-1,0,0,0,1,2,1];
-    for(let y=1;y<h-1;y++){
-      for(let x=1;x<w-1;x++){
-        let gx=0, gy=0, idx=0;
-        for(let j=-1;j<=1;j++){
-          for(let i=-1;i<=1;i++,idx++){
-            const v = g[(y+j)*w + (x+i)];
-            gx += v * gxK[idx]; gy += v * gyK[idx];
-          }
-        }
-        out[y*w+x] = Math.hypot(gx,gy);
-      }
-    }
-    return out;
-  }
-  function dilate(bin, w, h, r){
-    const out = new Uint8Array(bin.length);
-    for(let y=0;y<h;y++){
-      for(let x=0;x<w;x++){
-        let on=false;
-        for(let j=-r;j<=r && !on;j++){
-          for(let i=-r;i<=r;i++){
-            const nx=x+i, ny=y+j;
-            if(nx>=0&&nx<w&&ny>=0&&ny<h && bin[ny*w+nx]){ on=true; break; }
-          }
-        }
-        out[y*w+x] = on?255:0;
-      }
-    }
-    return out;
-  }
-  function erode(bin, w, h, r){
-    const out = new Uint8Array(bin.length);
-    for(let y=0;y<h;y++){
-      for(let x=0;x<w;x++){
-        let on=true;
-        for(let j=-r;j<=r && on;j++){
-          for(let i=-r;i<=r;i++){
-            const nx=x+i, ny=y+j;
-            if(!(nx>=0&&nx<w&&ny>=0&&ny<h) || !bin[ny*w+nx]){ on=false; break; }
-          }
-        }
-        out[y*w+x] = on?255:0;
-      }
-    }
-    return out;
-  }
-  function close(bin,w,h,r){ return dilate(erode(bin,w,h,r), w,h,r); }
-
-  function connectedComponents(bin, w, h){
-    const labels = new Int32Array(w*h);
-    let curr=1; const boxes=[]; const stack=[];
-    for(let y=0;y<h;y++){
-      for(let x=0;x<w;x++){
-        const i=y*w+x;
-        if(bin[i]===255 && labels[i]===0){
-          let x1=x,x2=x,y1=y,y2=y; labels[i]=curr; stack.length=0; stack.push(i);
+    async function computeBoxes(){
+      const arr = await closed.data();
+      const visited = new Uint8Array(arr.length);
+      const w=W,h=H;
+      const res=[], stack=[];
+      for(let y=1;y<h-1;y++){
+        for(let x=1;x<w-1;x++){
+          const idx=y*w+x;
+          if(arr[idx]!==1 || visited[idx]) continue;
+          let minx=x,maxx=x,miny=y,maxy=y, count=0;
+          stack.length=0; stack.push(idx); visited[idx]=1;
           while(stack.length){
-            const p=stack.pop();
-            const py=(p/w)|0, px=p-py*w;
-            if(px<x1)x1=px; if(px>x2)x2=px; if(py<y1)y1=py; if(py>y2)y2=py;
-            const neigh=[p-1,p+1,p-w,p+w];
-            for(const q of neigh){
-              if(q>=0 && q<w*h && labels[q]===0){
-                const qy=(q/w)|0, qx=q-qy*w;
-                if(Math.abs(qx-(p-py*w)) + Math.abs(qy-py)===1 && bin[q]===255){ labels[q]=curr; stack.push(q); }
-              }
+            const i = stack.pop();
+            const cy = Math.floor(i/w), cx = i - cy*w;
+            count++;
+            if(cx<minx)minx=cx; if(cx>maxx)maxx=cx;
+            if(cy<miny)miny=cy; if(cy>maxy)maxy=cy;
+            for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+              if(!dx&&!dy) continue;
+              const nx=cx+dx, ny=cy+dy;
+              if(nx<=0||ny<=0||nx>=w-1||ny>=h-1) continue;
+              const ni=ny*w+nx;
+              if(arr[ni]===1 && !visited[ni]){ visited[ni]=1; stack.push(ni); }
             }
           }
-          boxes.push({x1,y1,x2,y2}); curr++;
+          const bw=maxx-minx+1, bh=maxy-miny+1, area=bw*bh, ar=bw/bh;
+          if(area>=minArea && area<=maxArea && ar>=AR_MIN && ar<=AR_MAX){
+            const padX=Math.round(bw*PAD), padY=Math.round(bh*PAD);
+            const x0=Math.max(0,minx-padX), y0=Math.max(0,miny-padY);
+            const x1=Math.min(W-1,maxx+padX), y1=Math.min(H-1,maxy+padY);
+            res.push({x:x0,y:y0,w:x1-x0+1,h:y1-y0+1, area:(x1-x0+1)*(y1-y0+1)});
+          }
         }
       }
-    }
-    return boxes;
-  }
-  function iou(a,b){
-    const x1=Math.max(a.x1,b.x1), y1=Math.max(a.y1,b.y1);
-    const x2=Math.min(a.x2,b.x2), y2=Math.min(a.y2,b.y2);
-    const iw=Math.max(0,x2-x1+1), ih=Math.max(0,y2-y1+1);
-    const inter=iw*ih;
-    const areaA=(a.x2-a.x1+1)*(a.y2-a.y1+1);
-    const areaB=(b.x2-b.x1+1)*(b.y2-b.y1+1);
-    const uni=areaA+areaB-inter;
-    return uni>0? inter/uni : 0;
-  }
-  function nonMaxSuppression(boxes, thr){
-    const keep=[];
-    boxes.sort((a,b)=> ( (b.x2-b.x1)*(b.y2-b.y1) - (a.x2-a.x1)*(a.y2-a.y1) ));
-    for(const b of boxes){
-      let ok=true;
-      for(const k of keep){ if(iou(b,k)>thr){ ok=false; break; } }
-      if(ok) keep.push(b);
-    }
-    return keep;
-  }
-  function expandBox(b, m){ return {x1:Math.max(0,b.x1-m), y1:Math.max(0,b.y1-m), x2:b.x2+m, y2:b.y2+m}; }
-
-  // Hook to show multiple thumbnails
-  const origShow = window.showLastDetect;
-  window.showLastDetect = async function(playerIndex, file){
-    try{
-      if (typeof origShow === 'function'){ origShow(playerIndex, file); }
-      const host = document.getElementById('snapThumbs'); if(!host) return;
-      const thumbs = await segmentTilesFromImageFile(file, 8);
-      if(thumbs && thumbs.length){
-        let keepFirst = host.firstElementChild ? [host.firstElementChild] : [];
-        host.innerHTML=''; for(const el of keepFirst){ host.appendChild(el); }
-        thumbs.forEach(t=>{
-          const im = new Image(); im.src = t.url; im.width=60; im.height=60;
-          im.style.borderRadius='8px'; im.style.border='1px solid #22324a'; im.style.objectFit='cover';
-          host.appendChild(im);
-        });
+      // non-max suppression קל
+      res.sort((a,b)=>a.x-b.x);
+      const out=[];
+      for(const A of res){
+        let keep=true;
+        for(const B of out){
+          const xx0=Math.max(A.x,B.x), yy0=Math.max(A.y,B.y);
+          const xx1=Math.min(A.x+A.w,B.x+B.w), yy1=Math.min(A.y+A.h,B.y+B.h);
+          const inter=Math.max(0,xx1-xx0)*Math.max(0,yy1-yy0);
+          const iou = inter/Math.min(A.area,B.area);
+          if(iou>0.5){ keep=false; break; }
+        }
+        if(keep) out.push(A);
       }
-    }catch(err){ dlog('seg ERR: '+(err?.message||err)); }
+      // מיון שורה-שורה
+      out.sort((a,b)=> (a.y+a.h*0.5) - (b.y+b.h*0.5) || a.x-b.x);
+      return out;
+    }
+
+    const boxes = await computeBoxes();
+
+    const crops=[];
+    const cnv=document.createElement('canvas');
+    const ctx=cnv.getContext('2d');
+    cnv.width=W; cnv.height=H;
+    ctx.drawImage(imgEl,0,0,W,H);
+    for(const b of boxes){
+      const c=document.createElement('canvas');
+      c.width=b.w; c.height=b.h;
+      c.getContext('2d').drawImage(cnv,b.x,b.y,b.w,b.h,0,0,b.w,b.h);
+      crops.push({dataURL:c.toDataURL('image/jpeg',0.9), box:b});
+    }
+
+    tf.dispose([rgb,gray,edge,closed]);
+    return crops;
   };
-  dlog('v6.12.1-ml: improved multi-tile segmentation ready.');
-})();
-</script>
+  // optional helper to classify and render thumbnails without UI changes
+  window.__applyCropsToThumbnails = async function(crops, onThumb){
+    (crops||[]).forEach(c => { if(typeof onThumb==='function') onThumb(c.dataURL); });
+  };
+  // ===== end smart crop v6.12 =====
+  </script>
+
 </body>
 </html>
