@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v6.6-ml</small>
+<small class="tag" id="verBadge">v6.7-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -90,7 +90,7 @@
 </div>
 <!-- אימון מודל – תמיד גלוי (על המכשיר) -->
 <div class="card" id="trainCard">
-<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/><div id="snapThumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-inline-start:8px;"></div></div><h2>אימון מודל זיהוי (CPU)</h2>
+<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/></div><h2>אימון מודל זיהוי (CPU)</h2>
 <div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
 <div class="sep"></div>
 <div class="row" style="align-items:center;gap:10px">
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v6.6-ml</div>
+<div class="muted">© v6.7-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v6.6-ml';
+const VERSION = 'v6.7-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -295,25 +295,6 @@ try{
   }
 }catch(_){ /* keep silent */ }
 if(typeof detectedValue!=='undefined'){ awardPointsFromDetection(idx, detectedValue); }
-        // v6.6 segmentation add-on (append thumbs per tile)
-        try{
-          if(e.target.files && e.target.files[0]){
-            const f = e.target.files[0];
-            const imgTmp = new Image();
-            imgTmp.onload = async ()=>{
-              const can = document.createElement('canvas'); can.width=imgTmp.naturalWidth; can.height=imgTmp.naturalHeight;
-              can.getContext('2d').drawImage(imgTmp,0,0);
-              const tiles = __segmentTiles_v66(can);
-              for(const t of tiles){
-                const pred = await __classifyTileCanvas(t);
-                const txtL = pred ? (pred.label+' • '+((pred.score*100)|0)+'%') : '';
-                __appendTileThumb(t.toDataURL('image/jpeg',0.9), txtL);
-              }
-            };
-            imgTmp.src = URL.createObjectURL(f);
-          }
-        }catch(_){}
-    
       }
     }
   });
@@ -327,36 +308,11 @@ function bump(index, delta){
 
 // == זיהוי אחרון – תצוגה ==
 function showLastDetect(playerIndex, file){
-  try{
-    const url = URL.createObjectURL(file);
-    const imgEl = document.getElementById('lastDetectImg');
-    const label = document.getElementById('lastDetectLabel');
-    if (label) {
-      label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`;
-    }
-    if (imgEl){
-      imgEl.src = url;
-      imgEl.style.display = 'block';
-    }
-    // add a small thumbnail of the snap (non-destructive)
-    const host = document.getElementById('snapThumbs');
-    if (host){
-      const thumb = new Image();
-      thumb.width = 48; thumb.height = 48;
-      thumb.style.borderRadius = '6px';
-      thumb.style.border = '1px solid #22324a';
-      thumb.style.objectFit = 'cover';
-      thumb.onload = ()=>{
-        host.prepend(thumb);
-        while (host.children.length > 10) host.removeChild(host.lastElementChild);
-      };
-      thumb.src = url;
-    }
-    // revoke later to allow display
-    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 5000);
-  }catch(e){
-    log('showLastDetect ERR: ' + (e && e.message || e));
-  }
+  const url = URL.createObjectURL(file);
+  const img = null;
+  const label = $$('#lastDetectLabel');
+  // no image preview
+  if(label){ label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`; }
 }
 
 // ====== אתחול שמות וניקוד ======
@@ -572,7 +528,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v6.6-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v6.7-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -661,185 +617,5 @@ else {
 })();
 </script>
 
-<!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 -->
-// ===== Improved segmentation v6.6 =====
-function __segmentTiles_v66(srcCanvas){
-  const W = srcCanvas.width, H = srcCanvas.height;
-  const ctx = srcCanvas.getContext('2d',{willReadFrequently:true});
-  const img = ctx.getImageData(0,0,W,H);
-  const data = img.data;
-  // grayscale
-  const gray = new Uint8ClampedArray(W*H);
-  for(let i=0,j=0;i<data.length;i+=4,j++){
-    gray[j] = (0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2])|0;
-  }
-  // blur
-  const blur = new Uint8ClampedArray(W*H);
-  for(let y=1;y<H-1;y++){
-    for(let x=1;x<W-1;x++){
-      let s=0;
-      for(let dy=-1;dy<=1;dy++){
-        for(let dx=-1;dx<=1;dx++){
-          s += gray[(y+dy)*W+(x+dx)];
-        }
-      }
-      blur[y*W+x] = (s/9)|0;
-    }
-  }
-  // Otsu threshold
-  const hist=new Array(256).fill(0);
-  for(let i=0;i<blur.length;i++) hist[blur[i]]++;
-  let sum=0,sumB=0,wB=0,wF=0,max=0,th=127,total=blur.length;
-  for(let i=0;i<256;i++) sum+=i*hist[i];
-  for(let i=0;i<256;i++){
-    wB+=hist[i]; if(wB===0) continue;
-    wF=total-wB; if(wF===0) break;
-    sumB+=i*hist[i];
-    const mB=sumB/wB, mF=(sum-sumB)/wF;
-    const between=wB*wF*(mB-mF)*(mB-mF);
-    if(between>max){ max=between; th=i; }
-  }
-  const bin=new Uint8Array(W*H);
-  for(let i=0;i<blur.length;i++) bin[i]= blur[i]>th?1:0;
-
-  // connected components
-  const seen=new Uint8Array(W*H); const boxes=[]; const stack=[];
-  const minArea=(W*H)*0.01, maxArea=(W*H)*0.5;
-  for(let y=1;y<H-1;y++){
-    for(let x=1;x<W-1;x++){
-      const idx=y*W+x;
-      if(!bin[idx]||seen[idx]) continue;
-      let minx=x,maxx=x,miny=y,maxy=y,area=0;
-      stack.push(idx); seen[idx]=1;
-      while(stack.length){
-        const p=stack.pop();
-        const py=(p/W)|0, px=p%W; area++;
-        if(px<minx)minx=px;if(px>maxx)maxx=px;if(py<miny)miny=py;if(py>maxy)maxy=py;
-        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-          const nx=px+dx, ny=py+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue;
-          const ni=ny*W+nx;
-          if(bin[ni]&&!seen[ni]){seen[ni]=1;stack.push(ni);}
-        }
-      }
-      const bw=maxx-minx+1,bh=maxy-miny+1;
-      const areaBox=bw*bh, aspect=bw/bh;
-      if(areaBox>minArea && areaBox<maxArea && aspect>0.4 && aspect<2.5){
-        const pad=6;
-        boxes.push([Math.max(0,minx-pad),Math.max(0,miny-pad),
-                    Math.min(W-1,maxx+pad),Math.min(H-1,maxy+pad)]);
-      }
-    }
-  }
-  // fallback: if only 1 wide box, split vertically
-  if(boxes.length<=1){
-    const cuts=[0,Math.floor(W/2),W];
-    boxes.length=0;
-    for(let i=0;i<cuts.length-1;i++){
-      const x1=cuts[i],x2=cuts[i+1];
-      boxes.push([x1,0,x2,H]);
-    }
-  }
-  boxes.sort((a,b)=>a[0]-b[0]);
-  const out=[];
-  for(const [x1,y1,x2,y2] of boxes){
-    const cw=x2-x1+1,ch=y2-y1+1;
-    const c=document.createElement('canvas'); c.width=cw; c.height=ch;
-    c.getContext('2d').drawImage(srcCanvas,x1,y1,cw,ch,0,0,cw,ch);
-    out.push(c);
-  }
-  return out;
-}
-
-<script>
-// __seg_v66__: robust multi-tile segmentation + per-tile classify (no UI changes)
-function __segmentTiles_v66(canvas){
-  const W=canvas.width, H=canvas.height;
-  const ctx=canvas.getContext('2d', {willReadFrequently:true});
-  const {data} = ctx.getImageData(0,0,W,H);
-  const gray=new Float32Array(W*H);
-  for(let i=0,j=0;i<data.length;i+=4,j++){ gray[j]=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114); }
-  // Blur 3x3
-  const blur=new Float32Array(W*H);
-  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
-    let s=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ s+= gray[(y+dy)*W+(x+dx)]; }
-    blur[y*W+x]=s/9;
-  }
-  // Otsu threshold to get binary
-  const hist=new Array(256).fill(0); for(let i=0;i<blur.length;i++){ const v=Math.max(0,Math.min(255, blur[i]|0)); hist[v]++; }
-  let sum=0; for(let i=0;i<256;i++) sum+= i*hist[i];
-  let sumB=0,wB=0,max=0,thr=127, total=blur.length;
-  for(let i=0;i<256;i++){ wB+=hist[i]; if(!wB) continue; const wF=total-wB; if(!wF) break; sumB+= i*hist[i];
-    const mB=sumB/wB, mF=(sum-sumB)/wF; const between=wB*wF*(mB-mF)*(mB-mF); if(between>max){max=between;thr=i;} }
-  const bin=new Uint8Array(W*H); for(let i=0;i<blur.length;i++){ bin[i] = (blur[i]>thr)?1:0; }
-  // Close (dilate then erode)
-  const dil=(src)=>{ const dst=new Uint8Array(W*H);
-    for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){ let v=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(src[(y+dy)*W+(x+dx)]){v=1;break;} } dst[y*W+x]=v; }
-    return dst; };
-  const ero=(src)=>{ const dst=new Uint8Array(W*H);
-    for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){ let v=1; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!src[(y+dy)*W+(x+dx)]){v=0;break;} } dst[y*W+x]=v; }
-    return dst; };
-  let m = dil(bin); m = dil(m); m = ero(m);
-  // Connected components -> boxes
-  const seen=new Uint8Array(W*H); const boxes=[];
-  const minA = W*H*0.01, maxA=W*H*0.45;
-  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
-    const i=y*W+x; if(!m[i] || seen[i]) continue;
-    const q=[i]; seen[i]=1;
-    let x0=x,x1=x,y0=y,y1=y, area=0;
-    while(q.length){
-      const p=q.pop(); const py=(p/W)|0, px=p%W; area++;
-      if(px<x0)x0=px; if(px>x1)x1=px; if(py<y0)y0=py; if(py>y1)y1=py;
-      const nb=[p-1,p+1,p-W,p+W];
-      for(const n of nb){ if(n>0 && n<W*H && m[n] && !seen[n]){ seen[n]=1; q.push(n); } }
-    }
-    const bw=x1-x0+1, bh=y1-y0+1, ar=bw/bh, A=bw*bh;
-    if(A>=minA && A<=maxA && ar>0.6 && ar<1.8){
-      const pad=Math.floor(Math.min(bw,bh)*0.08)+6;
-      x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad);
-      x1=Math.min(W-1,x1+pad); y1=Math.min(H-1,y1+pad);
-      boxes.push([x0,y0,x1,y1]);
-    }
-  }
-  // If single wide band -> split by vertical projection
-  if(boxes.length<=1){
-    const col=new Float32Array(W);
-    for(let x=0;x<W;x++){ let s=0; for(let y=0;y<H;y++){ s+= m[y*W+x]; } col[x]=s; }
-    // find valleys
-    const gapThr = H*0.04; let start=0; const seg=[];
-    for(let x=1;x<W;x++){
-      if(col[x]<gapThr && (x-start)>Math.max(40, W*0.12)){ seg.push([start,x]); start=x+1; }
-    }
-    if((W-start)>Math.max(40, W*0.12)) seg.push([start,W-1]);
-    if(seg.length){ boxes.length=0; for(const [a,b] of seg){ boxes.push([a,0,b,H-1]); } }
-  }
-  if(!boxes.length){ boxes.push([0,0,W-1,H-1]); }
-  boxes.sort((a,b)=>a[0]-b[0]);
-  const out=[]; for(const [a,b,c,d] of boxes){
-    const cw=c-a+1, ch=d-b+1; const cn=document.createElement('canvas'); cn.width=cw; cn.height=ch;
-    cn.getContext('2d').drawImage(canvas, a,b,cw,ch, 0,0,cw,ch); out.push(cn);
-  }
-  return out.slice(0,6);
-}
-async function __classifyTileCanvas(cnv){
-  if(typeof net==='undefined' || !net?.infer || typeof classifier==='undefined' || !classifier?.predictClass) return null;
-  const timg=tf.browser.fromPixels(cnv);
-  const emb=net.infer(timg,true);
-  const res=await classifier.predictClass(emb,3);
-  timg.dispose(); emb.dispose();
-  if(!res||!res.confidences) return null;
-  const lbl=res.label; const score=res.confidences[lbl]||0;
-  return {label:lbl, score};
-}
-function __appendTileThumb(dataURL, text){
-  const host=document.getElementById('snapThumbs'); if(!host) return;
-  const box=document.createElement('div'); box.style.position='relative'; box.style.width='48px'; box.style.height='48px';
-  box.style.border='1px solid #22324a'; box.style.borderRadius='6px'; box.style.overflow='hidden';
-  const im=new Image(); im.src=dataURL; im.style.width='100%'; im.style.height='100%'; im.style.objectFit='cover';
-  const cap=document.createElement('div'); cap.style.position='absolute'; cap.style.bottom='2px'; cap.style.right='2px';
-  cap.style.fontSize='11px'; cap.style.background='rgba(0,0,0,.6)'; cap.style.padding='1px 4px'; cap.style.borderRadius='6px';
-  cap.textContent=text||''; box.appendChild(im); box.appendChild(cap); host.prepend(box);
-  while(host.children.length>12) host.removeChild(host.lastElementChild);
-}
-</script>
-</body>
+<!-- version updated 1756290570.2479835 --></body>
 </html>
