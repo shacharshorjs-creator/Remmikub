@@ -295,8 +295,6 @@ try{
   }
 }catch(_){ /* keep silent */ }
 if(typeof detectedValue!=='undefined'){ awardPointsFromDetection(idx, detectedValue); }
-        // v6.12-ml: improved cropping & multi-detect
-        try { if (e.target.files && e.target.files[0]) { segmentAndDetect(e.target.files[0], idx); } } catch(_){}
       }
     }
   });
@@ -646,3 +644,193 @@ else {
 
 <!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 --></body>
 </html>
+
+<!-- v6.12-ml: improved multi-tile cropping (non-destructive; UI unchanged) -->
+<script>
+(function(){
+  const dlog = (m)=>{ try {
+    const dbg = document.getElementById('debug');
+    if (dbg) { dbg.textContent += (dbg.textContent?'\n':'') + String(m); dbg.scrollTop = dbg.scrollHeight; }
+  } catch(_){} };
+
+  // Heuristic segmentation:
+  // 1) downscale -> grayscale -> normalize -> adaptive threshold
+  // 2) connected components (4-neigh) to get boxes
+  // 3) filter by aspect ratio/area; merge overlaps (NMS); expand margin
+  async function segmentTilesFromImageFile(file, maxTiles=6){
+    const img = await loadImage(file);
+    const {canvas, ctx} = makeCanvas(img.width, img.height);
+    ctx.drawImage(img, 0, 0);
+
+    // Downscale for speed
+    const scale = Math.min(1, 640/Math.max(img.width, img.height));
+    const sw = Math.max(1, Math.round(img.width * scale));
+    const sh = Math.max(1, Math.round(img.height * scale));
+    const {canvas: c2, ctx: x2} = makeCanvas(sw, sh);
+    x2.drawImage(canvas, 0, 0, sw, sh);
+
+    const imgData = x2.getImageData(0, 0, sw, sh);
+    const data = imgData.data;
+
+    // Grayscale + normalize
+    const gray = new Float32Array(sw*sh);
+    for (let i=0, j=0; i<data.length; i+=4, j++){
+      // luminance
+      gray[j] = (0.2126*data[i] + 0.7152*data[i+1] + 0.0722*data[i+2]);
+    }
+    // local mean threshold (box blur)
+    const k = Math.max(5, Math.floor(Math.max(sw, sh)/60)|0|1); // odd-ish
+    const blurred = boxBlur(gray, sw, sh, k);
+    const bin = new Uint8Array(sw*sh);
+    for (let i=0;i<gray.length;i++){
+      bin[i] = gray[i] > (blurred[i] + 6) ? 255 : 0; // foreground brighter than local bg
+    }
+
+    // Connected components
+    const boxes = connectedComponents(bin, sw, sh).map(b=>expandBox(b, 4));
+
+    // Filter & rank boxes
+    const minArea = (sw*sh)*0.01, maxArea = (sw*sh)*0.5;
+    const filtered = boxes.filter(b=>{
+      const w=b.x2-b.x1+1, h=b.y2-b.y1+1, a=w*h;
+      const ar = w/h;
+      return a>minArea && a<maxArea && ar>0.6 && ar<1.4; // roughly square tiles
+    });
+
+    const merged = nonMaxSuppression(filtered, 0.25);
+    merged.sort((a,b)=> (b.x2-b.x1)*(b.y2-b.y1) - (a.x2-a.x1)*(a.y2-a.y1));
+    const top = merged.slice(0, maxTiles);
+
+    // Return actual cropped blobs (preview-sized) in original resolution
+    const thumbs = [];
+    const margin = 10/scale; // expand a bit on original image
+    for (const b of top){
+      const ox1 = Math.max(0, Math.floor(b.x1/scale - margin));
+      const oy1 = Math.max(0, Math.floor(b.y1/scale - margin));
+      const ox2 = Math.min(img.width, Math.ceil(b.x2/scale + margin));
+      const oy2 = Math.min(img.height, Math.ceil(b.y2/scale + margin));
+      const w = Math.max(1, ox2-ox1), h=Math.max(1, oy2-oy1);
+      const {canvas: c3, ctx: x3} = makeCanvas(w, h);
+      x3.drawImage(img, ox1, oy1, w, h, 0, 0, w, h);
+      const url = c3.toDataURL("image/jpeg", 0.9);
+      thumbs.push({url, box:{x1:ox1,y1:oy1,x2:ox2,y2:oy2}});
+    }
+    return thumbs;
+  }
+
+  function makeCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return {canvas:c, ctx:c.getContext('2d')}; }
+  function loadImage(file){
+    return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=URL.createObjectURL(file); });
+  }
+  function boxBlur(src, w, h, r){
+    const out = new Float32Array(src.length);
+    // horizontal
+    const tmp = new Float32Array(src.length);
+    const k = (r|0); const ks = k*2+1;
+    for(let y=0;y<h;y++){
+      let sum=0, idx=y*w;
+      for(let x=0;x<w;x++){
+        const add = src[y*w + Math.min(w-1, x+k)];
+        const rem = src[y*w + Math.max(0, x-k-1)];
+        sum += add - rem;
+        tmp[idx+x] = sum / ks;
+      }
+    }
+    // vertical
+    for(let x=0;x<w;x++){
+      let sum=0;
+      for(let y=0;y<h;y++){
+        const add = tmp[Math.min(h-1, y+k)*w + x];
+        const rem = tmp[Math.max(0, y-k-1)*w + x];
+        sum += add - rem;
+        out[y*w + x] = sum / ks;
+      }
+    }
+    return out;
+  }
+  function connectedComponents(bin, w, h){
+    const labels = new Int32Array(w*h);
+    let curr=1;
+    const boxes = [];
+    const stack = [];
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const i=y*w+x;
+        if (bin[i]===255 && labels[i]===0){
+          let x1=x,x2=x,y1=y,y2=y;
+          labels[i]=curr; stack.length=0; stack.push(i);
+          while(stack.length){
+            const p=stack.pop();
+            const py = (p/w)|0, px = p - py*w;
+            // bbox
+            if(px<x1)x1=px; if(px>x2)x2=px; if(py<y1)y1=py; if(py>y2)y2=py;
+            // 4-neigh
+            const neigh = [p-1, p+1, p-w, p+w];
+            for(const q of neigh){
+              if (q>=0 && q<w*h && labels[q]===0){
+                const qy=(q/w)|0, qx=q-qy*w;
+                if (Math.abs(qx-px)+Math.abs(qy-py)===1 && bin[q]===255){
+                  labels[q]=curr; stack.push(q);
+                }
+              }
+            }
+          }
+          boxes.push({x1,y1,x2,y2});
+          curr++;
+        }
+      }
+    }
+    return boxes;
+  }
+  function iou(a,b){
+    const x1=Math.max(a.x1,b.x1), y1=Math.max(a.y1,b.y1);
+    const x2=Math.min(a.x2,b.x2), y2=Math.min(a.y2,b.y2);
+    const iw=Math.max(0,x2-x1+1), ih=Math.max(0,y2-y1+1);
+    const inter=iw*ih;
+    const areaA=(a.x2-a.x1+1)*(a.y2-a.y1+1);
+    const areaB=(b.x2-b.x1+1)*(b.y2-b.y1+1);
+    const uni=areaA+areaB-inter;
+    return uni>0? inter/uni : 0;
+  }
+  function nonMaxSuppression(boxes, thr){
+    const keep=[];
+    boxes.sort((a,b)=> ( (b.x2-b.x1)*(b.y2-b.y1) - (a.x2-a.x1)*(a.y2-a.y1) ));
+    for(const b of boxes){
+      let ok=true;
+      for(const k of keep){ if(iou(b,k)>thr){ ok=false; break; } }
+      if(ok) keep.push(b);
+    }
+    return keep;
+  }
+  function expandBox(b, m){ return {x1:Math.max(0,b.x1-m), y1:Math.max(0,b.y1-m), x2:b.x2+m, y2:b.y2+m}; }
+
+  // Hook into existing last-detect UI to show multiple thumbnails if found
+  const origShow = window.showLastDetect;
+  window.showLastDetect = async function(playerIndex, file){
+    try {
+      // call original to keep behavior
+      if (typeof origShow === 'function'){ origShow(playerIndex, file); }
+      // now attempt segmentation and show thumbs
+      const host = document.getElementById('snapThumbs');
+      if (!host) return;
+      const thumbs = await segmentTilesFromImageFile(file, 8);
+      if (thumbs && thumbs.length){
+        // clear previous set, then show new set (limit 8)
+        // keep original small preview as first item from origShow; then add crops
+        let keepFirst = host.firstElementChild ? [host.firstElementChild] : [];
+        host.innerHTML='';
+        for(const el of keepFirst){ host.appendChild(el); }
+        thumbs.forEach(t=>{
+          const im = new Image();
+          im.src = t.url; im.width = 60; im.height = 60;
+          im.style.borderRadius='8px'; im.style.border='1px solid #22324a'; im.style.objectFit='cover';
+          host.appendChild(im);
+        });
+      }
+    } catch(err){
+      dlog('seg ERR: '+(err && err.message || err));
+    }
+  };
+  dlog('v6.12-ml: multi-tile segmentation patch ready.');
+})();
+</script>
