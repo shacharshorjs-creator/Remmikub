@@ -50,7 +50,7 @@
 <div class="wrap" id="app">
 <div class="row" style="justify-content:space-between;align-items:center">
 <div class="flex">
-<small class="tag" id="verBadge">v6.7-ml</small>
+<small class="tag" id="verBadge">v6.8-ml</small>
 <small class="tag" id="tfBadge">TF: init</small>
 <small class="tag" id="modelBadge">model: —</small>
 <small class="tag" id="examplesBadge">דוגמאות: —</small>
@@ -90,7 +90,7 @@
 </div>
 <!-- אימון מודל – תמיד גלוי (על המכשיר) -->
 <div class="card" id="trainCard">
-<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/></div><h2>אימון מודל זיהוי (CPU)</h2>
+<div id="lastDetectWrap" style="position:sticky;bottom:0;z-index:5;background:#0d1117;border-top:1px solid #263040;padding:8px 12px;display:flex;gap:12px;align-items:center"><div id="lastDetectLabel">זיהוי אחרון: —</div><img id="lastDetectImg" style="height:48px;width:36px;object-fit:cover;border-radius:6px;display:none"/><div id="snapThumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-inline-start:8px;"></div></div><h2>אימון מודל זיהוי (CPU)</h2>
 <div class="hint">upload → embedding (MobileNet) → KNN • המודל נשמר/נטען מ־localStorage (לא נשלח לרשת).</div>
 <div class="sep"></div>
 <div class="row" style="align-items:center;gap:10px">
@@ -124,7 +124,7 @@
 </div>
 <div class="footer row" style="justify-content:space-between">
 <div class="hint">קיצור דרך: <span class="kbd">שמור מודל</span> שומר ל־localStorage • <span class="kbd">שחזר מודל</span> טוען אוטומטית עם פתיחת העמוד.</div>
-<div class="muted">© v6.7-ml</div>
+<div class="muted">© v6.8-ml</div>
 </div>
 </div>
 <!-- TFJS + MobileNet + KNN (גרסאות שנבדקו) -->
@@ -210,7 +210,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 <script>
-const VERSION = 'v6.7-ml';
+const VERSION = 'v6.8-ml';
 const $$ = sel => document.querySelector(sel);
 const on = (el,ev,fn) => el.addEventListener(ev,fn);
 const log = msg => { const d=$$('#debug'); d.textContent += (d.textContent? '\\n':'') + msg; d.scrollTop=d.scrollHeight; };
@@ -308,11 +308,36 @@ function bump(index, delta){
 
 // == זיהוי אחרון – תצוגה ==
 function showLastDetect(playerIndex, file){
-  const url = URL.createObjectURL(file);
-  const img = null;
-  const label = $$('#lastDetectLabel');
-  // no image preview
-  if(label){ label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`; }
+  try{
+    const url = URL.createObjectURL(file);
+    const imgEl = document.getElementById('lastDetectImg');
+    const label = document.getElementById('lastDetectLabel');
+    if (label) {
+      label.textContent = `זיהוי אחרון: שחקן ${playerIndex+1} • ${players[playerIndex].name}`;
+    }
+    if (imgEl){
+      imgEl.src = url;
+      imgEl.style.display = 'block';
+    }
+    // add a small thumbnail of the snap (non-destructive)
+    const host = document.getElementById('snapThumbs');
+    if (host){
+      const thumb = new Image();
+      thumb.width = 48; thumb.height = 48;
+      thumb.style.borderRadius = '6px';
+      thumb.style.border = '1px solid #22324a';
+      thumb.style.objectFit = 'cover';
+      thumb.onload = ()=>{
+        host.prepend(thumb);
+        while (host.children.length > 10) host.removeChild(host.lastElementChild);
+      };
+      thumb.src = url;
+    }
+    // revoke later to allow display
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 5000);
+  }catch(e){
+    log('showLastDetect ERR: ' + (e && e.message || e));
+  }
 }
 
 // ====== אתחול שמות וניקוד ======
@@ -528,7 +553,7 @@ function awardPointsFromDetection(playerIdx, points) {
 
 </script>
 
-<!-- v6.7-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
+<!-- v6.8-ml minimal patch: fill detected value into the "ערך" input next to the correct player -->
 <script>
 (function(){
   // Helper: safe debug log
@@ -617,5 +642,114 @@ else {
 })();
 </script>
 
-<!-- version updated 1756290570.2479835 --></body>
+<!-- version updated 1756290570.2479835 --><!-- thumbs patch 1756294700.2569437 -->
+<script>
+// __thumb_restore_v68__: restore tile-thumbnails module without UI changes
+
+// Safe, simple segmenter (keeps previous behavior stable). If it fails -> returns the whole image.
+function __segmentTiles_safe(canvas){
+  try{
+    const W=canvas.width, H=canvas.height;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    const img=ctx.getImageData(0,0,W,H); const data=img.data;
+    // grayscale + simple edge magnitude
+    const gray=new Uint8Array(W*H);
+    for(let i=0,j=0;i<data.length;i+=4,j++){ gray[j]=(data[i]*0.3+data[i+1]*0.59+data[i+2]*0.11)|0; }
+    const mag=new Uint16Array(W*H);
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){
+      const i=y*W+x;
+      const gx = Math.abs(gray[i+1]-gray[i-1]);
+      const gy = Math.abs(gray[i+W]-gray[i-W]);
+      mag[i]=gx+gy;
+    }
+    // vertical projection for gaps between tiles
+    const col=new Uint32Array(W);
+    for(let x=0;x<W;x++){ let s=0; for(let y=0;y<H;y++){ s+=mag[y*W+x]; } col[x]=s; }
+    // normalize & find valleys
+    let mx=1; for(let x=0;x<W;x++) if(col[x]>mx) mx=col[x];
+    const norm=new Float32Array(W); for(let x=0;x<W;x++) norm[x]=col[x]/mx;
+    const gaps=[]; let run=0, start=0, thr=0.08;
+    for(let x=0;x<W;x++){
+      if(norm[x]<thr){ if(run===0) start=x; run++; }
+      else if(run){ if(run>Math.max(6,W*0.02)) gaps.push([(start+x-1)/2]); run=0; }
+    }
+    if(run) gaps.push([(start+W-1)/2]);
+    const cuts=[0, ...gaps.map(g=>Math.round(g[0])), W];
+    const segs=[]; for(let i=0;i<cuts.length-1;i++){ const a=cuts[i], b=cuts[i+1]; if(b-a>Math.max(40,W*0.12)) segs.push([a,b]); }
+    const boxes = segs.length ? segs.map(([a,b])=>({x:a,y:0,w:b-a,h:H})) : [{x:0,y:0,w:W,h:H}];
+    // build canvases
+    const outs=[];
+    for(const b of boxes){
+      const padX=Math.round(b.w*0.08), padY=Math.round(H*0.06);
+      const x=Math.max(0,b.x-padX), y=Math.max(0,b.y+0); // no top pad to avoid background
+      const w=Math.min(W, b.x+b.w+padX)-x, h=Math.min(H, H-padY)-y;
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(canvas, x,y,w,h, 0,0,w,h);
+      outs.push(c);
+    }
+    return outs.slice(0,6);
+  }catch(e){
+    // fallback: whole canvas
+    return [canvas];
+  }
+}
+
+// Append thumbnail for a tile (dataURL). If #snapThumbs not found, no-op.
+function __appendTileThumb(url, text){
+  const host=document.getElementById('snapThumbs'); if(!host) return;
+  const box=document.createElement('div');
+  box.style.cssText='position:relative;width:48px;height:48px;border:1px solid #22324a;border-radius:6px;overflow:hidden';
+  const im=new Image(); im.src=url; im.style.cssText='width:100%;height:100%;object-fit:cover';
+  const cap=document.createElement('div');
+  cap.textContent=text||'';
+  cap.style.cssText='position:absolute;bottom:2px;right:2px;font-size:11px;background:rgba(0,0,0,.6);padding:1px 4px;border-radius:6px;color:#fff';
+  box.appendChild(im); box.appendChild(cap);
+  host.prepend(box);
+  while(host.children.length>12){ host.removeChild(host.lastElementChild); }
+}
+
+// Hook camera onchange handlers to always show thumbnails of sliced tiles
+(function(){
+  try{
+    // find all per-player camera labels that already exist
+    const labels = document.querySelectorAll('label.cam, label.camera, .cam, .camera');
+    // fallback: bind to any input[type=file].snap used for shots
+    const inputs = document.querySelectorAll('input.snap[type=file], input[type=file].snap');
+    const bind = (inp)=>{
+      if(!inp || inp.__thumbBound) return;
+      inp.__thumbBound = true;
+      const prev = inp.onchange;
+      inp.onchange = async (e)=>{
+        try{
+          const f = e.target.files && e.target.files[0];
+          if(f){
+            const url = URL.createObjectURL(f);
+            const img = new Image();
+            img.onload = ()=>{
+              // draw to a temp canvas
+              const can=document.createElement('canvas'); can.width=img.naturalWidth; can.height=img.naturalHeight;
+              can.getContext('2d').drawImage(img,0,0);
+              const tiles = __segmentTiles_safe(can);
+              if(!tiles.length){
+                __appendTileThumb(can.toDataURL('image/jpeg',0.9), '');
+              }else{
+                tiles.forEach(t=> __appendTileThumb(t.toDataURL('image/jpeg',0.9), ''));
+              }
+            };
+            img.src = url;
+          }
+        }catch{}
+        if(typeof prev === 'function'){ try{ await prev.call(inp, e); }catch{} }
+      };
+    };
+    inputs.forEach(bind);
+    // also watch future inputs (if created dynamically)
+    const mo=new MutationObserver(()=>{
+      document.querySelectorAll('input.snap[type=file], input[type=file].snap').forEach(bind);
+    });
+    mo.observe(document.documentElement,{subtree:true,childList:true});
+  }catch(_){}
+})();
+</script>
+</body>
 </html>
